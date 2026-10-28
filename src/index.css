@@ -82,3 +82,20 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 /* small buttons with a soft lift (header export) */
 .soft-btn { box-shadow: 0 1px 2px rgb(0 0 0 / .06), 0 3px 10px rgb(0 0 0 / .08); transition: box-shadow .15s; }
 .soft-btn:hover { box-shadow: 0 1px 3px rgb(0 0 0 / .08), 0 5px 14px rgb(0 0 0 / .11); }
+
+/* a button that appears when it becomes useful (unit editor: Rotate, Delete) pops in */
+.pop-in { display: inline-flex; animation: pop-in .18s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes pop-in { from { opacity: 0; transform: scale(.6); } }
+@media (prefers-reduced-motion: reduce) { .pop-in { animation: none; } }
+
+/* a scrolling list in a floating panel (the unit editor's palette and inspector) fades out over its last
+   56px, so items dissolve at the bottom edge instead of being cut off (each list ends with room to scroll
+   its last item clear of it) */
+.fade-bottom {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 56px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 56px), transparent);
+}
+
+/* scroll without showing a scroll bar (the unit editor's floating panels: their bottom fade shows there is more) */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

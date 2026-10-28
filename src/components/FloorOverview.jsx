@@ -1,6 +1,7 @@
 // Fig 2 · Floor — the whole floor with all its units together (read-only overview).
 // Click a unit (or its tab) to open that unit's isolated, editable layout.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CELL, TILE } from '../iso/units.js';
 import { planFrame, renderScene, edgeItems } from '../iso/render.js';
 import { meetingRooms, routeToKosign } from '../model/wayfinding.js';
@@ -13,9 +14,9 @@ import { exportPng } from '../lib/exportPng.js';
 import IsoDefs from './IsoDefs.jsx';
 import { useFrameUpdater } from '../lib/useFrameUpdater.js';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
-import Credit from './Credit.jsx';
 import SceneButton, { icon } from './SceneButton.jsx';
-import { HeaderTools, Divider, FloorUnitButtons } from './HeaderTools.jsx';
+import { ViewTools, Divider, FloorUnitButtons } from './ViewTools.jsx';
+import ActionMenu from './ActionMenu.jsx';
 import { entryDoors, useDoorSwing } from '../iso/doorSwing.js';
 
 const TW = TILE * CELL;
@@ -217,30 +218,34 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     catch (err) { setMsg(`export failed: ${err.message}`); }
   };
 
-  // the view tools, as one row of round buttons centred in the app header: back to the building, the
-  // floors with this floor's units, then fit and the meeting-room highlight
+  // the view tools, as one row of round buttons at the bottom left of the drawing:
+  // back to the building, the floors with this floor's units, then fit and the meeting-room highlight
+  const headerActions = typeof document !== 'undefined' ? document.getElementById('header-actions') : null;
   const tools = (
-    <HeaderTools>
-      <SceneButton below label="Building" tip="Back to the whole building" onClick={onBack}>{TOOL.back}</SceneButton>
+    <ViewTools after={
+      // the status line (and any message or route note above it) right after the dock, on its line
+      <div className="pointer-events-none ml-1 flex flex-col justify-center whitespace-nowrap text-[12px] leading-tight tabular-nums" aria-live="polite">
+        {msg ? <div className="text-accent-hi">{msg}</div> : null}
+        {kosign && <div className="text-accent-hi">{kosign.path ? `route · east lifts → ${kosign.room.label} entrance` : 'KOSIGN entrance not reachable on this floor'}</div>}
+        <div className="text-ink-hi">
+          F{floor} · {plan.units.length} units · {total.assigned}/{total.desks} desks assigned{hoverUnit ? ` · unit ${hoverUnit} · click to open` : ''}
+        </div>
+      </div>
+    }>
+      <SceneButton place="above-start" compact docked label="Building" tip="Back to the whole building" onClick={onBack}>{TOOL.back}</SceneButton>
       <Divider />
       <FloorUnitButtons floor={floor} onFloor={onFloor} onUnit={onUnit} />
       <Divider />
-      <SceneButton below label="Fit" tip="Fit the whole floor in the view" onClick={() => setVb(VB0)}>{TOOL.fit}</SceneButton>
-      <SceneButton below label={showMeet ? 'Hide meeting rooms' : 'Highlight meeting rooms'} active={showMeet} onClick={() => setShowMeet((v) => !v)}
+      <SceneButton place="above" compact docked label="Fit" tip="Fit the whole floor in the view" onClick={() => setVb(VB0)}>{TOOL.fit}</SceneButton>
+      <SceneButton place="above" compact docked label={showMeet ? 'Hide meeting rooms' : 'Highlight meeting rooms'} active={showMeet} onClick={() => setShowMeet((v) => !v)}
         tip={rooms.length ? `Light up the ${rooms.length} meeting rooms on this floor` : 'No meeting rooms on this floor'}>{TOOL.meet}</SceneButton>
-    </HeaderTools>
+    </ViewTools>
   );
 
   return (
-    <div className="flex flex-1 min-h-0">
-      {tools}
+    <div className="relative flex flex-1 min-h-0">
       <div className="flex flex-col flex-1 min-w-0">
         <div ref={stageRef} className="relative flex-1 min-h-0 stage-glow">
-          <button type="button" className="frost-panel frost-edge absolute right-4 top-3 z-10 rounded-full px-3.5 py-2 text-[12px] font-medium text-accent-hi hover:text-accent" onClick={exportFloor}>Export PNG</button>
-          <div className="absolute left-4 top-3 pointer-events-none">
-            <div className="text-[11px] uppercase tracking-[.18em] text-ink">Fig 2 · Floor {String(floor).padStart(2, '0')} · all units</div>
-            <div className="text-[12px] text-ink-hi mt-0.5">Click a unit to open its layout</div>
-          </div>
           <svg
             ref={svgRef}
             className="floor-ov office-lit w-full h-full block select-none touch-none"
@@ -263,25 +268,23 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
             <g className={hoverUnit ? `units hover-${hoverUnit}` : 'units'} dangerouslySetInnerHTML={{ __html: overlay }} />
           </svg>
           <HoverTip tip={tip} />
-          <Credit />
-          <div className="absolute right-4 bottom-3 text-right text-[12px] tabular-nums pointer-events-none" aria-live="polite">
-            {msg ? <div className="text-accent-hi">{msg}</div> : null}
-            {kosign && <div className="text-accent-hi">{kosign.path ? `route · east lifts → ${kosign.room.label} entrance` : 'KOSIGN entrance not reachable on this floor'}</div>}
-            <div className="text-ink-hi">
-              F{floor} · {plan.units.length} units · {total.assigned}/{total.desks} desks assigned{hoverUnit ? ` · unit ${hoverUnit} · click to open` : ''}
-            </div>
-          </div>
+          {tools}
+          {/* Export sits in the app header beside the Labels / Dark mode switches, as tall as they are */}
+          {headerActions && createPortal(
+            <ActionMenu items={[{ label: 'Export', onClick: exportFloor, accent: true }]} />,
+            headerActions)}
         </div>
       </div>
 
-      <aside className="w-72 shrink-0 border-l border-edge p-3 flex flex-col gap-3 overflow-auto">
+      {/* the units list floats over the drawing at the right: no column of its own, frosted cards */}
+      <aside className="pointer-events-none absolute inset-y-0 right-0 z-10 w-60 p-3 flex flex-col gap-1.5 overflow-auto [&>*]:pointer-events-auto">
         <h3 className="text-[10px] uppercase tracking-[.18em] text-ink">Units on floor {floor}</h3>
         {plan.units.map((u) => {
           const p = PLANS[u.id], s = unitStats[u.unit];
           return (
             <button key={u.unit} type="button" onClick={() => onUnit(floor, u.unit)}
               onPointerEnter={() => setHoverUnit(u.unit)} onPointerLeave={() => setHoverUnit(null)}
-              className={`text-left rounded-md border px-3 py-2.5 transition-colors ${hoverUnit === u.unit ? 'border-accent bg-accent-dim' : 'border-edge'}`}>
+              className={`frost-panel frost-edge text-left rounded-xl border px-3 py-2.5 transition-colors ${hoverUnit === u.unit ? '!border-accent !bg-[color-mix(in_srgb,var(--accent)_14%,var(--panel))]' : ''}`}>
               <div className="flex items-baseline justify-between">
                 <span className="text-[14px] text-ink-hi">Unit {u.unit}</span>
                 <span className="text-[11px] text-accent-hi tabular-nums">{s.assigned}/{s.desks} seats</span>

@@ -4,6 +4,7 @@
 // the floor plane z = 0) → cell (floor) → origin (minus grab offset, clamped) → validate().
 // Nothing is stored unless it passes validate(), so placement is 100% grid-snapped.
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CELL, CUT_H } from '../iso/units.js';
 import { centerGrab, collides, footprint, normRot, rotateItem, snapOrigin, validate, worldToCell, onPlate } from '../iso/grid.js';
 import { depthSort } from '../iso/depth.js';
@@ -16,11 +17,10 @@ import { entryDoors, roomDoorIds, useDoorSwing } from '../iso/doorSwing.js';
 import { useFrameUpdater } from '../lib/useFrameUpdater.js';
 import Palette from './Palette.jsx';
 import Inspector from './Inspector.jsx';
-import Switch, { ICONS } from './Switch.jsx';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
 import SceneButton, { icon } from './SceneButton.jsx';
-import { HeaderTools, Divider, FloorUnitButtons } from './HeaderTools.jsx';
-import Credit from './Credit.jsx';
+import { ViewTools, Divider, FloorUnitButtons } from './ViewTools.jsx';
+import ActionMenu from './ActionMenu.jsx';
 
 const ItemG = memo(function ItemG({ K, item, cls, cut, ghost }) {
   const html = useMemo(() => renderItem(K, item, cut), [K, item, cut]);
@@ -40,11 +40,11 @@ function nextDeskLabel(items, pid) {
 const area = (it) => { const f = footprint(it); return f.w * f.d; };
 
 export default function FloorEditor({ pid, items: allItems, plans, dispatch, onBack, onSwitch, light, savedAt }) {
-  // Building-core (schematic) mode shows elevators, restrooms and stairwells; the office view hides
-  // them. Hidden core items still block placement, so nothing can be stacked onto the real core.
-  const [showCore, setShowCore] = useState(false);
-  const items = useMemo(() => (showCore ? allItems : allItems.filter((it) => !CORE.has(it.type))), [allItems, showCore]);
-  const hiddenCore = allItems.length - items.length;
+  // The office view: the unit's own building-core items (elevators, restrooms, stairwells) are hidden here
+  // (the faded core round the unit shows them); they still block placement, so nothing can be stacked onto
+  // the real core. (A building-core mode used to show them; the view is now always the office view.)
+  const showCore = false;
+  const items = useMemo(() => allItems.filter((it) => !CORE.has(it.type)), [allItems]);
   const plan = PLANS[pid];
   const K = useMemo(() => planFrame(plan), [plan]);
   const VB0 = useMemo(() => ({ x: 0, y: 0, w: K.W, h: K.H }), [K]);
@@ -63,7 +63,9 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const [ghost, setGhost] = useState(null); // { item, ok, reason, mode }
   const [hover, setHover] = useState(null); // { cx, cy }
   const [hoverId, setHoverId] = useState(null); // item under the pointer
-  const [cut, setCut] = useState(false);
+  const [panelMin, setPanelMin] = useState(false);
+  const [paletteMin, setPaletteMin] = useState(false);   // the objects panel collapsed to its icons   // the right-hand panel folded down to its header
+  const cut = false;   // tall walls and objects at full height (the cutaway switch is gone)
   const [msg, setMsg] = useState('');
   const drag = useRef(null);
   const lastWorld = useRef(null);
@@ -90,7 +92,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const check = useCallback((item) => {
     const reason = validate(allItems, item, plan);
     const hidden = reason && !showCore && allItems.some((o) => CORE.has(o.type) && o.id !== item.id && collides(item, o));
-    return { ok: !reason, reason: hidden ? `${reason} (hidden building core · turn on Core to see it)` : reason };
+    return { ok: !reason, reason: hidden ? `${reason} (the building core, hidden in this view)` : reason };
   }, [allItems, plan, showCore]);
 
   const ghostAt = useCallback((world, base, grab, mode) => {
@@ -366,50 +368,65 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     savedAt ? `saved ${savedAt}` : 'not saved',
   ].filter(Boolean).join(' · ');
 
-  const tb = 'rounded-md border border-edge px-2.5 py-1 text-[12px] text-ink-hi hover:border-line transition-colors disabled:opacity-40 disabled:hover:border-edge';
 
-  // navigation as one row of round buttons centred in the app header (as on the floor view): back to the
-  // floor, the floors with this floor's units (this one ringed; another glides over to it), and fit
+  // navigation as one row of round buttons at the bottom left of the drawing (as on the floor
+  // view): back to the floor, the floors with this floor's units (this one ringed; another glides over
+  // to it), and fit
+  const headerActions = typeof document !== 'undefined' ? document.getElementById('header-actions') : null;
   const tools = (
-    <HeaderTools>
-      <SceneButton below label={`Floor ${plan.floor}`} tip={`Back to every unit of floor ${plan.floor}`} onClick={onBack}>{icon(<path d="M10 3 5 8l5 5" />)}</SceneButton>
+    <ViewTools left={`calc(0.75rem + ${paletteMin ? '4.75rem' : '14rem'} + 0.75rem)`} after={<>
+      {/* editing actions: round frosted buttons floating beside the dock (R, Delete and ⌘Z still work); Rotate
+          shows only while there is something to turn (a movable item selected, or one being placed) and Delete
+          only while a removable item is selected; Undo is always there, first, so the others pop in after it */}
+      <div className="flex items-center gap-2" role="toolbar" aria-label="Edit">
+        <SceneButton place="above" tall label="Undo" tip="Undo the last change · ⌘Z" onClick={() => dispatch({ type: 'undo' })}>
+          {icon(<><path d="M5.5 3 2.5 6l3 3" /><path d="M2.5 6H10a3.5 3.5 0 0 1 0 7H7" /></>)}</SceneButton>
+        {((sel && !sel.locked) || placing) && (
+          <span className="pop-in"><SceneButton place="above" tall label="Rotate 90°" tip="Turn the selected item (or the one being placed) · R" onClick={rotate}>
+            {icon(<><path d="M13 8a5 5 0 1 1-1.5-3.6" /><path d="M13 2.5V5h-2.5" /></>)}</SceneButton></span>
+        )}
+        {sel && !sel.locked && (
+          <span className="pop-in"><SceneButton place="above" tall label="Delete" tip="Remove the selected item · Delete" onClick={remove}>
+            {icon(<><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" /><path d="M7 7v4M9 7v4" /></>)}</SceneButton></span>
+        )}
+      </div>
+      {/* the status line (and any message above it) right after the edit buttons, on the dock's line */}
+      <div className="pointer-events-none ml-1 flex flex-col justify-center whitespace-nowrap text-[12px] leading-tight tabular-nums" aria-live="polite">
+        {msg ? <div className="text-accent-hi">{msg}</div> : null}
+        <div className="text-ink-hi">{status}</div>
+      </div>
+    </>}>
+      <SceneButton place="above-start" compact docked label={`Floor ${plan.floor}`} tip={`Back to every unit of floor ${plan.floor}`} onClick={onBack}>{icon(<path d="M10 3 5 8l5 5" />)}</SceneButton>
       <Divider />
       <FloorUnitButtons floor={plan.floor} unit={plan.unit}
         onFloor={(f) => onSwitch(f, UNITS[f].includes(plan.unit) ? plan.unit : UNITS[f][0])}
         onUnit={(f, u) => glide(u)} />
       <Divider />
-      <SceneButton below label="Fit" tip="Fit the whole unit in the view" onClick={() => setVb(VB0)}>{icon(<path d="M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3" />)}</SceneButton>
-    </HeaderTools>
+      <SceneButton place="above" compact docked label="Fit" tip="Fit the whole unit in the view" onClick={() => setVb(VB0)}>{icon(<path d="M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3" />)}</SceneButton>
+    </ViewTools>
   );
 
   return (
-    <div className="flex flex-1 min-h-0">
-      {tools}
-      <aside className="w-56 shrink-0 p-3 overflow-auto">
-        <Palette placing={placing} setPlacing={setPlacing} showCore={showCore} />
+    <div className="relative flex flex-1 min-h-0">
+      {/* the palette: a frosted card floating over the drawing at the left (no column of its own), full height;
+          the bottom dock starts just right of it; its list scrolls inside and fades out at the bottom edge.
+          Its header collapses it to a slim column of icons (names in a frosted card on hover) */}
+      <aside className={`frost-panel frost-edge absolute left-3 top-3 bottom-3 z-10 flex flex-col rounded-2xl ${paletteMin ? 'w-[4.75rem]' : 'w-56'}`}>
+        <div className={`flex items-center gap-2 py-2 pr-1.5 ${paletteMin ? 'justify-center pl-1.5' : 'pl-3'} border-b border-[color-mix(in_srgb,var(--ink)_18%,transparent)]`}>
+          {!paletteMin && <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink-hi">Objects</span>}
+          <button type="button" onClick={() => setPaletteMin((m) => !m)} aria-expanded={!paletteMin}
+            aria-label={paletteMin ? 'Expand the objects panel' : 'Collapse the objects panel'} title={paletteMin ? 'Expand' : 'Collapse'}
+            className="grid size-6 shrink-0 place-items-center rounded-full text-ink hover:bg-accent-dim hover:text-accent">
+            {icon(<path d={paletteMin ? 'M6 4l4 4-4 4' : 'M10 4 6 8l4 4'} />)}
+          </button>
+        </div>
+        <div className="fade-bottom no-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2 pb-10">
+          <Palette placing={placing} setPlacing={setPlacing} showCore={showCore} collapsed={paletteMin} />
+        </div>
       </aside>
 
       <div className="flex flex-col flex-1 min-w-0">
-        <div className="flex flex-wrap items-center gap-2 border-b border-edge px-3 py-2">
-          <button type="button" className={tb} onClick={rotate} disabled={!sel && !placing}>Rotate 90°</button>
-          <button type="button" className={tb} onClick={remove} disabled={!sel}>Delete</button>
-          <button type="button" className={tb} onClick={() => dispatch({ type: 'undo' })}>Undo</button>
-          <span className="mx-1 flex items-center gap-3">
-            <Switch checked={cut} onChange={setCut} label="Cutaway" icon={ICONS.cutaway}
-              title="Cutaway: lower tall walls and objects so the plan is easier to read" />
-            <Switch checked={showCore} onChange={setShowCore} label="Building core" icon={ICONS.core}
-              title={`Building core (elevators, restrooms, stairwells): hidden in the office view${!showCore && hiddenCore ? ` · ${hiddenCore} hidden` : ''}`} />
-          </span>
-          <span className="flex-1" />
-          <button type="button" className={tb} onClick={() => { if (confirm(`Reset floor ${plan.floor} unit ${plan.unit} to the official PDF layout? (Undo can restore your version.)`)) dispatch({ type: 'reset', plan: pid }); }}>Reset to PDF</button>
-          <button type="button" className={`${tb} !border-accent text-accent-hi`} onClick={exportPlan}>Export PNG</button>
-        </div>
-
         <div ref={stageRef} className="relative flex-1 min-h-0 stage-glow">
-          <div className="absolute left-4 top-3 pointer-events-none">
-            <div className="text-[11px] uppercase tracking-[.18em] text-ink">Fig 2 · Floor {String(plan.floor).padStart(2, '0')} · Unit {plan.unit}{showCore ? ' · building core' : ' · office view'}</div>
-            <div className="text-[12px] text-ink-hi mt-0.5">{plan.subtitle}</div>
-          </div>
           <svg
             ref={svgRef}
             className="office-lit w-full h-full block select-none touch-none"
@@ -442,25 +459,42 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
             {neighbours.filter((n) => n.ahead).map(nbG)}
           </svg>
           <HoverTip tip={tip} />
-          <Credit />
-          <div className="absolute right-4 bottom-3 text-right text-[12px] tabular-nums pointer-events-none" aria-live="polite">
-            {msg ? <div className="text-accent-hi">{msg}</div> : null}
-            <div className="text-ink-hi">{status}</div>
-          </div>
+          {tools}
+          {/* Export and Reset to PDF: one Actions menu in the app header beside the Labels / Dark mode switches */}
+          {headerActions && createPortal(
+            <ActionMenu items={[
+              { label: 'Export', onClick: exportPlan, accent: true },
+              { label: 'Reset to PDF', onClick: () => { if (confirm(`Reset floor ${plan.floor} unit ${plan.unit} to the official PDF layout? (Undo can restore your version.)`)) dispatch({ type: 'reset', plan: pid }); } },
+            ]} />, headerActions)}
         </div>
       </div>
 
-      <aside className="w-72 shrink-0 border-l border-edge p-3 flex flex-col min-h-0">
-        <Inspector
-          plan={plan}
-          item={sel}
-          items={items}
-          patch={(p) => sel && dispatch({ type: 'patch', plan: pid, id: sel.id, patch: p })}
-          resize={resize}
-          rotate={rotate}
-          remove={remove}
-          select={(id) => { setSelected(id); setMsg(''); }}
-        />
+      {/* the inspector floats over the drawing at the right as a frosted card (no column of its own); its header
+          minimises it to a pill at the bottom right, on the dock's line (same 40 px row) */}
+      <aside className={`frost-panel frost-edge absolute right-3 z-10 flex w-60 min-h-0 flex-col ${panelMin ? 'bottom-3 h-10 rounded-full' : 'top-3 bottom-3 rounded-2xl'}`}>
+        <div className={`flex items-center gap-2 pr-1.5 ${panelMin ? 'h-10 pl-4' : 'py-2 pl-3 border-b border-[color-mix(in_srgb,var(--ink)_18%,transparent)]'}`}>
+          <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink-hi">
+            {sel ? 'Selected' : `Unit ${plan.unit}`}<span className="text-ink"> · {st.assigned}/{st.desks} seats</span>
+          </span>
+          <button type="button" onClick={() => setPanelMin((m) => !m)} aria-expanded={!panelMin}
+            aria-label={panelMin ? 'Expand the panel' : 'Minimise the panel'} title={panelMin ? 'Expand' : 'Minimise'}
+            className={`grid ${panelMin ? 'size-7' : 'size-6'} shrink-0 place-items-center rounded-full text-ink hover:bg-accent-dim hover:text-accent`}>
+            {/* minimised it sits at the bottom: up opens it, down sends it there */}
+            {icon(<path d={panelMin ? 'M4 10l4-4 4 4' : 'M4 6l4 4 4-4'} />)}
+          </button>
+        </div>
+        {!panelMin && (
+          <div className="flex min-h-0 flex-1 flex-col px-3 pt-3">
+            <Inspector
+              plan={plan}
+              item={sel}
+              items={items}
+              patch={(p) => sel && dispatch({ type: 'patch', plan: pid, id: sel.id, patch: p })}
+              resize={resize}
+              select={(id) => { setSelected(id); setMsg(''); }}
+            />
+          </div>
+        )}
       </aside>
     </div>
   );

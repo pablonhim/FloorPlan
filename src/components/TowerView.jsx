@@ -12,7 +12,7 @@ import { RENTED, TOTAL_FLOORS, UNITS, PLANS, planId, stats } from '../model/floo
 import { FOOTPRINT, EXTENT, PILLARS, LIFTS, facades, strips } from '../model/building.js';
 import IsoDefs from './IsoDefs.jsx';
 import SceneButton, { icon } from './SceneButton.jsx';
-import Credit from './Credit.jsx';
+import { ViewTools, Divider } from './ViewTools.jsx';
 import { vehicle, VEHICLE_DEFS } from '../iso/vehicles.js';
 import { leg, cubicLeg, pose, person, planPath, duration } from '../iso/scenes.js';
 
@@ -1554,9 +1554,9 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
           </svg>
         </figure>
       )}
-      {/* scene controls: animate traffic and a visitor through the site */}
-      {/* scene controls: a column of round buttons down the left; hovering one shows its tooltip at once */}
-      <div className="absolute left-4 top-3 z-10 flex flex-col items-start gap-2" role="toolbar" aria-label="Site animations">
+      {/* scene controls (animate traffic and a visitor through the site): the bottom-left dock, as on the floor
+          and unit pages; hovering a button shows its hint above it at once */}
+      <ViewTools>
         {[
           // paired scenes share one button: after parking it offers leaving (in red), and back again
           b1Next === 'park'
@@ -1572,20 +1572,19 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
           gatesOpen
             ? ['Close gates', () => holdGates(false), 'Slide the site entrance and exit gates shut', true, ICON.gate]
             : ['Gate', () => holdGates(true), 'Slide the site entrance and exit gates open (and keep them open)', false, ICON.gate],
-        ].map(([label, fn, tip, leave, glyph]) => (
-          <SceneButton key={label} label={label} tip={tip} onClick={fn} red={leave}>{glyph}</SceneButton>
+        ].map(([label, fn, tip, leave, glyph], i) => (
+          <SceneButton key={label} place={i ? 'above' : 'above-start'} compact docked label={label} tip={tip} onClick={fn} red={leave}>{glyph}</SceneButton>
         ))}
-        {/* a short divider sets the KOSIGN floor buttons apart from the site scenes */}
-        <div className="flex flex-col items-start gap-2" role="group" aria-label="Go to KOSIGN">
-          <span className="mx-auto my-0.5 block h-px w-6 self-center bg-[color-mix(in_srgb,var(--ink)_35%,transparent)]" aria-hidden="true" />
-          {RENTED.map((f) => (
-            <SceneButton key={f} label={`Go to KOSIGN · floor ${f}`} tip={`Walk in, take the east lift to floor ${f} and follow the route to KOSIGN`} onClick={() => goKosign(f)}>
-              <span className="text-[11px] font-semibold tabular-nums">{f}F</span>
-            </SceneButton>
-          ))}
-        </div>
-        <SceneButton label="Reset" tip="Every car back in its bay, every scene stopped" onClick={resetScene}>{ICON.reset}</SceneButton>
-      </div>
+        {/* a divider sets the KOSIGN floor buttons apart from the site scenes */}
+        <Divider />
+        {RENTED.map((f) => (
+          <SceneButton key={f} place="above" compact docked label={`Go to KOSIGN · floor ${f}`} tip={`Walk in, take the east lift to floor ${f} and follow the route to KOSIGN`} onClick={() => goKosign(f)}>
+            <span className="text-[11px] font-semibold tabular-nums">{f}F</span>
+          </SceneButton>
+        ))}
+        <Divider />
+        <SceneButton place="above" compact docked label="Reset" tip="Every car back in its bay, every scene stopped" onClick={resetScene}>{ICON.reset}</SceneButton>
+      </ViewTools>
       <svg
         ref={svgRef}
         className="twr w-full h-full block"
@@ -1608,7 +1607,6 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
       {tip && plans && <FloorTip {...tip} plans={plans} box={holder.current.getBoundingClientRect()} />}
       {/* bottom line: both texts share the floor-menu button's row (bottom-3, 40px tall) so they line up with its centre */}
       {/* bottom row (same 40px line as the floor-menu button): credit at the left, hint centred */}
-      <Credit />
       <div className="pointer-events-none absolute left-1/2 bottom-3 flex h-10 -translate-x-1/2 items-center whitespace-nowrap text-[12px] text-ink">click a lit floor · ↑↓ + enter</div>
       <div className="pointer-events-none absolute right-16 bottom-3 flex h-10 items-center text-[12px] text-ink-hi tabular-nums" aria-live="polite">{read}</div>
     </div>

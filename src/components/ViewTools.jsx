@@ -1,21 +1,28 @@
-// A view's tools as one row of round buttons centred in the app header (App renders the #header-tools slot;
-// a view portals its row into it), and the floor / unit buttons shared by the floor view and the unit editor.
+// A view's tools as one frosted dock pill at the bottom left of its drawing (compact buttons inside, thin
+// dividers between groups), and the floor / unit buttons shared by the floor view and the unit editor.
+// Hints and the floor menu open upward, away from the bottom edge.
 import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import SceneButton from './SceneButton.jsx';
 import { RENTED, UNITS, PLANS, planId } from '../model/floors.js';
 
-/** Renders its children into the header's centre slot. */
-export function HeaderTools({ children }) {
-  const target = typeof document !== 'undefined' ? document.getElementById('header-tools') : null;
-  return target ? createPortal(<div className="flex items-center gap-2" role="toolbar" aria-label="View tools">{children}</div>, target) : null;
+/**
+ * The bottom-left tool dock (place it in the drawing's positioned container); `after` floats beside it, and
+ * `left` (a CSS length) moves it right, e.g. past a panel floating at the left.
+ */
+export function ViewTools({ children, after = null, left = '1rem' }) {
+  return (
+    <div className="absolute bottom-3 z-20 flex h-10 items-center gap-2" style={{ left }}>
+      <div className="frost-panel frost-edge flex h-10 items-center gap-0 rounded-full px-1" role="toolbar" aria-label="View tools">{children}</div>
+      {after}
+    </div>
+  );
 }
 
 /** A short vertical divider between groups of header buttons. */
-export const Divider = () => <span className="mx-0.5 block h-6 w-px bg-[color-mix(in_srgb,var(--ink)_35%,transparent)]" aria-hidden="true" />;
+export const Divider = () => <span className="mx-0.5 block h-5 w-px bg-[color-mix(in_srgb,var(--ink)_35%,transparent)]" aria-hidden="true" />;
 
 /**
- * Floor picker: a frosted pill showing the floor shown; clicking it opens a frosted menu of the rented floors
+ * Floor picker: a pill in the dock showing the floor shown; clicking it opens (upward) a frosted menu of the rented floors
  * (the one shown checked). Closes on a choice, a click outside or Escape; arrow keys move through it.
  */
 function FloorDropdown({ floor, onFloor }) {
@@ -39,14 +46,14 @@ function FloorDropdown({ floor, onFloor }) {
   return (
     <div ref={box} className="relative">
       <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}
-        className={`frost-panel frost-edge flex h-9 items-center gap-1.5 rounded-full pl-3.5 pr-2.5 text-[12px] font-semibold tabular-nums ${open ? 'text-accent ring-1 ring-accent' : 'text-ink-hi hover:text-accent'}`}>
+        className={`flex h-8 items-center gap-1 rounded-full pl-3 pr-2 text-[11.5px] font-semibold tabular-nums transition-colors ${open ? 'bg-accent-dim text-accent' : 'text-ink-hi hover:bg-accent-dim hover:text-accent'}`}>
         Floor {floor}
         <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
-          aria-hidden="true" className={`transition-transform duration-150 ${open ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4" /></svg>
+          aria-hidden="true" className={`transition-transform duration-150 ${open ? 'rotate-180' : ''}`}><path d="M4 10l4-4 4 4" /></svg>
       </button>
       {open && (
         <div role="menu" aria-label="Floor" onKeyDown={onMenuKey}
-          className="frost-panel frost-edge absolute left-1/2 top-full z-30 mt-2 min-w-[132px] -translate-x-1/2 rounded-xl p-1">
+          className="frost-panel frost-edge absolute bottom-full left-1/2 z-30 mb-2 min-w-[132px] -translate-x-1/2 rounded-xl p-1">
           {RENTED.map((f) => (
             <button key={f} type="button" role="menuitemradio" aria-checked={f === floor} onClick={() => pick(f)}
               className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] outline-none focus-visible:bg-accent-dim ${f === floor ? 'text-accent-hi' : 'text-ink-hi hover:bg-accent-dim'}`}>
@@ -67,12 +74,12 @@ function FloorDropdown({ floor, onFloor }) {
  */
 export function FloorUnitButtons({ floor, unit = null, onFloor, onUnit }) {
   return (
-    <div className="flex items-center gap-1.5" role="group" aria-label={`Floor ${floor} and its units`}>
+    <div className="flex items-center gap-0" role="group" aria-label={`Floor ${floor} and its units`}>
       <FloorDropdown floor={floor} onFloor={onFloor} />
       {UNITS[floor].map((u) => {
         const p = PLANS[planId(floor, u)];
         return (
-          <SceneButton below key={u} label={`Unit ${u}`} active={u === unit} onClick={() => u !== unit && onUnit(floor, u)}
+          <SceneButton place="above" compact docked key={u} label={`Unit ${u}`} active={u === unit} onClick={() => u !== unit && onUnit(floor, u)}
             tip={u === unit ? `Editing unit ${u} · ${p.subtitleEn || p.subtitle}` : `Open unit ${u}'s layout · ${p.subtitleEn || p.subtitle}`}>
             <span className="text-[12px] font-semibold">{u}</span>
           </SceneButton>

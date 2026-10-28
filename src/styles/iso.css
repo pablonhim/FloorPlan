@@ -130,8 +130,9 @@
 .face.deskTop.furn.top { fill:var(--desk-top); }
 .face.deskExt.furn.top { fill:color-mix(in srgb, var(--desk-top) 82%, var(--furn-side)); }
 /* selected furniture: solid indigo */
-.it.sel .face.furn { fill:var(--accent); stroke:var(--accent-hi); }
-.it.sel .face.furn.top { fill:color-mix(in srgb, var(--accent) 72%, #fff); }
+/* selected (light theme): solid accent; at night a selected object lights up like a hovered one instead (below) */
+:root[data-theme="light"] .it.sel .face.furn { fill:var(--accent); stroke:var(--accent-hi); }
+:root[data-theme="light"] .it.sel .face.furn.top { fill:color-mix(in srgb, var(--accent) 72%, #fff); }
 /* lit screens (desk monitors, displays) read as solid indigo panels */
 .it.live .glass.hot { fill:var(--accent); stroke:var(--accent-hi); }
 /* desk monitors: always on, lit like the office glass (a pale blue-tinted pane with an accent edge) */
@@ -229,8 +230,8 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 .it.cafe .face.furn.top, .it.cafe .face.seat.furn.top, .it.cafe .face.tableTop.top { fill:var(--struct-top); }
 .it.cafe .face.tableTop { stroke:var(--struct-line); }
 /* …but a selected one still turns accent blue like any other item */
-.it.cafe.sel .face.furn { fill:var(--accent); stroke:var(--accent-hi); }
-.it.cafe.sel .face.furn.top, .it.cafe.sel .face.seat.furn.top { fill:color-mix(in srgb, var(--accent) 72%, #fff); }
+:root[data-theme="light"] .it.cafe.sel .face.furn { fill:var(--accent); stroke:var(--accent-hi); }
+:root[data-theme="light"] .it.cafe.sel .face.furn.top, :root[data-theme="light"] .it.cafe.sel .face.seat.furn.top { fill:color-mix(in srgb, var(--accent) 72%, #fff); }
 /* server racks: charcoal cabinets, the status LEDs blink forever (each its own rate / phase, set inline);
    at night they glow */
 .face.rack { fill:#30343b; stroke:var(--struct-line); } .face.rack.side { fill:#3b4048; } .face.rack.top { fill:#4a5059; }
@@ -262,7 +263,9 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 .it.live .face.deskTop { stroke:var(--accent); }
 .it.live .face.pane { fill:color-mix(in srgb, var(--accent) 14%, #ffffff); fill-opacity:.86; stroke:var(--accent); }
 .it.live .glass.hot { filter:url(#soft); }
-.it.sel .face { stroke:var(--accent-hi); }
+:root[data-theme="light"] .it.sel .face { stroke:var(--accent-hi); }
+/* night: the selected object is lit up exactly as on hover (.tip-hot), its footprint outline marks it */
+:root:not([data-theme="light"]) .it.sel { filter:brightness(1.55) saturate(1.2); }
 .it.lifted { opacity:.25; }
 .it.ghost { opacity:.72; pointer-events:none; }
 .it.ghost.bad .face { stroke:var(--warn); }

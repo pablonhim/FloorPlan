@@ -7,6 +7,7 @@ import FloorEditor from './components/FloorEditor.jsx';
 import FloorOverview from './components/FloorOverview.jsx';
 import Switch, { ICONS } from './components/Switch.jsx';
 import MenuIcon from './components/MenuIcon.jsx';
+import Credit from './components/Credit.jsx';
 import { useCameraNav } from './lib/useCameraNav.js';
 
 export default function App() {
@@ -109,15 +110,26 @@ export default function App() {
 
   return (
     <div className={`h-full flex flex-col bg-panel ${view.kind === 'building' ? 'overflow-hidden' : ''}`}>
-      <header className="relative flex items-center gap-3 px-4 py-2.5">
-        <span className="text-[18px] leading-none text-ink-hi tracking-wide"><span className="font-semibold">KOSIGN</span> Floor Plan</span>
-        {/* centre slot: a view puts its own tool row here (FloorOverview, through a portal) */}
-        <div id="header-tools" className="absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2" />
+      <header className="flex items-center gap-3 px-4 py-2.5">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-3">
+            <span className="text-[18px] font-semibold leading-none text-ink-hi tracking-wide">Floor Plan</span>
+            {/* the page you are on, beside the logo: same size, quieter (none on the building page) */}
+            {view.kind !== 'building' && (
+              <span className="text-[18px] leading-none tracking-wide text-ink-hi/45" aria-live="polite">
+                {view.kind === 'floor' ? `Floor ${view.floor}` : `Floor ${view.floor} · Unit ${view.unit}`}
+              </span>
+            )}
+          </div>
+          <Credit />
+        </div>
         <span className="flex-1" />
-        <div className="flex items-center gap-2">
-          <Switch checked={labels} onChange={setLabels} label="Labels" icon={ICONS.labels}
+        <div className="flex items-center gap-4">
+          {/* a view's own header actions, beside the switches (the floor view's Export, through a portal) */}
+          <div id="header-actions" className="flex items-center gap-2 empty:hidden" />
+          <Switch showLabel checked={labels} onChange={setLabels} label="Labels" icon={ICONS.labels}
             title="Labels: show or hide all text in the drawing (room, team and employee names, signs, ground markings)" />
-          <Switch checked={theme === 'dark'} onChange={(on) => setTheme(on ? 'dark' : 'light')} label="Dark mode" icon={ICONS.theme} />
+          <Switch showLabel checked={theme === 'dark'} onChange={(on) => setTheme(on ? 'dark' : 'light')} label="Dark mode" icon={ICONS.theme} />
         </div>
       </header>
 

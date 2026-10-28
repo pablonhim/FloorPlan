@@ -28,7 +28,7 @@ export const ICONS = {
   ],
 };
 
-export default function Switch({ checked, onChange, label, title, icon }) {
+export default function Switch({ checked, onChange, label, title, icon, showLabel = false }) {
   const glyph = icon ? (checked ? icon[icon.length - 1] : icon[0]) : null;
   return (
     <button
@@ -38,8 +38,10 @@ export default function Switch({ checked, onChange, label, title, icon }) {
       aria-label={label}
       title={title || label}
       onClick={() => onChange(!checked)}
-      className="switch group inline-flex shrink-0 items-center rounded-full outline-none"
+      className="switch group inline-flex shrink-0 items-center gap-2 rounded-full outline-none"
     >
+      {/* showLabel: the label as visible text before the track (the header switches) */}
+      {showLabel && <span className="text-[12px] text-ink-hi">{label}</span>}
       <span
         className={`switch-track relative h-6 w-11 rounded-full transition-colors duration-200 ${checked ? 'bg-accent' : 'bg-detail'}`}
         data-on={checked || undefined}

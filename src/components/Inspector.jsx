@@ -1,4 +1,5 @@
-// Selected-item inspector, the unit legend from the PDF, and the unit's seating roster.
+// Selected-item inspector, the unit legend from the PDF, and the unit's seating roster (kept brief: the
+// editing actions and shortcuts live on the bottom bar).
 import { useEffect, useState } from 'react';
 import { baseSize, footprint } from '../iso/grid.js';
 import { SIZES, ZONE_KINDS } from '../model/catalog.js';
@@ -50,22 +51,17 @@ const Btn = ({ children, onClick, on, title }) => (
 function Legend({ plan }) {
   return (
     <section className="flex flex-col gap-1.5">
-      <div className="text-[13px] text-ink-hi">{plan.title}</div>
-      <div className="text-[11px] text-ink">{plan.subtitle} · {plan.subtitleEn}</div>
-      <ol className="mt-1 space-y-0.5 text-[12px]">
+      <div className="truncate text-[13px] text-ink-hi">{plan.title}</div>
+      <ol className="space-y-0.5 text-[12px]">
         {plan.legend.map((l, i) => (
-          <li key={l} className="flex gap-2"><span className="w-4 text-accent tabular-nums">{i + (plan.legendStart || 1)}</span><span className="text-ink-hi">{l}</span></li>
+          <li key={l} className="flex min-w-0 gap-2"><span className="w-4 shrink-0 text-accent tabular-nums">{i + (plan.legendStart || 1)}</span><span className="truncate text-ink-hi">{l}</span></li>
         ))}
       </ol>
-      <div className="mt-1 text-[11px] leading-relaxed text-ink">
-        Desk 140 × 120 cm · grid 20 cm · tile 60 cm. Pillars (សសរ), walls, glass and rooms are locked: click to select,
-        unlock to move. Desks and partitions drag freely.
-      </div>
     </section>
   );
 }
 
-export default function Inspector({ plan, item, items, patch, resize, rotate, remove, select }) {
+export default function Inspector({ plan, item, items, patch, resize, select }) {
   const [q, setQ] = useState('');
   const teams = [...new Set(items.filter((i) => i.type === 'zone' && ['dept', 'ceo'].includes(i.kind)).map((i) => i.label))];
   const desks = items.filter((i) => i.type === 'desk')
@@ -76,18 +72,16 @@ export default function Inspector({ plan, item, items, patch, resize, rotate, re
   const size = item && baseSize(item);
 
   return (
-    <div className="flex flex-col gap-5 min-h-0 overflow-auto">
+    // scrolls up and down only (long text is cut with an ellipsis), fading out at the bottom as it scrolls
+    <div className="fade-bottom no-scrollbar flex min-h-0 min-w-0 flex-col gap-4 overflow-y-auto overflow-x-hidden pb-10">
       <datalist id="teams">{teams.map((t) => <option key={t} value={t} />)}</datalist>
       {item ? (
         <section className="flex flex-col gap-3">
-          <div>
-            <div className="text-[13px] text-ink-hi">
-              {s.label}{s.km ? ` · ${s.km}` : ''}{s.kr ? ` · ${s.kr}` : ''}
-              {item.type === 'desk' && item.label ? <span className="text-ink"> · {item.label}</span> : null}
+          <div className="min-w-0">
+            <div className="truncate text-[13px] text-ink-hi">
+              {s.label}{item.type === 'desk' && item.label ? <span className="text-ink"> · {item.label}</span> : null}
             </div>
-            <div className="text-[11px] text-ink tabular-nums">
-              cell {item.gx},{item.gy} · {footprint(item).w}×{footprint(item).d} cells ({footprint(item).w * 20}×{footprint(item).d * 20} cm) · {item.rot}°
-            </div>
+            <div className="text-[11px] text-ink tabular-nums">{footprint(item).w * 20}×{footprint(item).d * 20} cm · {item.rot}°</div>
           </div>
 
           {item.type === 'desk' && (
@@ -124,26 +118,12 @@ export default function Inspector({ plan, item, items, patch, resize, rotate, re
 
           <Switch checked={!!item.locked} onChange={(locked) => patch({ locked })} label="Locked" icon={ICONS.lock}
             title={item.locked ? 'Locked: can be selected but not dragged, nudged, rotated or deleted' : 'Unlocked'} />
-          <div className="flex flex-wrap gap-2">
-            <Btn onClick={rotate} title="R">Rotate 90° <span className="text-ink">R</span></Btn>
-            <Btn onClick={remove} title="Delete">Delete <span className="text-ink">Del</span></Btn>
-          </div>
         </section>
       ) : (
-        <>
-          <Legend plan={plan} />
-          <section className="text-[11px] leading-relaxed text-ink">
-            <ul className="space-y-0.5">
-              <li><span className="text-ink-hi">drag</span> move · snaps to 20 cm cells</li>
-              <li><span className="text-ink-hi">R</span> rotate 90° (also mid-drag)</li>
-              <li><span className="text-ink-hi">←↑↓→</span> nudge one cell · <span className="text-ink-hi">Del</span> delete</li>
-              <li><span className="text-ink-hi">Ctrl Z</span> undo · <span className="text-ink-hi">wheel</span> zoom · drag floor to pan</li>
-            </ul>
-          </section>
-        </>
+        <Legend plan={plan} />
       )}
 
-      <section className="flex flex-col gap-2 min-h-0">
+      <section className="flex min-w-0 flex-col gap-2">
         <div className="flex items-baseline justify-between">
           <h3 className={capCls.replace('16em', '18em')}>Seating</h3>
           <span className="text-[11px] text-ink tabular-nums">{all.filter((d) => d.name).length}/{all.length}</span>
@@ -153,10 +133,10 @@ export default function Inspector({ plan, item, items, patch, resize, rotate, re
           {desks.map((d, i) => (
             <li key={d.id}>
               {(i === 0 || desks[i - 1].team !== d.team) && (
-                <div className="px-1 pt-2 pb-0.5 text-[10px] uppercase tracking-[.14em] text-ink">{d.team || 'Unassigned / other'}</div>
+                <div className="truncate px-1 pt-2 pb-0.5 text-[10px] uppercase tracking-[.14em] text-ink">{d.team || 'Unassigned / other'}</div>
               )}
               <button type="button" onClick={() => select(d.id)}
-                className={`w-full flex items-center gap-2 rounded px-1 py-1 text-left text-[12px] hover:bg-recess ${item?.id === d.id ? 'bg-recess' : ''}`}>
+                className={`flex w-full min-w-0 items-center gap-2 rounded px-1 py-1 text-left text-[12px] hover:bg-recess ${item?.id === d.id ? 'bg-recess' : ''}`}>
                 <span className={`size-1.5 shrink-0 rounded-full ${d.name ? 'bg-accent' : 'bg-detail'}`} />
                 <span className="w-12 shrink-0 text-ink tabular-nums">{d.label || '—'}</span>
                 <span className={`truncate ${d.name ? 'text-ink-hi' : 'text-ink'}`}>{d.name || d.note || 'unassigned'}</span>
