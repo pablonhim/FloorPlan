@@ -82,10 +82,17 @@ export function pose(path, t) {
 }
 
 /**
- * Low-poly walking figure (about 1.75 m) at (x, y) on the ground at z, facing (ux, uy), stride phase
- * from the distance walked. Boxes on the world axes nearest the heading, painted back to front.
+ * The drawings show walls and lifts cut down (the plans' elevator box is ~1.1 m), so figures are drawn at
+ * this fraction of life size to stay shorter than the lift they walk into.
  */
-export function person(K, { x, y, z, ux, uy, dist, m }) {
+export const PERSON_SCALE = 0.6;
+
+/**
+ * Low-poly walking figure (1.75 m × PERSON_SCALE) at (x, y) on the ground at z, facing (ux, uy), stride
+ * phase from the distance walked. Boxes on the world axes nearest the heading, painted back to front.
+ */
+export function person(K, { x, y, z, ux, uy, dist, m: m0 }) {
+  const m = m0 * PERSON_SCALE;
   const alongX = Math.abs(ux) >= Math.abs(uy);
   const f = alongX ? [Math.sign(ux), 0] : [0, Math.sign(uy)], l = [-f[1], f[0]];
   const ph = (dist / (1.3 * m)) * Math.PI * 2, sw = Math.sin(ph), bob = 0.03 * m * Math.abs(Math.cos(ph));

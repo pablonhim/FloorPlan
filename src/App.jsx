@@ -34,7 +34,7 @@ export default function App() {
   const openFloor = (floor) => setView({ kind: 'floor', floor });
   const openUnit = (floor, unit = UNITS[floor][0]) => setView({ kind: 'unit', floor, unit });
 
-  const floors = Array.from({ length: TOTAL_FLOORS }, (_, i) => TOTAL_FLOORS - i);
+  const floors = Array.from({ length: TOTAL_FLOORS + 1 }, (_, i) => TOTAL_FLOORS - i);   // 10 … 1, then G (0)
 
   const renderView = (view) => (
   view.kind === 'building' ? (
@@ -61,8 +61,8 @@ export default function App() {
                         <button type="button" disabled={!rented} onClick={() => openFloor(f)}
                           className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] ${rented ? 'border border-accent/60 bg-accent-dim text-ink-hi hover:border-accent' : 'border border-transparent text-ink cursor-default'}`}>
                           <span className={`size-1.5 rounded-full ${rented ? 'bg-accent' : 'bg-detail'}`} />
-                          <span className="tabular-nums w-8">F{String(f).padStart(2, '0')}</span>
-                          <span className="flex-1">{rented ? `Units ${UNITS[f].join(' · ')}` : f === 1 ? 'Lobby' : 'Vacant'}</span>
+                          <span className="tabular-nums w-8">{f === 0 ? 'G' : `F${String(f).padStart(2, '0')}`}</span>
+                          <span className="flex-1">{rented ? `Units ${UNITS[f].join(' · ')}` : f === 0 ? 'Lobby' : 'Vacant'}</span>
                           {rented && <span className="text-[11px] text-accent-hi tabular-nums">{o.assigned}/{o.desks}</span>}
                         </button>
                       </li>
@@ -97,6 +97,7 @@ export default function App() {
             <FloorEditor
               pid={planId(view.floor, view.unit)}
               items={state.plans[planId(view.floor, view.unit)]}
+              plans={state.plans}
               dispatch={dispatch}
               light={light}
               savedAt={savedAt}
@@ -109,15 +110,10 @@ export default function App() {
 
   return (
     <div className={`h-full flex flex-col bg-panel ${view.kind === 'building' ? 'overflow-hidden' : ''}`}>
-      <header className="flex items-center gap-3 px-4 py-2.5">
+      <header className="relative flex items-center gap-3 px-4 py-2.5">
         <span className="text-[18px] leading-none text-ink-hi tracking-wide"><span className="font-semibold">KOSIGN</span> Floor Plan</span>
-        <nav className="text-[12px] text-ink flex items-center gap-1.5" aria-label="Breadcrumb">
-          <span>/</span>
-          <button type="button" className={view.kind === 'building' ? 'text-ink-hi' : 'hover:text-ink-hi'} onClick={() => setView({ kind: 'building' })}>Building</button>
-          {view.kind !== 'building' && (<><span>/</span>
-            <button type="button" className={view.kind === 'floor' ? 'text-ink-hi' : 'hover:text-ink-hi'} onClick={() => openFloor(view.floor)}>Floor {view.floor}</button></>)}
-          {view.kind === 'unit' && (<><span>/</span><span className="text-ink-hi">Unit {view.unit}</span></>)}
-        </nav>
+        {/* centre slot: a view puts its own tool row here (FloorOverview, through a portal) */}
+        <div id="header-tools" className="absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2" />
         <span className="flex-1" />
         <div className="flex items-center gap-2">
           <Switch checked={labels} onChange={setLabels} label="Labels" icon={ICONS.labels}

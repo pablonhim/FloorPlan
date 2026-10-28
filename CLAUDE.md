@@ -7,7 +7,7 @@
 
 ## Architectural Requirements
 1. Building & Floor Context:
-   - 10-floor exterior schematic view.
+   - 11-storey exterior schematic view: ground floor G, then floors 1–10 (Cambodian numbering).
    - Floors 2 and 4 are interactive, editable, and designated as active/rented.
 2. Grid & Snapping Engine:
    - Isometric projection conversion: Screen coordinates $\leftrightarrow$ Isometric grid coordinates.

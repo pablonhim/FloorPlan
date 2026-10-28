@@ -4,25 +4,28 @@
 // the floor plane z = 0) → cell (floor) → origin (minus grab offset, clamped) → validate().
 // Nothing is stored unless it passes validate(), so placement is 100% grid-snapped.
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CUT_H } from '../iso/units.js';
+import { CELL, CUT_H } from '../iso/units.js';
 import { centerGrab, collides, footprint, normRot, rotateItem, snapOrigin, validate, worldToCell, onPlate } from '../iso/grid.js';
 import { depthSort } from '../iso/depth.js';
-import { planFrame, itemNode, renderCell, renderFoot, renderItem, renderPlate, renderZoneTag, renderShadows, edgeItems } from '../iso/render.js';
-import { isLive, describe, defaults, LAYER, CORE } from '../model/catalog.js';
-import { PLANS, RENTED, UNITS, stats } from '../model/floors.js';
+import { planFrame, itemNode, renderCell, renderFoot, renderItem, renderPlate, renderZoneTag, renderShadows, renderScene, edgeItems, cafeIds } from '../iso/render.js';
+import { isLive, describe, defaults, LAYER, CORE, tipFor } from '../model/catalog.js';
+import { PLANS, RENTED, UNITS, stats, floorPlan, coreItems, toFloor, CORE as CORE_AT } from '../model/floors.js';
 import { exportPng } from '../lib/exportPng.js';
 import IsoDefs from './IsoDefs.jsx';
-import { entryDoors, useDoorSwing } from '../iso/doorSwing.js';
+import { entryDoors, roomDoorIds, useDoorSwing } from '../iso/doorSwing.js';
 import { useFrameUpdater } from '../lib/useFrameUpdater.js';
 import Palette from './Palette.jsx';
 import Inspector from './Inspector.jsx';
 import Switch, { ICONS } from './Switch.jsx';
+import { HoverTip, useHoverTip } from './HoverTip.jsx';
+import Credit from './Credit.jsx';
 
 const ItemG = memo(function ItemG({ K, item, cls, cut, ghost }) {
   const html = useMemo(() => renderItem(K, item, cut), [K, item, cut]);
+  const tip = !ghost && tipFor(item);   // the hover card's text (HoverTip)
   return ghost || item.id.startsWith('edge-')
     ? <g className={cls} data-noexport={ghost ? '' : undefined} dangerouslySetInnerHTML={{ __html: html }} />
-    : <g data-id={item.id} className={cls} dangerouslySetInnerHTML={{ __html: html }} />;
+    : <g data-id={item.id} className={cls} data-tip={tip?.title} data-tip-sub={tip?.sub || undefined} dangerouslySetInnerHTML={{ __html: html }} />;
 });
 
 const Html = ({ html, ...rest }) => <g {...rest} dangerouslySetInnerHTML={{ __html: html }} />;
@@ -34,7 +37,7 @@ function nextDeskLabel(items, pid) {
 
 const area = (it) => { const f = footprint(it); return f.w * f.d; };
 
-export default function FloorEditor({ pid, items: allItems, dispatch, onBack, onSwitch, onFloor, light, savedAt }) {
+export default function FloorEditor({ pid, items: allItems, plans, dispatch, onBack, onSwitch, onFloor, light, savedAt }) {
   // Building-core (schematic) mode shows elevators, restrooms and stairwells; the office view hides
   // them. Hidden core items still block placement, so nothing can be stacked onto the real core.
   const [showCore, setShowCore] = useState(false);
@@ -45,6 +48,8 @@ export default function FloorEditor({ pid, items: allItems, dispatch, onBack, on
   const VB0 = useMemo(() => ({ x: 0, y: 0, w: K.W, h: K.H }), [K]);
   const edges = useMemo(() => edgeItems(plan), [plan]);
   const svgRef = useRef(null);
+  const stageRef = useRef(null);
+  const [tip, tipMove, tipHide] = useHoverTip(stageRef);
   // welcome: the unit's entrance doors swing as upright leaves when the unit opens
   const doorsRef = useRef(null);
   const swingDoors = useMemo(() => entryDoors(allItems), [allItems]);
@@ -117,13 +122,18 @@ export default function FloorEditor({ pid, items: allItems, dispatch, onBack, on
   // ---------- pointer ----------
   const onPointerDown = (e) => {
     if (e.button === 2) { setPlacing(null); return; }
-    if (e.button !== 0) return;
+    if (e.button !== 0 || gliding.current) return;
     const world = toWorld(e);
     lastWorld.current = world;
     if (placing) { stamp(placeGhost(world)); return; }
     const hit = e.target.closest('[data-id]');
     const it = hit && items.find((i) => i.id === hit.dataset.id);
     svgRef.current.setPointerCapture(e.pointerId);
+    const nbUnit = !it && e.target.closest('[data-unit]')?.dataset.unit;
+    if (nbUnit) {   // a faded neighbouring unit: drag pans, a click glides over to it
+      drag.current = { kind: 'pan', unit: nbUnit, vb0: vb, scale: svgRef.current.getScreenCTM().a, sx: e.clientX, sy: e.clientY, moved: false };
+      return;
+    }
     if (it && !it.locked) {
       const { cx, cy } = worldToCell(world[0], world[1]);
       drag.current = { kind: 'item', base: it, rot: it.rot, grab: { gx: cx - it.gx, gy: cy - it.gy }, sx: e.clientX, sy: e.clientY, moved: false };
@@ -136,11 +146,13 @@ export default function FloorEditor({ pid, items: allItems, dispatch, onBack, on
   };
 
   const onPointerMove = (e) => {
+    tipMove(e, Boolean(drag.current?.moved || placing));   // no card while dragging or placing
     const world = toWorld(e);
     lastWorld.current = world;
     const c = worldToCell(world[0], world[1]);
     setHover(onPlate({ x0: c.cx, y0: c.cy, x1: c.cx + 1, y1: c.cy + 1 }, plan) ? c : null);
     const d = drag.current;
+    if (!d) setHoverUnit(placing ? null : e.target.closest('[data-unit]')?.dataset.unit || null);
     if (!d) { if (placing) placeGhost(world); return; }
     if (!d.moved && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 4) return;
     d.moved = true;
@@ -156,6 +168,7 @@ export default function FloorEditor({ pid, items: allItems, dispatch, onBack, on
     drag.current = null;
     if (!d) return;
     if (d.kind === 'pan') {
+      if (!d.moved && commit && d.unit) { glide(d.unit); return; }
       if (!d.moved && commit) {
         setSelected(d.hit);
         const it = d.hit && items.find((i) => i.id === d.hit);
@@ -264,8 +277,10 @@ export default function FloorEditor({ pid, items: allItems, dispatch, onBack, on
 
   // ---------- scene ----------
   const plate = useMemo(() => renderPlate(K, plan), [K, plan]);
+  const cafe = useMemo(() => cafeIds(allItems), [allItems]);
+  const swung = useMemo(() => roomDoorIds(allItems), [allItems]);
   const lifted = ghost?.mode === 'move' ? drag.current?.base?.id : null;
-  const clsOf = (it) => `it${isLive(it) ? ' live' : ''}${it.id === selected ? ' sel' : ''}${it.id === lifted ? ' lifted' : ''}${it.locked ? ' locked' : ''}`;
+  const clsOf = (it) => `it${isLive(it) ? ' live' : ''}${cafe.has(it.id) ? ' cafe' : ''}${swung.has(it.id) ? ' swung' : ''}${it.id === selected ? ' sel' : ''}${it.id === lifted ? ' lifted' : ''}${it.locked ? ' locked' : ''}`;
 
   // floor layer (zones, then door swings) lies under everything; the rest is depth-sorted
   const floorNodes = useMemo(() => items.filter((it) => LAYER[it.type] === 'floor')
@@ -282,6 +297,53 @@ export default function FloorEditor({ pid, items: allItems, dispatch, onBack, on
   const tags = useMemo(() => floorNodes.filter((it) => it.type === 'zone')
     .map((it) => `<g class="tag${isLive(it) ? ' live' : ''}">${renderZoneTag(K, it)}</g>`).join(''), [floorNodes, K]);
 
+  // the floor's other units, faded, where they really are around this one (as on the floor overview);
+  // hover lifts one, a click glides the camera over to it and opens it (see glide)
+  const neighbours = useMemo(() => {
+    const fp = floorPlan(plan.floor), me = fp.units.find((u) => u.id === pid);
+    if (!me) return [];
+    return fp.units.filter((u) => u.id !== pid).map((u) => {
+      const p = PLANS[u.id], Ku = planFrame(p);
+      const [ox, oy] = K.D((u.ox - me.ox) * CELL, (u.oy - me.oy) * CELL, 0);
+      const its = (plans?.[u.id] || []).filter((it) => showCore || !CORE.has(it.type));
+      return {
+        unit: u.unit, ahead: u.ox - me.ox + u.oy - me.oy > 0,   // in front of this unit: drawn over it
+        html: `<g transform="translate(${ox.toFixed(2)} ${oy.toFixed(2)})">${renderScene(K, p, its)}</g>`,
+        // that unit's own fitted view, in this unit's svg coordinates: where the glide ends
+        to: { x: K.OX - Ku.OX + ox, y: K.OY - Ku.OY + oy, w: Ku.W, h: Ku.H },
+      };
+    });
+  }, [plan.floor, pid, K, plans, showCore]);
+  // the building core round it too (corridor, lifts, WCs, storage rooms, stairs), faded, not clickable;
+  // drawn over this unit when it lies in front of it (the north units), under it otherwise
+  const core = useMemo(() => {
+    const me = floorPlan(plan.floor).units.find((u) => u.id === pid);
+    if (!me) return null;
+    return { ahead: CORE_AT.corridor.y0 > me.oy, html: renderScene(K, plan, toFloor(coreItems(), -me.ox, -me.oy), { bare: true }) };
+  }, [plan, pid, K]);
+  const coreG = core && <g key="core" data-noexport="" className="nb core" dangerouslySetInnerHTML={{ __html: core.html }} />;
+  const [hoverUnit, setHoverUnit] = useState(null);
+  const gliding = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(gliding.current), []);
+  const glide = (unit) => {
+    const nb = neighbours.find((n) => n.unit === unit);
+    if (!nb || gliding.current) { if (!nb) onSwitch(plan.floor, unit); return; }
+    if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) { onSwitch(plan.floor, unit); return; }
+    setHoverUnit(null); setSelected(null); setPlacing(null); setGhost(null);
+    const from = vb, to = nb.to, t0 = performance.now(), ms = 700;
+    const ease = (k) => (k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2);
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / ms), e = ease(k), mix = (a, b) => a + (b - a) * e;
+      setVb({ x: mix(from.x, to.x), y: mix(from.y, to.y), w: mix(from.w, to.w), h: mix(from.h, to.h) });
+      if (k < 1) gliding.current = requestAnimationFrame(step);
+      else { gliding.current = 0; onSwitch(plan.floor, unit); }   // the new unit opens on exactly this view
+    };
+    gliding.current = requestAnimationFrame(step);
+  };
+  const nbG = (n) => (
+    <g key={n.unit} data-unit={n.unit} data-noexport="" className={`nb${hoverUnit === n.unit ? ' hot' : ''}`} dangerouslySetInnerHTML={{ __html: n.html }} />
+  );
+
   const hovered = !ghost && !placing && hoverId && hoverId !== selected ? items.find((i) => i.id === hoverId) : null;
   const feet = (hovered ? renderFoot(K, hovered, 'foot hover') : '') +
     (sel && !lifted ? renderFoot(K, sel, 'foot sel') : '') +
@@ -295,6 +357,7 @@ export default function FloorEditor({ pid, items: allItems, dispatch, onBack, on
 
   const status = [
     `F${plan.floor} unit ${plan.unit}`,
+    hoverUnit ? `unit ${hoverUnit} · click to open` : null,
     `${st.assigned}/${st.desks} desks assigned`,
     hover ? `cell ${hover.cx},${hover.cy} (${(hover.cx * 0.2).toFixed(1)}, ${(hover.cy * 0.2).toFixed(1)} m)` : null,
     placing ? `placing ${placing.type} ${placing.rot}°` : null,
@@ -323,7 +386,7 @@ export default function FloorEditor({ pid, items: allItems, dispatch, onBack, on
             <button type="button" role="tab" aria-selected={false} className={seg(false)} onClick={() => onFloor(plan.floor)}>All units</button>
             {UNITS[plan.floor].map((u) => (
               <button key={u} type="button" role="tab" aria-selected={u === plan.unit} className={seg(u === plan.unit)}
-                onClick={() => onSwitch(plan.floor, u)}>Unit {u}</button>
+                onClick={() => (u === plan.unit ? null : glide(u))}>Unit {u}</button>
             ))}
           </div>
           <span className="mx-1 h-5 w-px bg-edge" />
@@ -342,14 +405,14 @@ export default function FloorEditor({ pid, items: allItems, dispatch, onBack, on
           <button type="button" className={`${tb} !border-accent text-accent-hi`} onClick={exportPlan}>Export PNG</button>
         </div>
 
-        <div className="relative flex-1 min-h-0 stage-glow">
+        <div ref={stageRef} className="relative flex-1 min-h-0 stage-glow">
           <div className="absolute left-4 top-3 pointer-events-none">
             <div className="text-[11px] uppercase tracking-[.18em] text-ink">Fig 2 · Floor {String(plan.floor).padStart(2, '0')} · Unit {plan.unit}{showCore ? ' · building core' : ' · office view'}</div>
             <div className="text-[12px] text-ink-hi mt-0.5">{plan.subtitle}</div>
           </div>
           <svg
             ref={svgRef}
-            className="w-full h-full block select-none touch-none"
+            className="office-lit w-full h-full block select-none touch-none"
             style={{ cursor: placing ? 'copy' : undefined }}
             viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
             role="img"
@@ -359,13 +422,15 @@ export default function FloorEditor({ pid, items: allItems, dispatch, onBack, on
             onPointerUp={() => endDrag(true)}
             onPointerCancel={() => endDrag(false)}
             onPointerOver={(e) => setHoverId(e.target.closest('[data-id]')?.dataset.id || null)}
-            onPointerLeave={() => { setHover(null); setHoverId(null); if (!drag.current && placing) setGhost(null); }}
+            onPointerLeave={() => { setHover(null); setHoverId(null); setHoverUnit(null); tipHide(); if (!drag.current && placing) setGhost(null); }}
             onContextMenu={(e) => e.preventDefault()}
             onDragOver={onDragOver}
             onDragLeave={() => setGhost(null)}
             onDrop={onDrop}
           >
             <IsoDefs light={light} />
+            {core && !core.ahead && coreG}
+            {neighbours.filter((n) => !n.ahead).map(nbG)}
             <Html html={plate} />
             {floorNodes.map((it) => <ItemG key={it.id} K={K} item={it} cls={clsOf(it)} cut={cutH} />)}
             <Html html={shadows} className="shell-shadows" />
@@ -373,7 +438,11 @@ export default function FloorEditor({ pid, items: allItems, dispatch, onBack, on
             {solidNodes.map((n) => <ItemG key={n.ghost ? 'ghost' : n.it.id} K={K} item={n.it} cls={n.cls} cut={cutH} ghost={n.ghost} />)}
             <g className="door-swing" ref={doorsRef} pointerEvents="none" data-noexport="" />
             <Html html={tags} className="zone-tags" />
+            {core?.ahead && coreG}
+            {neighbours.filter((n) => n.ahead).map(nbG)}
           </svg>
+          <HoverTip tip={tip} />
+          <Credit />
           <div className="absolute right-4 bottom-3 text-right text-[12px] tabular-nums pointer-events-none" aria-live="polite">
             {msg ? <div className="text-accent-hi">{msg}</div> : null}
             <div className="text-ink-hi">{status}</div>

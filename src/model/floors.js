@@ -4,10 +4,11 @@
 
 import { ROTATIONS, TILE } from '../iso/units.js';
 import { SIZES } from './catalog.js';
-import { validate, rotateItem } from '../iso/grid.js';
+import { validate, rotateItem, cellRect } from '../iso/grid.js';
 import LAYOUTS from './layouts.json';
 
-export const TOTAL_FLOORS = 10;
+// Floors are numbered as in Cambodia: G (the ground-floor lobby, 0), then 1, 2, 3 … above it
+export const TOTAL_FLOORS = 10;   // floors 1–10 above G: 11 storeys in all
 export const RENTED = [2, 4];
 export const UNITS = { 2: ['A', 'B', 'C', 'D'], 4: ['C', 'D'] }; // floor 4: units C and D are in the PDF
 export const STORAGE_KEY = 'floorplan.v2';
@@ -29,7 +30,7 @@ export const PLANS = Object.fromEntries(Object.entries(LAYOUTS).map(([id, p]) =>
  * Where each unit sits on its floor (cells), as on the PDF key plan: Units C (NW) and D (NE) above the
  * central east–west corridor, Units A (SW) and B (SE) below it. Floor 4 only has C and D in the plan.
  */
-const UNIT_AT = { C: [0, 0], D: [78, 0], A: [15, 99], B: [78, 99] }; // A/B walls at y = 102: a 3 m corridor
+export const UNIT_AT = { C: [0, 0], D: [78, 0], A: [15, 99], B: [78, 99] }; // A/B walls at y = 102: a 3 m corridor
 
 /** Building core from the key plan (floor cells; identical on every floor, stacked). */
 export const CORE = {
@@ -72,7 +73,9 @@ export function floorPlan(floor) {
   fill(0, 69, 33, 93); fill(cols - 33, 69, cols, 93);                                          // WC pockets + the floor their doors swing onto
   fill(CORE.stairsW.x0 - 1, CORE.stairsY[0] - 4, CORE.stairsW.x1, CORE.stairsY[1] + 2);         // stair cores (and their doors)
   fill(CORE.stairsE.x0, CORE.stairsY[0] - 4, CORE.stairsE.x1 + 1, CORE.stairsY[1] + 2);
-  const edges = units.flatMap((u) => (PLANS[u.id].edges || []).map((e) => ({ ...e, gx: e.gx + u.ox, gy: e.gy + u.oy })));
+  // a boundary wall both neighbours carry (Unit A's east wall is Unit B's west wall) is drawn once
+  const edges = [...new Map(units.flatMap((u) => (PLANS[u.id].edges || []).map((e) => ({ ...e, gx: e.gx + u.ox, gy: e.gy + u.oy })))
+    .map((e) => [`${e.type}:${e.gx}:${e.gy}:${e.rot}:${e.w}`, e])).values()];
   return { id: `F${floor}`, floor, cols, rows, mask: grid.map((r) => r.join('')), edges, units };
 }
 
@@ -172,16 +175,122 @@ function dedupeDoors(items) {
     ? { ...d, flip: true } : d));
 }
 
-export const seedPlan = (id) => sanitize(LAYOUTS[id].items, PLANS[id]);
+/**
+ * Close the small gaps between neighbouring desks along each desk row (desks at 0° / 180°) and column
+ * (90° / 270°). Rows that face each other (touching back to back) form one block and move together,
+ * slot by slot, so a facing pair stays mirrored: first the desks sharing a slot are lined up on its
+ * start, then each gap of up to MAX_GAP cells is closed by sliding the smaller run of touching slots on
+ * one side of it (the far side on a tie). Wider gaps are aisles and stay, as do gaps between two
+ * different named teams. Nothing is moved into anything: if one side is blocked the other is tried,
+ * and if both are, the gap stays.
+ */
+const MAX_GAP = 2;
+export function packDeskRows(items, plan) {
+  let out = items;
+  const horiz = (d) => (d.rot || 0) % 180 === 0;
+  const span = (d) => { const r = cellRect(d); return horiz(d) ? [r.x0, r.x1, r.y0, r.y1] : [r.y0, r.y1, r.x0, r.x1]; }; // along, cross
+  const desks = () => out.filter((d) => d.type === 'desk');
+  // blocks: rows of the same direction joined when one's desks touch the other's back to back
+  const root = new Map(), find = (k) => (root.get(k) === k ? k : find(root.get(k)));
+  const lineOf = (d) => `${horiz(d) ? 'h' : 'v'}${span(d)[2]}`;
+  for (const d of desks()) root.set(lineOf(d), lineOf(d));
+  for (const a of desks()) for (const b of desks()) {
+    const [a0, a1, , c1] = span(a), [b0, b1, c0] = span(b);
+    if (horiz(a) === horiz(b) && c1 === c0 && a0 < b1 && b0 < a1) root.set(find(lineOf(b)), find(lineOf(a)));
+  }
+  const blocks = [...new Set([...root.keys()].map(find))];
+  const shift = (d, by) => (horiz(d) ? { ...d, gx: d.gx + by } : { ...d, gy: d.gy + by });
+  const tryMove = (moves) => {   // moves: [[desk, by]]; all or nothing
+    const moved = new Map(moves.filter(([, by]) => by).map(([d, by]) => [d.id, shift(d, by)]));
+    const next = out.map((d) => moved.get(d.id) || d);
+    if (![...moved.values()].every((d) => !validate(next, d, plan))) return false;
+    out = next;
+    return true;
+  };
+  // slots: desks of the block whose spans along the row overlap, in order
+  const slotsOf = (block) => {
+    const ds = desks().filter((d) => find(lineOf(d)) === block).sort((a, b) => span(a)[0] - span(b)[0]);
+    const slots = [];
+    for (const d of ds) {
+      const [a0, a1] = span(d), last = slots[slots.length - 1];
+      if (last && a0 < last.a1) { last.ds.push(d); last.a1 = Math.max(last.a1, a1); } else slots.push({ a0, a1, ds: [d] });
+    }
+    return slots;
+  };
+  const teams = (slot) => new Set(slot.ds.map((d) => d.team).filter(Boolean));
+  for (const block of blocks) {
+    for (const slot of slotsOf(block)) tryMove(slot.ds.map((d) => [d, slot.a0 - span(d)[0]]));
+    for (let i = 1; ; i++) {
+      const slots = slotsOf(block);
+      if (i >= slots.length) break;
+      const gap = slots[i].a0 - slots[i - 1].a1;
+      const ta = teams(slots[i - 1]), tb = teams(slots[i]);
+      if (gap <= 0 || gap > MAX_GAP || (ta.size && tb.size && ![...ta].some((t) => tb.has(t)))) continue;
+      let l = i - 1; while (l > 0 && slots[l - 1].a1 === slots[l].a0) l--;
+      let r = i; while (r < slots.length - 1 && slots[r].a1 === slots[r + 1].a0) r++;
+      const run = (from, to, by) => slots.slice(from, to).flatMap((sl) => sl.ds.map((d) => [d, by]));
+      const left = run(l, i, gap), right = run(i, r + 1, -gap);
+      const nl = i - l, nr = r + 1 - i;
+      if (nl < nr) { if (!tryMove(left)) tryMove(right); } else if (!tryMove(right)) tryMove(left);
+    }
+  }
+  return out;
+}
+
+export const seedPlan = (id) => packDeskRows(sanitize(LAYOUTS[id].items, PLANS[id]), PLANS[id]);
+/**
+ * The shell (walls, glass walls and pillars; the outer walls come with the plan) of the units a floor does
+ * not rent, taken from the floor where they are laid out (the building's shell is the same on every floor):
+ * floor 4 rents only C and D, so its A and B are drawn as faded shells. [{ unit, plan, items, ox, oy }]
+ */
+export function shellUnits(floor) {
+  return ['C', 'D', 'A', 'B'].filter((u) => !UNITS[floor].includes(u)).flatMap((u) => {
+    const from = RENTED.find((f) => UNITS[f].includes(u));
+    if (from === undefined) return [];
+    const id = planId(from, u), [ox, oy] = UNIT_AT[u];
+    return [{ unit: u, plan: PLANS[id], items: seedPlan(id).filter((it) => ['wall', 'glass', 'pillar'].includes(it.type)), ox, oy }];
+  });
+}
+
 export const seedAll = () => Object.fromEntries(Object.keys(PLANS).map((id) => [id, seedPlan(id)]));
 
 // ---------- persistence ----------
+
+/** Saved items matching `pick` moved to their seed position (by id), where they fit there. */
+function moveSeeded(items, id, pick) {
+  let out = items;
+  for (const seed of seedPlan(id).filter(pick)) {
+    const cur = out.find((it) => it.id === seed.id);
+    if (!cur || (cur.gx === seed.gx && cur.gy === seed.gy)) continue;
+    const moved = { ...cur, gx: seed.gx, gy: seed.gy };
+    const next = out.map((it) => (it.id === seed.id ? moved : it));
+    if (!validate(next, moved, PLANS[id])) out = next;
+  }
+  return out;
+}
+
+/** Seed items matching `pick` that a saved plan lacks (by id), added where they still fit. */
+function addSeeded(items, id, pick) {
+  const have = new Set(items.map((it) => it.id));
+  let out = items;
+  for (const it of seedPlan(id).filter((s) => pick(s) && !have.has(s.id))) if (!validate(out, it, PLANS[id])) out = [...out, it];
+  return out;
+}
 
 export function load() {
   try {
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
     if (raw && raw.plans) {
-      return Object.fromEntries(Object.keys(PLANS).map((id) => [id, Array.isArray(raw.plans[id]) ? sanitize(raw.plans[id], PLANS[id]) : seedPlan(id)]));
+      // v2 → v3: desk rows were packed (no gaps between neighbouring desks); saved plans get it once
+      // v3 → v4: two massage chairs each in the 4th-floor men's and women's massage rooms
+      // v4 → v5: three server racks in the 2D server room; v5 → v6: the racks moved to the room's middle
+      const fix = (items, id) => {
+        const packed = raw.v >= 3 ? items : packDeskRows(items, PLANS[id]);
+        const chairs = raw.v >= 4 ? packed : addSeeded(packed, id, (it) => it.type === 'massageChair');
+        const racks = raw.v >= 5 ? chairs : addSeeded(chairs, id, (it) => it.type === 'serverRack');
+        return raw.v >= 6 ? racks : moveSeeded(racks, id, (it) => it.type === 'serverRack');
+      };
+      return Object.fromEntries(Object.keys(PLANS).map((id) => [id, Array.isArray(raw.plans[id]) ? fix(sanitize(raw.plans[id], PLANS[id]), id) : seedPlan(id)]));
     }
   } catch { /* corrupt or blocked storage: fall through to the PDF layout */ }
   return seedAll();
@@ -189,7 +298,7 @@ export function load() {
 
 export function save(plans) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ v: 2, savedAt: new Date().toISOString(), plans }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ v: 6, savedAt: new Date().toISOString(), plans }));
     return true;
   } catch {
     return false;

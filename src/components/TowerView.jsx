@@ -1,20 +1,24 @@
-// Fig 1 · TELA Office Building — the building as a 10-floor exterior schematic, extruded from the real footprint
+// Fig 1 · TELA Office Building — the building as an 11-storey exterior schematic (G, then floors 1–10), extruded from the real footprint
 // traced off the official layout's key plan (see model/building.js): stepped façades, the WC and stair
 // core bumps and the recessed north centre all run the full height. Rented floors (2 and 4) glow and
 // open the floor view; their lit windows track how many desks on that floor have someone assigned.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { frame, slits } from '../iso/kernel.js';
 import { depthSort } from '../iso/depth.js';
+import { renderParts } from '../iso/parts.js';
+import { elevatorParts } from '../model/catalog.js';
 import { shadowLayer, roundedRectPath } from '../iso/shadow.js';
 import { RENTED, TOTAL_FLOORS, UNITS, PLANS, planId, stats } from '../model/floors.js';
 import { FOOTPRINT, EXTENT, PILLARS, LIFTS, facades, strips } from '../model/building.js';
 import IsoDefs from './IsoDefs.jsx';
+import SceneButton, { icon } from './SceneButton.jsx';
+import Credit from './Credit.jsx';
 import { vehicle, VEHICLE_DEFS } from '../iso/vehicles.js';
 import { leg, cubicLeg, pose, person, planPath, duration } from '../iso/scenes.js';
 
 /*  World units: 1 m = M units. The building stands on a site plate with a 6.4 m margin.
     plate      0..PW × 0..PD, height PZ
-    building   footprint extruded from PZ: NF floors × FH (3.2 m) + a parapet of PARA
+    building   footprint extruded from PZ: NF storeys (G, 1, 2 …) × FH (3.2 m) + a parapet of PARA
     roof       walkable: a 1.2 m guard parapet follows the whole outline; penthouse over the
                corridor, lift overruns over both cores
     basement   B1 parking slab under the plate (BZ deep): the P↓IN ramp beside the east façade, and
@@ -30,7 +34,7 @@ import { leg, cubicLeg, pose, person, planPath, duration } from '../iso/scenes.j
                down the west side to the loop.
     Ten regular angled bays on the loop's south kerb, then one continuous front lawn.            */
 const M = 5, NM = 48, WM = 70, EM = 65; // site margins: 9.6 m north (VIP lanes), 14 m west (VIP lanes + bays), east: up to the VIP wall's outer face (no strip beyond it)
-const PZ = 7, FH = 16, NF = TOTAL_FLOORS, PARA = 3, BZ = 14;
+const PZ = 7, FH = 16, NF = TOTAL_FLOORS + 1, PARA = 3, BZ = 14;   // NF storeys: G (floor 0) + floors 1…TOTAL_FLOORS
 const GUARD = { h: 6, t: 1.25 }; // walkable roof: 1.2 m guard parapet, 0.25 m thick, along the whole outline
 const H = NF * FH + PARA, ZTOP = PZ + H;
 const wx = (x) => WM + x * M, wy = (y) => NM + y * M;
@@ -298,9 +302,9 @@ function publicWC() {
   let s = `<g class="pwc-shadow">` + shadowLayer(K, [{ x0: b.x, y0: b.y, x1: b.x + b.w, y1: b.y + b.d, h: b.h }],
     { z: PZ, clipId: 'pwc-clip', clip: roundedRectPath(K, PLATE, PLATE_R, PZ), slices: 4, darkness: 0.22, spread: [0.6, 3], cls: 'twr-ground-shadow' }) + `</g>`;
   // interior, only seen when the block is x-rayed: three stalls along the west wall and a basin counter
-  for (let i = 0; i < 3; i++) s += box(b.x + 1, b.y + 2 + i * 9, PZ, 9, 0.6, 9, 0, 'partition furn');
-  s += box(b.x + 1, b.y + 2 + 27, PZ, 9, 0.6, 9, 0, 'partition furn');
-  s += box(b.x + b.w - 14, b.y + 1, PZ, 12, 3.5, 4.5, 0, 'furn');
+  for (let i = 0; i < 3; i++) s += box(b.x + 1, b.y + 2 + i * 9, PZ, 9, 0.6, 9, 0, 'partition fixture');
+  s += box(b.x + 1, b.y + 2 + 27, PZ, 9, 0.6, 9, 0, 'partition fixture');
+  s += box(b.x + b.w - 14, b.y + 1, PZ, 12, 3.5, 4.5, 0, 'fixture counter');
   s += `<g class="pwc">`;
   s += box(b.x, b.y, PZ, b.w, b.d, b.h, 0, 'struct');
   s += `<g transform="${TOP(b.x, b.y, z1)}"><rect class="detail" x="1.2" y="1.2" width="${b.w - 2.4}" height="${b.d - 2.4}"/></g>`;
@@ -311,7 +315,7 @@ function publicWC() {
     `<text class="pwc-sign" x="${b.d / 2}" y="3.1" font-size="1.9" text-anchor="middle" letter-spacing=".3">공용 화장실 · PUBLIC RESTROOM</text>` +
     `<text class="pwc-glyph" x="${b.d / 2}" y="${b.h - 12.4}" font-size="2.6" text-anchor="middle">♀ ♂</text>` +
     `<rect class="face recess" x="${dx - 0.6}" y="${b.h - 11.6}" width="${dw + 1.2}" height="11.6"/>` +
-    `<rect class="face" x="${dx}" y="${b.h - 11}" width="${dw}" height="11"/>` +
+    `<rect class="face pwc-door" x="${dx}" y="${b.h - 11}" width="${dw}" height="11"/>` +
     `<line class="entry-handle" x1="${dx + dw - 1.4}" y1="${b.h - 6.5}" x2="${dx + dw - 1.4}" y2="${b.h - 4.5}"/></g>`;
   s += `</g>`;
   // seen through (a visitor inside): a frosted body — its two visible walls and roof — and a hairline
@@ -609,12 +613,12 @@ function paneOrder(floor) {
 
 export function buildSvg({ occ, cursor, away, vipArrived, vipGone }) {
   const { P, TOP, FRONT, SIDE, box, path } = K;
-  const panes = Object.fromEntries(Array.from({ length: NF }, (_, i) => [i + 1, paneOrder(i + 1)]));
+  const panes = Object.fromEntries(Array.from({ length: NF }, (_, i) => [i, paneOrder(i)]));
   const lit = (i) => {
     const o = occ[i];
     return RENTED.includes(i) && o && o.desks ? Math.round((o.assigned / o.desks) * SLOTS_PER_FLOOR) : 0;
   };
-  const flCls = (i) => `fl${RENTED.includes(i) ? ' rent' : ''}${cursor === i ? ' cursor' : ''}`;
+  const flCls = (i) => `fl${RENTED.includes(i) ? ' rent' : ''}${i === 0 ? ' lobby' : ''}${cursor === i ? ' cursor' : ''}`;
 
   let svg = ASPHALT_GRAIN;   // the road texture (a pattern the driving surfaces fill with)
   // ---- B1 parking basement under the plate ----
@@ -627,7 +631,7 @@ export function buildSvg({ occ, cursor, away, vipArrived, vipGone }) {
   svg += `<g transform="${TOP(0, 0, PZ)}">
     <rect class="plate-edge" x="${PLATE.x0 + EDGE}" y="${PLATE.y0 + EDGE}" width="${PLATE.x1 - PLATE.x0 - 2 * EDGE}" height="${PLATE.y1 - PLATE.y0 - 2 * EDGE}" rx="${PLATE_R - EDGE}"/>
   </g>`;
-  svg += `<g transform="${FRONT(PLATE.x0, PLATE.y1, PZ)}"><text class="label" x="${(PLATE.x1 - PLATE.x0) / 2 - 40}" y="5.2" font-size="4" letter-spacing=".6">TELA OFFICE BUILDING · 10 FLOORS · ${EXTENT.w} × ${EXTENT.d} M</text></g>`;
+  svg += `<g transform="${FRONT(PLATE.x0, PLATE.y1, PZ)}"><text class="label" x="${(PLATE.x1 - PLATE.x0) / 2 - 40}" y="5.2" font-size="4" letter-spacing=".6">TELA OFFICE BUILDING · ${NF} STOREYS · ${EXTENT.w} × ${EXTENT.d} M</text></g>`;
 
   svg += courtyard();
   svg += vipDeck();      // the raised VIP route with its graded ramp, bays and markings
@@ -651,18 +655,19 @@ export function buildSvg({ occ, cursor, away, vipArrived, vipGone }) {
     const side = f.front ? 'front' : 'side';
     let s = `<g transform="${t}"><rect class="face struct ${side}" width="${f.len}" height="${H}"/>`;
     const base = FACES.slice(0, FACES.indexOf(f)).reduce((a, g) => a + g.slots.length, 0); // slot index offset
-    for (let i = 1; i <= NF; i++) {
-      const v = H - i * FH;
+    for (let i = 0; i < NF; i++) {   // floor i (G = 0) is storey i + 1 from the ground
+      const v = H - (i + 1) * FH;
       const { rank, variant } = panes[i];
       const n = lit(i);
       // the bloom halo only on rented floors: on the others it is never visible, and every blur filter
       // costs a repaint whenever the view moves
       s += `<g class="${flCls(i)}" data-f="${i}"><rect class="face band struct ${side}" y="${v}" width="${f.len}" height="${FH}"/>` +
-        (RENTED.includes(i) ? `<rect class="halo" x="-3" y="${v - 2}" width="${f.len + 6}" height="${FH + 4}" filter="url(#bloom)"/>` : '');
+        // the rented floors and the lobby (lit all night) bloom at night
+        (RENTED.includes(i) || i === 0 ? `<rect class="halo" x="-3" y="${v - 2}" width="${f.len + 6}" height="${FH + 4}" filter="url(#bloom)"/>` : '');
       s += `<line class="detail" x1="0" y1="${v + FH - 1.4}" x2="${f.len}" y2="${v + FH - 1.4}"/><g class="win">`;
       f.slots.forEach((sl, k) => {
         const r = rank[base + k];
-        if (i === 1) s += `<rect class="pn lobby" x="${sl.x.toFixed(2)}" y="${v + 1.6}" width="${sl.w.toFixed(2)}" height="${FH - 3.4}"/>`;
+        if (i === 0) s += `<rect class="pn lobby" x="${sl.x.toFixed(2)}" y="${v + 1.6}" width="${sl.w.toFixed(2)}" height="${FH - 3.4}"/>`;
         // --d: when this window's light switches on as night falls (scattered, so the floor lights up unevenly)
         else s += `<rect class="pn${r < n ? ' on' + variant[base + k] : ''}" style="--d:${500 + ((base + k) * 389 + i * 157) % 1700}ms" x="${sl.x.toFixed(2)}" y="${v + 2.6}" width="${sl.w.toFixed(2)}" height="${FH - 5.2}"/>`;
       });
@@ -896,27 +901,66 @@ function fitRoute(path, extra = []) {
 /** "Go to KOSIGN": from just outside the entrance, in through the lobby (the building frosts so the
  *  visitor stays visible), across to the right-hand (east) lift core, then the lift rides up to the
  *  floor. The floor view takes over from there (route to KOSIGN's entrance). */
+/**
+ * The east lift pair, reused from the floor plans: two of the plans' elevators exactly as drawn there
+ * (90 × 78 plan units each, cut at the plans' height, sill, doors and ▲▼ indicator in front) side by side,
+ * scaled evenly to the building (plan unit = 2 cm, tower unit = 20 cm) and centred in the east core with
+ * the sills at its front. The visitor's (west) car rides.
+ */
+const ELEV = (() => {
+  const L = LIFTS[1], S = 0.1, W = 90 * S, x0 = wx(L.x0) + ((L.x1 - L.x0) * M - 2 * W) / 2;
+  return { S, W, D: 78 * S, y0: wy(L.y1) - 90 * S, cars: [x0, x0 + W] };
+})();
+/**
+ * The lift core sits deep in the building, so in iso its cars at G read a storey up, level with the floor
+ * above the lobby, and every stop a floor too high. The lift (its cars and their shadow) is drawn one
+ * storey lower to line up with the façade; the destination storey's outline stays at its true height.
+ */
+const LIFT_DROP = FH, LZ0 = PZ - LIFT_DROP;
+/** One plan elevator at (x, y, z) in tower units: its parts scaled evenly, door leaves `open` 0…1. */
+function towerElevator(x, y, z, open) {
+  const s = ELEV.S;
+  const parts = elevatorParts({ open }).map((p) => ({
+    ...p, x: p.x * s, y: p.y * s, z: p.z * s, w: p.w * s, d: p.d * s, h: p.h * s,
+    deco: p.deco && Object.fromEntries(Object.entries(p.deco).map(([f, fn]) =>
+      [f, () => `<g transform="scale(${s})">${fn(f[1] === 'y' ? p.w : p.d, p.h)}</g>`])),
+    top: p.top && ((w, d, rot) => `<g transform="scale(${s})">${p.top(p.w, p.d, rot)}</g>`),
+  }));
+  return renderParts(K, parts, { W0: 90 * s, D0: 90 * s, rot: 0, ox: x, oy: y, z0: z });
+}
+
 export function kosignPath(floor) {
-  // to the door of the west car of the east lift pair (the one that rides up)
-  const L = LIFTS[1], lx = wx(L.x0) + 1 + ((L.x1 - L.x0) * M - 3) / 4, front = wy(L.y1) + 4;
-  const inside = { xray: 'xray-floors', inside: true, speed: WALK_SPEED };
+  // in through the lobby, to the doors of the west car of the east lift pair (the one that rides up)
+  const L = LIFTS[1], lx = ELEV.cars[0] + ELEV.W / 2, front = wy(L.y1) + 4;
+  const inside = { xray: 'xray-bld', inside: true, speed: WALK_SPEED };
   return [
     leg([CX, YB + 16], [['L', CX, YB + 2]], { speed: WALK_SPEED, z: entryZ }),
-    leg([CX, YB + 2], [['L', CX, front], ['L', lx, front], ['L', lx, wy(L.y1) - 1]], inside),
+    // walking in, the visitor steps down with the lowered lift drawing (LIFT_DROP), from the lobby door to
+    // the car, so they meet its floor rather than float above it
+    leg([CX, YB + 2], [['L', CX, front], ['L', lx, front], ['L', lx, ELEV.y0 + ELEV.D / 2]],
+      { ...inside, z: (x, y) => PZ - LIFT_DROP * Math.min(1, Math.max(0, (YB + 2 - y) / (YB + 2 - (ELEV.y0 + ELEV.D / 2)))) }),
   ];
 }
+/** Arriving: out of the west car at the floor (on the lowered lift drawing, LZ0), to just in front of it. */
+export function kosignExitPath(floor) {
+  const L = LIFTS[1], lx = ELEV.cars[0] + ELEV.W / 2, zf = LZ0 + floor * FH;
+  return [leg([lx, ELEV.y0 + ELEV.D / 2], [['L', lx, wy(L.y1) + 3]],
+    { xray: 'xray-bld', inside: true, speed: WALK_SPEED, z: () => zf })];
+}
+export const LIFT_RISE = 2.4;   // s the car takes from G to the floor
 /** The east lift for "Go to KOSIGN": waits lit at the ground floor while the visitor walks over (wait
- *  seconds), then rises to the floor. */
-export function kosignLiftPath(floor, wait) {
+ *  seconds), rises to the floor, then opens there and holds while the visitor steps out (exit seconds);
+ *  after that the floor view takes over, where the visitor steps out of the plan's lift once more. */
+export function kosignLiftPath(floor, wait, exit) {
   const L = LIFTS[1], at = { x: wx((L.x0 + L.x1) / 2), y: wy((L.y0 + L.y1) / 2), z: PZ, ux: 0, uy: -1 };
   return [
-    { wait, len: 0, liftIdle: true, xray: 'xray-floors', at },
-    { wait: 2.4, len: 0, lift: floor, xray: 'xray-floors', at },
+    { wait, len: 0, liftIdle: true, dest: floor, xray: 'xray-bld', at },
+    { wait: LIFT_RISE, len: 0, lift: floor, dest: floor, xray: 'xray-bld', at },
+    { wait: exit, len: 0, liftAt: floor, dest: floor, xray: 'xray-bld', at },
   ];
 }
 
 // small icons for the scene buttons (16 × 16, stroked in the current colour)
-const icon = (d) => <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>;
 const ICON = {
   parkIn: icon(<><path d="M3 13V3h3.2a2.6 2.6 0 0 1 0 5.2H3" /><path d="M12 4v8M9.5 9.5 12 12l2.5-2.5" /></>),     // P ↓
   parkOut: icon(<><path d="M3 13V3h3.2a2.6 2.6 0 0 1 0 5.2H3" /><path d="M12 12V4M9.5 6.5 12 4l2.5 2.5" /></>),   // P ↑
@@ -927,20 +971,6 @@ const ICON = {
   walk: icon(<><circle cx="9" cy="2.8" r="1.3" /><path d="M8.5 5.5 7 9.5l2.5 1.5L10 14M7 9.5 5.5 13M8.5 5.5l2.5 2 1.5-.5M8.5 5.5 6 7l-.8 2" /></>), // walker
   reset: icon(<path d="M2.8 8a5.2 5.2 0 1 0 1.6-3.8M2.5 2.5v3h3" />),
 };
-
-/** A round scene button; hovering (or focusing) it shows its own tooltip right away (no browser title). */
-function SceneButton({ label, tip, onClick, red = false, children }) {
-  return (
-    <button type="button" onClick={onClick} aria-label={label}
-      className={`group relative frost-panel frost-edge grid size-9 place-items-center rounded-full ${red ? 'text-[#e5484d] hover:text-[#c9363b]' : 'text-ink-hi hover:text-accent'}`}>
-      {children}
-      <span role="tooltip" className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded-lg frost-panel frost-edge px-2.5 py-1.5 text-left text-[11px] leading-snug opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100">
-        <span className={`block font-semibold ${red ? 'text-[#e5484d]' : 'text-ink-hi'}`}>{label}</span>
-        <span className="block text-ink">{tip}</span>
-      </span>
-    </button>
-  );
-}
 
 /** Camera view for the ATM button: the ATM room and a little of the lawn round it. */
 const ATM_VIEW = (() => {
@@ -1255,38 +1285,31 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
         if (!a.shownAt && camSettled.current) a.shownAt = now;
         a.inner.removeAttribute('transform');
         if (!a.shownAt) { a.inner.innerHTML = ''; a.look = null; return true; }
-        // twin cars in the east core (like the plans' lift pair): the visitor's (west) car opens, closes
-        // and rises; the other waits at G. Each shows its floor above the doors (G, 2, 3, 4…)
-        const L = LIFTS[1], k = p.leg.lift ? p.k : 0, e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
-        const lz = PZ + e * ((p.leg.lift || 1) - 1) * FH;
+        // the plans' twin elevators in the east core: the visitor's (west) car opens, closes and rises;
+        // the other waits at G
+        const k = p.leg.lift ? p.k : 0, e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
         const ease = (t) => 1 - (1 - Math.min(1, Math.max(0, t))) ** 3;
-        const open = p.leg.lift ? 1 - ease(p.k * 5) : ease((now - a.shownAt) / 700);
-        const y0 = wy(L.y0) + 1, d = (L.y1 - L.y0) * M - 2, h = FH - 3, cw = ((L.x1 - L.x0) * M - 3) / 2;
-        const car = (x0, z, op) => {
-          const gw = cw * 0.62, gx = (cw - gw) / 2, pw = gw / 2, slide = op * pw * 0.92;
-          const fl = Math.round((z - PZ) / FH) + 1;
-          return K.box(x0, y0, z, cw, d, h, 0, 'lift-car') +
-            `<g transform="${K.FRONT(x0, y0 + d, z + h)}"><rect class="lift-gap" x="${gx}" y="2.6" width="${gw}" height="${h - 2.6}"/>` +
-            `<rect class="lift-door" x="${gx - slide}" y="2.6" width="${pw}" height="${h - 2.6}"/>` +
-            `<rect class="lift-door" x="${gx + pw + slide}" y="2.6" width="${pw}" height="${h - 2.6}"/>` +
-            `<rect class="lift-frame" x="${gx - 0.6}" y="2" width="${gw + 1.2}" height="${h - 2}"/>` +
-            `<text class="lift-floor" x="${cw / 2}" y="1.7" font-size="1.6" text-anchor="middle">${fl === 1 ? 'G' : fl}</text></g>`;
-        };
-        const xa = wx(L.x0) + 1, xb = xa + cw + 1;
-        // the shaft: an outline from the ground up past the 4th floor with a level mark per floor (G, 2, 3…)
-        // so the cars visibly start at the bottom, on the ground floor; a contact shadow grounds them
-        const sx0 = xa - 0.5, sx1 = xb + cw + 0.5, sy0 = y0 - 0.5, sy1 = y0 + d + 0.5, top = PZ + 5 * FH;
-        const P3 = (x, y, z) => K.P(x, y, z).map((v) => v.toFixed(2)).join(' ');
-        let shaft = `<path class="lift-shaft" d="M${P3(sx0, sy1, PZ)}L${P3(sx1, sy1, PZ)}L${P3(sx1, sy0, PZ)}` +
-          `M${P3(sx0, sy1, PZ)}L${P3(sx0, sy1, top)}M${P3(sx1, sy1, PZ)}L${P3(sx1, sy1, top)}M${P3(sx1, sy0, PZ)}L${P3(sx1, sy0, top)}` +
-          `M${P3(sx0, sy1, top)}L${P3(sx1, sy1, top)}L${P3(sx1, sy0, top)}"/>`;
-        for (let f = 1; f <= 5; f++) {
-          const z = PZ + (f - 1) * FH, [tx, ty] = K.P(sx0 - 1.5, sy1, z + 1.2);
-          shaft += `<path class="lift-level${f === 1 ? ' g' : ''}" d="M${P3(sx0 - 1, sy1, z)}L${P3(sx1, sy1, z)}L${P3(sx1, sy0, z)}"/>` +
-            `<text class="lift-level-tag${f === 1 ? ' g' : ''}" x="${tx.toFixed(2)}" y="${ty.toFixed(2)}" font-size="3" text-anchor="end">${f === 1 ? 'G' : f}</text>`;
-        }
-        const shadow = `<path class="lift-ground" d="${K.path([[sx0, sy0, PZ], [sx1, sy0, PZ], [sx1, sy1, PZ], [sx0, sy1, PZ]])}Z"/>`;
-        a.inner.innerHTML = shadow + shaft + car(xa, lz, open) + car(xb, PZ, 0);
+        // floor n sits n storeys above G; at G the car opens for the visitor, rising it shuts and climbs,
+        // arrived (liftAt) it opens at the floor
+        const lz = p.leg.liftAt ? LZ0 + p.leg.liftAt * FH : LZ0 + e * (p.leg.lift || 0) * FH;
+        const open = p.leg.liftAt ? ease(p.k * 4) : p.leg.lift ? 1 - ease(p.k * 5) : ease((now - a.shownAt) / 700);
+        const car = (x0, z, op) => towerElevator(x0, ELEV.y0, z, op);
+        const [xa, xb] = ELEV.cars, y0 = ELEV.y0, d = ELEV.D, cw = ELEV.W;
+        // no shaft outline or level marks (the frosted building is enough); a contact shadow grounds the cars
+        const sx0 = xa - 0.5, sx1 = xb + cw + 0.5, sy0 = y0 - 0.5, sy1 = y0 + d + 0.5;
+        const shadow = `<path class="lift-ground" d="${K.path([[sx0, sy0, LZ0], [sx1, sy0, LZ0], [sx1, sy1, LZ0], [sx0, sy1, LZ0]])}Z"/>`;
+        // the destination floor's name beside the car's stop at the shaft (no outline round the floor)
+        const dest = p.leg.dest || 0;
+        const [tx, ty] = K.P(sx1 + 2, sy1, LZ0 + dest * FH + FH * 0.45);
+        const tag = dest > 0 ? `<text class="lift-dest-tag" x="${tx.toFixed(2)}" y="${ty.toFixed(2)}" font-size="4.5">${dest}F</text>` : '';
+        // the rented floors (2 and 4) glow as bands round the frosted building, the destination brightest
+        const bands = RENTED.map((fl) => {
+          const z0 = PZ + fl * FH, z1 = z0 + FH;
+          return `<g class="lift-band${fl === dest ? ' dest' : ''}">` + ORDERED.map((f) => `<path d="${K.path(f.front
+            ? [[wx(f.x0), wy(f.y), z0], [wx(f.x1), wy(f.y), z0], [wx(f.x1), wy(f.y), z1], [wx(f.x0), wy(f.y), z1]]
+            : [[wx(f.x), wy(f.y0), z0], [wx(f.x), wy(f.y1), z0], [wx(f.x), wy(f.y1), z1], [wx(f.x), wy(f.y0), z1]])}Z"/>`).join('') + `</g>`;
+        }).join('');
+        a.inner.innerHTML = bands + tag + shadow + car(xa, lz, open) + car(xb, LZ0, 0);
         a.look = null;
       } else if (a.kind === 'car') {
         const deg = Math.round((Math.atan2(p.uy, p.ux) * 180) / Math.PI);
@@ -1347,7 +1370,7 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
       if (g.classList.contains('open') !== want) g.classList.toggle('open', want);
     });
     if (svgEl) {
-      for (const cls of ['xray-bld', 'xray-pwc', 'xray-floors']) if (svgEl.classList.contains(cls) !== (xray === cls)) svgEl.classList.toggle(cls, xray === cls);
+      for (const cls of ['xray-bld', 'xray-pwc']) if (svgEl.classList.contains(cls) !== (xray === cls)) svgEl.classList.toggle(cls, xray === cls);
       if (d > 0.05) {                                // moving: ease toward the target and write it
         c.x += (t.x - c.x) * k; c.y += (t.y - c.y) * k; c.w += (t.w - c.w) * k; c.h += (t.h - c.h) * k;
         svgEl.setAttribute('viewBox', `${c.x.toFixed(2)} ${c.y.toFixed(2)} ${c.w.toFixed(2)} ${c.h.toFixed(2)}`);
@@ -1360,12 +1383,16 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
   };
   const start = (actor) => {
     const first = pose(actor.path, 0);
-    const path = [{ wait: INTRO, len: 0, at: { x: first.x, y: first.y, z: first.z, ux: first.ux, uy: first.uy }, clip: first.leg.clip }, ...actor.path];
+    // the intro wait keeps the first leg's clip, x-ray and inside-the-building layer (an actor starting inside
+    // the frosted building, like the visitor stepping out of the lift, stays visible while it waits)
+    const path = [{ wait: INTRO, len: 0, at: { x: first.x, y: first.y, z: first.z, ux: first.ux, uy: first.uy },
+      clip: first.leg.clip, xray: first.leg.xray, inside: first.leg.inside }, ...actor.path];
     actors.current.push({ ...actor, path, t0: performance.now(), map: planPath(actor.path),
       views: { over: actor.view || fitRoute(actor.path, actor.camPts) } });
     if (!loop.current) loop.current = requestAnimationFrame(tick);
   };
-  useEffect(() => () => cancelAnimationFrame(loop.current), []);
+  const exitTimer = useRef(0);   // "Go to KOSIGN": when the visitor steps out of the lift at the floor
+  useEffect(() => () => { cancelAnimationFrame(loop.current); clearTimeout(exitTimer.current); }, []);
 
   const parkIn = () => {
     const k = [...PARKED.keys()].reverse().find((j) => !away.has(PARKED[j]));
@@ -1413,13 +1440,17 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
     // camera: not close — the whole lower building, ground to above the 4th floor, and the entrance
     const pts = FOOTPRINT.flatMap(([x, y]) => [K.P(wx(x), wy(y), PZ), K.P(wx(x), wy(y), PZ + 5 * FH + 6)]).concat([K.P(CX, YB + 20, PZ)]);
     const view = fitScreen(pts);
-    const walk = kosignPath(floor);
+    const walk = kosignPath(floor), exit = kosignExitPath(floor);
     let done = false;
     // the lift first (it waits lit at the ground floor during the walk), then the visitor (the newest
-    // actor leads); once the visitor is in, the lift leads and rises
-    start({ kind: 'lift', path: kosignLiftPath(floor, duration(walk)), view,
+    // actor leads); once the visitor is in, the lift leads and rises; at the floor its doors open and the
+    // visitor steps out (a new walker, started as the car arrives); then the floor view takes over, where
+    // the visitor steps out of the plan's lift once more and waits in front of it (FloorOverview guide)
+    start({ kind: 'lift', path: kosignLiftPath(floor, duration(walk), INTRO + duration(exit) + 0.4), view,
       onArrive: () => { if (done) return; done = true; onGuide?.(floor); } });
     start({ kind: 'person', path: walk, view });
+    clearTimeout(exitTimer.current);
+    exitTimer.current = setTimeout(() => start({ kind: 'person', path: exit, view }), (INTRO + duration(walk) + LIFT_RISE) * 1000);
     setMsg(`to KOSIGN on floor ${floor} · in through the lobby to the east lifts`);
   };
   // ATM button: zoom the camera to the ATM room, or back out to the whole site
@@ -1444,12 +1475,13 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
     setMsg('a visitor is walking from the drop-off to the public restroom');
   };
   const resetScene = () => {
+    clearTimeout(exitTimer.current);
     actors.current.forEach((a) => a.node?.remove());
     actors.current = [];
     cancelAnimationFrame(loop.current);
     loop.current = 0;
     holder.current?.querySelectorAll('.anim-back, .anim-front, .anim-mid1, .anim-mid2, .anim-pwc').forEach((g) => { g.innerHTML = ''; });
-    holder.current?.querySelector('svg.twr')?.classList.remove('xray-bld', 'xray-pwc', 'xray-floors');
+    holder.current?.querySelector('svg.twr')?.classList.remove('xray-bld', 'xray-pwc');
     mapFor.current = null;
     setMap(null);
     setAway(new Set());
@@ -1486,13 +1518,14 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
   const pick = (i) => {
     setCursor(i);
     if (RENTED.includes(i)) onOpen(i);
-    else setMsg(`floor ${i} is ${i === 1 ? 'the lobby' : 'vacant'} · only floors ${RENTED.join(' and ')} are rented`);
+    else setMsg(i === 0 ? `G is the lobby · only floors ${RENTED.join(' and ')} are rented` : `floor ${i} is vacant · only floors ${RENTED.join(' and ')} are rented`);
   };
 
   const onKey = (e) => {
     if (e.target !== e.currentTarget) return;   // keys on the scene buttons stay theirs
-    if (e.key === 'ArrowUp') { setCursor((c) => Math.min(NF, c + 1)); setMsg(''); }
-    else if (e.key === 'ArrowDown') { setCursor((c) => Math.max(1, c - 1)); setMsg(''); }
+    if (e.key === 'ArrowUp') { setCursor((c) => Math.min(TOTAL_FLOORS, c + 1)); setMsg(''); }
+    else if (e.key === 'ArrowDown') { setCursor((c) => Math.max(0, c - 1)); setMsg(''); }
+    else if (e.key === 'g' || e.key === 'G') setCursor(0);
     else if (e.key === 'Enter' || e.key === ' ') pick(cursor);
     else if (/^[1-9]$/.test(e.key)) setCursor(+e.key);
     else if (e.key === '0') setCursor(10);
@@ -1503,7 +1536,7 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
   const o = occupancy[cursor];
   const read = msg || (RENTED.includes(cursor)
     ? `floor ${cursor} · units ${UNITS[cursor].join(' & ')} · ${o.assigned}/${o.desks} seats · enter to edit`
-    : `floor ${cursor} · ${cursor === 1 ? 'lobby' : 'vacant'}`);
+    : cursor === 0 ? 'floor G · lobby' : `floor ${cursor} · vacant`);
 
   return (
     <div ref={holder} tabIndex={0} onKeyDown={onKey} className="relative flex-1 min-h-0 overflow-hidden outline-none stage-glow">
@@ -1558,7 +1591,7 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
         className="twr w-full h-full block"
         viewBox={K.viewBox}
         role="img"
-        aria-label="Isometric view of the TELA Office Building, 10 floors. Floors 2 and 4 are rented and glow; click one, or use arrow keys and Enter, to open its floor plan."
+        aria-label="Isometric view of the TELA Office Building, 11 storeys including the ground floor. Floors 2 and 4 are rented and glow; click one, or use arrow keys and Enter, to open its floor plan."
         onClick={(e) => { const f = e.target.closest('.fl'); if (f) pick(+f.dataset.f); }}
         onMouseOver={(e) => { const f = e.target.closest('.fl'); if (f) { setCursor(+f.dataset.f); setMsg(''); } }}
         onMouseMove={(e) => {
@@ -1575,7 +1608,7 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
       {tip && plans && <FloorTip {...tip} plans={plans} box={holder.current.getBoundingClientRect()} />}
       {/* bottom line: both texts share the floor-menu button's row (bottom-3, 40px tall) so they line up with its centre */}
       {/* bottom row (same 40px line as the floor-menu button): credit at the left, hint centred */}
-      <div className="pointer-events-none absolute left-4 bottom-3 flex h-10 items-center whitespace-nowrap text-[11px] text-ink/60">Designed by Pablo. Powered by isoglow.</div>
+      <Credit />
       <div className="pointer-events-none absolute left-1/2 bottom-3 flex h-10 -translate-x-1/2 items-center whitespace-nowrap text-[12px] text-ink">click a lit floor · ↑↓ + enter</div>
       <div className="pointer-events-none absolute right-16 bottom-3 flex h-10 items-center text-[12px] text-ink-hi tabular-nums" aria-live="polite">{read}</div>
     </div>

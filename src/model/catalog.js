@@ -4,6 +4,7 @@
 
 import { CELL, PILLAR_H, WALL_H } from '../iso/units.js';
 import { esc, slits } from '../iso/kernel.js';
+import { rotPoint } from '../iso/parts.js';
 
 /**
  * Footprint (cells, unrotated), height (world units) and metadata.
@@ -13,6 +14,8 @@ export const SIZES = {
   desk:         { w: 7, d: 6, h: 54, label: 'Desk', note: '140 × 120 cm incl. chair', sizable: 'wd' },
   drawer:       { w: 2, d: 2, h: 30, label: 'Lead drawer', kr: '팀장의 서랍' },
   stool:        { w: 2, d: 2, h: 24, label: 'Stool' },
+  serverRack:   { w: 3, d: 6, h: 56, label: 'Server rack', kr: '서버 랙', note: '60 × 120 cm, 42U (shown cut)' },
+  massageChair: { w: 4, d: 7, h: 50, label: 'Massage chair', kr: '안마의자', note: '80 × 140 cm, reclined' },
   table:        { w: 9, d: 2, h: 38, label: 'Table', kr: '책상 익스텐션', sizable: 'wd' },
   roundTable:   { w: 6, d: 6, h: 38, label: 'Round table' },
   meetingTable: { w: 20, d: 10, h: 38, label: 'Meeting table' },
@@ -58,8 +61,9 @@ export const ZONE_KINDS = {
 
 /** Palette order and grouping. */
 export const PALETTE = [
-  { group: 'Seating', types: ['desk', 'drawer', 'stool'] },
+  { group: 'Seating', types: ['desk', 'drawer', 'stool', 'massageChair'] },
   { group: 'Tables', types: ['table', 'roundTable', 'meetingTable', 'counter'] },
+  { group: 'Equipment', types: ['serverRack'] },
   { group: 'Structure', types: ['pillar', 'wall', 'glass', 'partition', 'door'] },
   { group: 'Zones', types: ['zone'] },
   { group: 'Building core', core: true, types: ['elevator', 'storeroom', 'wc', 'cabinet', 'restroom', 'stair'] },
@@ -100,10 +104,25 @@ export function describe(item) {
   return s.label.toLowerCase();
 }
 
-// ---------- shared bits ----------
+/**
+ * Hover card text for an item: { title, sub }, or null for the ones that get no card (walls, doors, glass,
+ * partitions and room areas: they are everywhere, a card on each would be noise).
+ */
+const NO_TIP = new Set(['zone', 'door', 'wall', 'glass', 'partition']);
+export function tipFor(item) {
+  if (!item || NO_TIP.has(item.type)) return null;
+  const s = SIZES[item.type];
+  if (item.type === 'desk') {
+    const name = (item.name || '').trim();
+    return { title: name || 'Unassigned desk', sub: [item.label, item.team].filter(Boolean).join(' · ') || s.note };
+  }
+  if (item.type === 'wc') return item.gender === 'm' ? { title: "Men's WC", sub: '남자 화장실' } : { title: "Women's WC", sub: '여자 화장실' };
+  if (item.type === 'elevator') return { title: 'Elevator', sub: 'to every floor · G – 10' };
+  if (item.type === 'pillar') return { title: 'Pillar', sub: `${s.km} · ${s.kr}` };
+  return { title: s.label, sub: [s.kr, s.note].filter(Boolean).join(' · ') };
+}
 
-const glassPanel = (on) => (w, h) =>
-  `<rect class="glass${on ? ' hot' : ''}" x="1.5" y="1.5" width="${w - 3}" height="${h - 3}" rx="1"/>`;
+// ---------- shared bits ----------
 
 const fitText = (text, room, max) => Math.max(3, Math.min(max, room / Math.max(1, [...text].length * 0.92)));
 
@@ -114,31 +133,61 @@ const seat = (x, y, live, s = 16) => [
 
 // ---------- elements ----------
 
+/** Teams whose desks have no side extension table. */
+const NO_EXT_TEAMS = new Set(['GM']);
+
 function desk(item, W, D) {
   const live = isLive(item);
   const name = (item.name || '').trim();
   const top = Math.round(D * 0.58);            // worktop depth; the rest is the chair zone
+  // 25 cm extension table at the x = 0 end (the employee's left); none for the teams in NO_EXT_TEAMS
+  const EXT = NO_EXT_TEAMS.has((item.team || '').trim()) ? 0 : 12.5;
+  const mid = 1 + EXT + (W - 2 - EXT) / 2;     // centre of the desk proper: monitor and chair line up on it
+  // desks facing each other in a pair differ by 180°, which would put their extensions at opposite ends;
+  // the 180° / 270° desks are mirrored so the extensions of a facing pair line up on the same end
+  const flip = (item.rot || 0) >= 180;
+  const screen = (w, h) => `<rect class="glass hot monitor" x="1.5" y="1.5" width="${w - 3}" height="${h - 3}" rx="1"/>` +
+    `<rect class="scr-accent" x="4" y="4" width="${w * 0.5}" height="1.6"/><rect class="scr-accent" x="4" y="7.5" width="${w * 0.32}" height="1.6"/>`;
+  // the screen's light as a ray across the worktop: a widening, fading beam from just in front of the
+  // monitor to the desk's front edge, in the worktop's own frame turned to the desk's rotation (the
+  // beam is symmetric, so the mirroring of 180° / 270° desks does not change it); #ray-<rot> fades it
+  const ray = (rot) => {
+    const pw = W - 2 - EXT, pd = top - 1, u = pw / 2;
+    const pts = [[u - 10, 6], [u + 10, 6], [u + 17, pd], [u - 17, pd]].map(([a, b]) => rotPoint(a, b, pw, pd, rot));
+    // each desk's beam breathes on its own (CSS beam-breathe), phase and pace seeded from its id
+    const h = [...String(item.id || '')].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+    const style = `animation-duration:${(3.2 + (h % 17) / 10).toFixed(1)}s;animation-delay:-${((h >>> 5) % 40) / 10}s`;
+    return `<path class="monitor-ray" style="${style}" fill="url(#ray-${rot})" d="M${pts.map((p) => p.map((n) => n.toFixed(2)).join(' ')).join('L')}Z"/>`;
+  };
   return [
-    { x: 3, y: 3, z: 0, w: 2, d: top - 6, h: 36, cls: 'furn' },                    // legs
+    // the extension: its own board, as deep as the desk, butted against the desk's end, on its own legs
+    ...(EXT ? [
+      { x: 2, y: 3, z: 0, w: 2, d: top - 6, h: 36, cls: 'furn' },
+      { x: 1, y: 1, z: 36, w: EXT, d: top - 1, h: 2, cls: 'deskExt furn' },
+    ] : []),
+    { x: 1 + EXT + 2, y: 3, z: 0, w: 2, d: top - 6, h: 36, cls: 'furn' },          // desk legs
     { x: W - 5, y: 3, z: 0, w: 2, d: top - 6, h: 36, cls: 'furn' },
     {
-      x: 1, y: 1, z: 36, w: W - 2, d: top - 1, h: 2, cls: live ? 'deskTop furn live' : 'deskTop furn',
-      top: (w, d) => {
-        if (!name) return `<text class="label desk-name" x="${w / 2}" y="${d / 2 + 2}" font-size="5" text-anchor="middle">${esc(item.note || '—')}</text>`;
+      x: 1 + EXT, y: 1, z: 36, w: W - 2 - EXT, d: top - 1, h: 2, cls: live ? 'deskTop furn live' : 'deskTop furn',
+      top: (w, d, rot = 0) => {
+        if (!name) return ray(rot) + `<text class="label desk-name" x="${w / 2}" y="${d / 2 + 2}" font-size="5" text-anchor="middle">${esc(item.note || '—')}</text>`;
         const fs = fitText(name, w - 6, 8.5);
-        return `<text class="${live ? 'scr' : 'label'} desk-name" x="${w / 2}" y="${d / 2 + fs * 0.35}" font-size="${fs.toFixed(1)}" text-anchor="middle">${esc(name)}</text>`;
+        return ray(rot) + `<text class="${live ? 'scr' : 'label'} desk-name" x="${w / 2}" y="${d / 2 + fs * 0.35}" font-size="${fs.toFixed(1)}" text-anchor="middle">${esc(name)}</text>`;
       },
     },
     {
-      x: W / 2 - 11, y: 5, z: 38, w: 22, d: 2, h: 14, cls: 'furn',                   // monitor, screen faces the chair
+      x: mid - 11, y: 5, z: 38, w: 22, d: 2, h: 14, cls: 'furn',                   // monitor, screen faces the chair
       deco: {
-        '+y': (w, h) => glassPanel(live)(w, h) +
-          (live ? `<rect class="scr-accent" x="4" y="4" width="${w * 0.5}" height="1.6"/><rect class="scr-accent" x="4" y="7.5" width="${w * 0.32}" height="1.6"/>` : ''),
+        // every desk's screen is on, assigned or not, facing its own chair; from behind (a desk turned
+        // away) the monitor shows its back, with the screen's glow spilling round its edge
+        '+y': screen,
+        '-y': (w, h) => `<rect class="monitor-halo" x="-.5" y="-.5" width="${w + 1}" height="${h + 1}" rx="1.5"/>` +
+          `<rect class="monitor-back" x="1.5" y="1.5" width="${w - 3}" height="${h - 3}" rx="1"/>`,
       },
     },
-    ...seat(W / 2 - 9, top + 3, live, 18),
-    { x: W / 2 - 9, y: D - 5, z: 24, w: 18, d: 3, h: 20, r: 1, cls: live ? 'seat furn live' : 'seat furn' },  // backrest
-  ];
+    ...seat(mid - 9, top + 3, live, 18),
+    { x: mid - 9, y: D - 5, z: 24, w: 18, d: 3, h: 20, r: 1, cls: live ? 'seat backrest furn live' : 'seat backrest furn' },  // backrest
+  ].map((p) => (flip ? { ...p, x: W - p.x - p.w } : p));
 }
 
 function drawer() {
@@ -147,6 +196,56 @@ function drawer() {
 }
 
 const stool = () => seat(2, 2, false);
+
+/**
+ * Server rack (60 × 120 cm, 42U), front door facing +y: a charcoal cabinet with a stack of server units
+ * on the front, each with two status LEDs that blink forever (CSS `rack-led`, each at its own rate and
+ * phase, seeded from the rack id so a re-render never restarts them out of step), a yellow light that
+ * runs down the door forever (`rack-scan`), and vents on the side.
+ */
+function serverRack(item) {
+  let seed = [...String(item.id || 'rack')].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 2 ** 32);
+  const front = (w, h) => {
+    let s = `<rect class="rack-door" x="1.2" y="1.2" width="${w - 2.4}" height="${h - 2.4}" rx=".6"/>`;
+    // a soft yellow light running down the door, over and over (CSS `rack-scan`), clipped to the door
+    const cid = `rack-clip-${seed}`;
+    s += `<defs><clipPath id="${cid}"><rect x="1.2" y="1.2" width="${w - 2.4}" height="${h - 2.4}" rx=".6"/></clipPath>` +
+      `<linearGradient id="rack-scan-grad" x1="0" y1="0" x2="0" y2="1"><stop class="rack-scan-stop" offset="0" stop-opacity="0"/>` +
+      `<stop class="rack-scan-stop" offset=".5" stop-opacity="1"/><stop class="rack-scan-stop" offset="1" stop-opacity="0"/></linearGradient></defs>` +
+      `<g clip-path="url(#${cid})"><rect class="rack-scan" x="1.2" y="-10" width="${w - 2.4}" height="10" fill="url(#rack-scan-grad)" ` +
+      `style="--run:${h + 10}px;animation-delay:${(-rnd() * 2.6).toFixed(2)}s"/></g>`;
+    for (let y = 3; y + 3.4 <= h - 2; y += 4.6) {
+      s += `<rect class="rack-unit" x="2.6" y="${y}" width="${w - 5.2}" height="3.4" rx=".3"/>`;
+      for (const [k, x] of [[0, w - 7.4], [1, w - 5.4]]) {
+        const tone = rnd() < 0.18 ? 'amber' : k ? 'blue' : 'green';
+        s += `<rect class="rack-led ${tone}" x="${x}" y="${y + 1.2}" width="1.1" height="1" ` +
+          `style="animation-duration:${(0.6 + rnd() * 1.8).toFixed(2)}s;animation-delay:${(-rnd() * 2).toFixed(2)}s"/>`;
+      }
+    }
+    return s;
+  };
+  const side = (w, h) => slits(4, h - 4, 2.4, 4, w - 4, false, 'rack-vent');
+  return [{ x: 1, y: 1, z: 0, w: 28, d: 58, h: 56, cls: 'rack', deco: { '+y': front, '+x': side, '-x': side } }];
+}
+
+/**
+ * Massage chair (80 × 140 cm, reclined), the sitter facing +y: two chunky armrest shells, a seat
+ * cushion on the base, a reclined back with its cushion and a head hood, and the leg rest out front.
+ * The boxes never interpenetrate, so the part depth sort stays exact.
+ */
+function massageChair() {
+  return [
+    { x: 1, y: 16, z: 0, w: 7, d: 36, h: 28, r: 2, cls: 'mchair furn' },     // armrests
+    { x: 32, y: 16, z: 0, w: 7, d: 36, h: 28, r: 2, cls: 'mchair furn' },
+    { x: 8, y: 18, z: 0, w: 24, d: 34, h: 12, cls: 'mchair furn' },           // base
+    { x: 8, y: 22, z: 12, w: 24, d: 30, h: 6, r: 2, cls: 'mchair furn' },     // seat cushion
+    { x: 8, y: 4, z: 8, w: 24, d: 14, h: 32, r: 3, cls: 'mchair furn' },      // back
+    { x: 10, y: 18, z: 18, w: 20, d: 4, h: 22, r: 1, cls: 'mchair furn' },    // back cushion
+    { x: 8, y: 2, z: 40, w: 24, d: 12, h: 10, r: 4, cls: 'mchair furn' },     // head hood
+    { x: 11, y: 52, z: 0, w: 18, d: 16, h: 14, r: 2, cls: 'mchair furn' },    // leg rest
+  ];
+}
 
 function table(item, W, D) {
   return [
@@ -238,14 +337,20 @@ export function zoneTag(item, w, d) {
     (status && d > 30 ? `<text class="zone-status" x="${x}" y="${fs + (sub ? 25 : 15)}" font-size="6.5">${status}</text>` : '');
 }
 
-function elevator() {
+/**
+ * Elevator parts (also reused by the tower's "Go to KOSIGN" scene, scaled to the building): `open`
+ * (0 shut … 1 open) slides the two door leaves apart over the lit car inside, `label` is the indicator
+ * above the doors.
+ */
+export function elevatorParts({ open = 0, label = '▲▼' } = {}) {
   const doors = (w, h) => {
-    const dw = 40, x0 = (w - dw) / 2, top = 12;
+    const dw = 40, x0 = (w - dw) / 2, top = 12, slide = open * (dw / 2) * 0.92;
     return `<rect class="face recess" x="${x0 - 2}" y="${top - 2}" width="${dw + 4}" height="${h - top + 2}"/>` +
-      `<rect class="face" x="${x0}" y="${top}" width="${dw / 2}" height="${h - top}"/>` +
-      `<rect class="face" x="${x0 + dw / 2}" y="${top}" width="${dw / 2}" height="${h - top}"/>` +
+      (open > 0 ? `<rect class="lift-gap" x="${x0}" y="${top}" width="${dw}" height="${h - top}"/>` : '') +
+      `<rect class="face" x="${x0 - slide}" y="${top}" width="${dw / 2}" height="${h - top}"/>` +
+      `<rect class="face" x="${x0 + dw / 2 + slide}" y="${top}" width="${dw / 2}" height="${h - top}"/>` +
       `<rect class="glass hot" x="${w / 2 - 8}" y="2.5" width="16" height="7" rx="1"/>` +
-      `<text class="scr" x="${w / 2}" y="8" font-size="5" text-anchor="middle">▲▼</text>`;
+      `<text class="scr" x="${w / 2}" y="8" font-size="5" text-anchor="middle">${esc(label)}</text>`;
   };
   return [
     { x: 18, y: 78, z: 0, w: 54, d: 12, h: 1, cls: 'sill' },
@@ -253,6 +358,8 @@ function elevator() {
       top: (w, d) => `<rect class="detail" x="4" y="4" width="${w - 8}" height="${d - 8}"/><line class="detail" x1="4" y1="4" x2="${w - 4}" y2="${d - 4}"/><line class="detail" x1="${w - 4}" y1="4" x2="4" y2="${d - 4}"/>` },
   ];
 }
+
+const elevator = () => elevatorParts();
 
 function restroom() {
   const t = 4, h = 40, W = 120, Dd = 90;
@@ -291,6 +398,7 @@ function stair(item, W, D) {
 function wc(item, W, D) {
   const men = item.gender === 'm', mirror = item.doorSide === 'r';
   const t = 4, h = 40, off = item.doorOff || 0;
+  const LAMPS = [0.2, 0.5, 0.8];   // wall lights along the counter's wall (fractions of its length)
   // the door gap along the front wall, in the room's own x (west → east)
   const dg = mirror ? [W - (t + 26 + off), W - (t + 2 + off)] : [t + 2 + off, t + 26 + off];
   const sign = (w) => `<rect class="face recess" x="${w / 2 - 16}" y="6" width="32" height="12" rx="1.5"/>` +
@@ -313,9 +421,11 @@ function wc(item, W, D) {
     // the basin counter: down the side wall (both rooms, mirror images of each other), or on the back wall
     // past the urinals
     out.push(sideBasins
-      ? { x: W - t - bw, y: t + 6, z: 0, w: bw, d: D - 2 * t - 30, h: 22, cls: 'furn',
-        top: (w, d) => [0.3, 0.7].map((f) => `<ellipse class="basin" cx="${w / 2}" cy="${d * f}" rx="${w * 0.28}" ry="${Math.min(d / 3, 30) * 0.32}"/>`).join('') }
-      : { x: g[0] + 4, y: t, z: 0, w: W - t - 2 - (g[0] + 4), d: 16, h: 22, cls: 'furn', top: basins(3) });
+      ? { x: W - t - bw, y: t + 6, z: 0, w: bw, d: D - 2 * t - 30, h: 22, cls: 'fixture counter',
+        top: (w, d) => [0.3, 0.7].map((f) => `<ellipse class="basin" cx="${w / 2}" cy="${d * f}" rx="${w * 0.28}" ry="${Math.min(d / 3, 30) * 0.32}"/>`).join('') +
+          // men: the right-wall lamps' beams falling across the counter, brightest at the wall (+x side)
+          (men ? LAMPS.map((f) => { const c = ((D - 2 * t) * f - 6) * (d / (D - 2 * t - 30)); return `<path class="wc-beam" fill="url(#wall-beam-x)" d="M${w} ${c - 4}L${w} ${c + 4}L0 ${c + 12}L0 ${c - 12}Z"/>`; }).join('') : '') }
+      : { x: g[0] + 4, y: t, z: 0, w: W - t - 2 - (g[0] + 4), d: 16, h: 22, cls: 'fixture counter', top: basins(3) });
     return out;
   };
   // women: the men's layout built for the mirrored door, flipped back across the room, minus the urinals
@@ -325,8 +435,18 @@ function wc(item, W, D) {
     { x: 0, y: 0, z: 0, w: W, d: D, h: 0, flat: true, cls: 'tile',
       top: (w, d) => slits(15, w - 15, 15, 2, d - 2, true, 'detail tile-line') + slits(15, d - 15, 15, 2, w - 2, false, 'detail tile-line') },
     { x: 0, y: 0, z: 0, w: W, d: t, h, cls: 'wall struct' },                                      // back wall
-    { x: 0, y: t, z: 0, w: t, d: D - 2 * t, h, cls: 'wall struct' },                              // side walls
-    { x: W - t, y: t, z: 0, w: t, d: D - 2 * t, h, cls: 'wall struct' },
+    // side walls, with wall lights over the basin counter (vanity lights), so the two rooms mirror each
+    // other: at night each lamp throws a warm beam (`wc-beam`, dark theme only). Women: the counter is on the
+    // left wall, whose inner face is toward the viewer — the beams run down that face (#wall-beam fades them
+    // toward the floor). Men: it is on the right wall, whose inner face is turned away — the lamps sit along
+    // its top and their beams fall across the counter top below (#wall-beam-x)
+    { x: 0, y: t, z: 0, w: t, d: D - 2 * t, h, cls: 'wall struct', ...(men ? {} : { deco: { '+x': (fw, fh) => LAMPS.map((f) => {
+      const u = fw * f;
+      return `<path class="wc-beam" fill="url(#wall-beam)" d="M${u - 3} 4L${u + 3} 4L${u + 13} ${fh}L${u - 13} ${fh}Z"/>` +
+        `<rect class="wc-lamp" x="${u - 4}" y="2.4" width="8" height="2.2" rx="1"/>`;
+    }).join('') } }) },
+    { x: W - t, y: t, z: 0, w: t, d: D - 2 * t, h, cls: 'wall struct', ...(men ? {
+      top: (w, d) => LAMPS.map((f) => `<rect class="wc-lamp" x=".6" y="${d * f - 4}" width="${w - 1.2}" height="8" rx="1"/>`).join('') } : {}) },
     ...inside.map(({ urinal, ...p }) => p),
   ];
   // front wall with the door gap (the sign on its longer stretch)
@@ -383,7 +503,7 @@ function storeroom(item, W, D) {
   ];
 }
 
-const BUILD = { desk, drawer, stool, table, roundTable, meetingTable, counter, pillar, wall, glass, partition, door, zone, elevator, restroom, stair, wc, cabinet, storeroom };
+const BUILD = { desk, drawer, stool, massageChair, serverRack, table, roundTable, meetingTable, counter, pillar, wall, glass, partition, door, zone, elevator, restroom, stair, wc, cabinet, storeroom };
 
 /** Parts for an item in its local frame plus its local footprint size in world units. */
 export function partsFor(item) {

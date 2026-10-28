@@ -13,6 +13,18 @@ export function behind(a, b) {
 
 const key = (n) => n.x0 + n.y0 + n.z0 * 1e-3;
 
+/**
+ * Do the two boxes' screen hexagons overlap? A box projects to a hexagon whose sides run along the
+ * screen images of the x, y and z axes, so two of them overlap exactly when their ranges overlap on
+ * the three functionals that are constant along one axis each: x - y, z - y and z - x.
+ */
+export function overlapOnScreen(a, b) {
+  const e = 1e-6;
+  return a.x0 - a.y1 < b.x1 - b.y0 - e && b.x0 - b.y1 < a.x1 - a.y0 - e &&
+    a.z0 - a.y1 < b.z1 - b.y0 - e && b.z0 - b.y1 < a.z1 - a.y0 - e &&
+    a.z0 - a.x1 < b.z1 - b.x0 - e && b.z0 - b.x1 < a.z1 - a.x0 - e;
+}
+
 /** Returns nodes in back-to-front order (topological sort, stable fallback for ties/cycles). */
 export function depthSort(nodes) {
   const n = nodes.length;
@@ -21,7 +33,9 @@ export function depthSort(nodes) {
   const out = Array.from({ length: n }, () => []);
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) {
-      if (i !== j && behind(nodes[i], nodes[j]) && !behind(nodes[j], nodes[i])) {
+      // only boxes that cover each other on screen need an order; constraining the rest as well can
+      // close a loop (desk leg < desk top < monitor < leg) and drop the sort to its rough fallback
+      if (i !== j && behind(nodes[i], nodes[j]) && !behind(nodes[j], nodes[i]) && overlapOnScreen(nodes[i], nodes[j])) {
         out[i].push(j);
         indeg[j]++;
       }

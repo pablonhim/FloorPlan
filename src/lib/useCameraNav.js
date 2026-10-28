@@ -2,7 +2,10 @@
 // settles in with a short, light ease (.view-enter in index.css; none for reduced motion).
 import { useCallback, useState } from 'react';
 
-const keyOf = (v) => `${v.kind}-${v.floor ?? ''}-${v.unit ?? ''}`;
+// unit views share one key per floor: going to another unit on the same floor keeps the editor mounted, so
+// its own camera glide (FloorEditor) hands over to the new unit without a remount; the floor view keeps one
+// key for every floor, so switching floor 2 ↔ 4 there swaps just the plan, not the whole page
+const keyOf = (v) => (v.kind === 'unit' ? `unit-${v.floor}` : v.kind === 'floor' ? 'floor' : v.kind);
 
 export function useCameraNav(initial) {
   const [view, setView] = useState(initial);

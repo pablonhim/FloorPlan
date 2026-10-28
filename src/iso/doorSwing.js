@@ -3,8 +3,13 @@
 // than the flat door symbol drawn on the floor. A short rAF animation writes only these few leaves.
 import { useEffect } from 'react';
 import { CELL, WALL_H } from './units.js';
+import { cellRect, footprint } from './grid.js';
 
-/** Doors that belong to an office entrance: within 6 cells of a zone of kind 'entrance' (not core doors). */
+/**
+ * Doors drawn as swinging glass leaves: those of an office entrance (within 6 cells of a zone of kind
+ * 'entrance'; not core doors), the server room's glass door (touching a zone of kind 'server') and one
+ * door per meeting room and executive office (see roomDoors).
+ */
 export function entryDoors(items) {
   const ents = items.filter((z) => z.type === 'zone' && z.kind === 'entrance');
   const near = (d, z) => d.gx + 4 >= z.gx - 6 && d.gx <= z.gx + z.w + 6 && d.gy + 4 >= z.gy - 6 && d.gy <= z.gy + z.d + 6;
@@ -19,8 +24,95 @@ export function entryDoors(items) {
     const key = `${z.id}:${d.gx}`, cur = best.get(key);
     if (!cur || dist(d, z) < dist(cur, z)) best.set(key, d);
   }
-  return [...best.values()];
+  const servers = items.filter((z) => z.type === 'zone' && z.kind === 'server');
+  const touches = (d, z) => d.gx + 4 >= z.gx - 1 && d.gx <= z.gx + z.w + 1 && d.gy + 4 >= z.gy - 1 && d.gy <= z.gy + z.d + 1;
+  for (const d of items) {
+    if (d.type === 'door' && !String(d.id).startsWith('core') && servers.some((z) => touches(d, z))) best.set(`server:${d.id}`, d);
+  }
+  const meet = roomDoors(items), ids = new Set(meet.map((m) => m.id));
+  return [...[...best.values()].filter((d) => !ids.has(d.id)), ...meet];
 }
+
+/**
+ * One glass door per meeting room and executive office (HQ, CEO): of the doors on the room's edge, the one nearest a glass wall (its
+ * glass front). The imported doors are all stored at 0°, so the leaf is not taken from the door's
+ * rotation: it lies along the room edge the door sits on, on that edge's wall / glass line, spans just the
+ * opening in that line (hinged at its start, its end when flipped), and swings into the room. Returns leaf descriptors
+ * { id, H: hinge, shut, open, len } in world units.
+ */
+const DOOR_ROOMS = new Set(['meeting', 'ceo']);
+export function roomDoors(items) {
+  const lines = items.filter((w) => w.type === 'glass' || w.type === 'wall').map((w) => ({ w, r: cellRect(w) }));
+  const glass = lines.filter((l) => l.w.type === 'glass');
+  const gap = (r, x, y) => Math.hypot(Math.max(r.x0 - x, 0, x - r.x1), Math.max(r.y0 - y, 0, y - r.y1));
+  const out = [];
+  for (const z of items.filter((i) => i.type === 'zone' && DOOR_ROOMS.has(i.kind))) {
+    const f = footprint(z), x0 = z.gx, y0 = z.gy, x1 = z.gx + f.w, y1 = z.gy + f.d;
+    // doors centred on the room's edge (within 2 cells of it), and the room's own glass
+    const zr = { x0, y0, x1, y1 };
+    const doors = items.filter((d) => d.type === 'door' && !String(d.id).startsWith('core') && gap(zr, d.gx + 2, d.gy + 2) <= 2);
+    if (!doors.length) continue;
+    const own = glass.filter((l) => gap(zr, (l.r.x0 + l.r.x1) / 2, (l.r.y0 + l.r.y1) / 2) <= 2);
+    const toGlass = (d) => (own.length ? Math.min(...own.map((l) => gap(l.r, d.gx + 2, d.gy + 2))) : 0);
+    // the door most on this room's edge (not a neighbour's door just outside it), then the one by the glass
+    const rank = (d) => gap(zr, d.gx + 2, d.gy + 2) * 100 + toGlass(d);
+    const d = doors.reduce((a, b) => (rank(b) < rank(a) ? b : a));
+    const cx = d.gx + 2, cy = d.gy + 2;
+    // wall / glass runs along a room edge that reach the door's span on it (within a cell)
+    const EDGE = { w: x0, e: x1, n: y0, s: y1 };
+    const runsOn = (side) => {
+      const vert = side === 'w' || side === 'e', edge = EDGE[side], a0 = vert ? d.gy : d.gx;
+      return lines.map((l) => l.r).filter((r) => (vert
+        ? r.y1 - r.y0 >= r.x1 - r.x0 && Math.abs((r.x0 + r.x1) / 2 - edge) <= 2 && r.y0 <= a0 + 5 && r.y1 >= a0 - 1
+        : r.x1 - r.x0 >= r.y1 - r.y0 && Math.abs((r.y0 + r.y1) / 2 - edge) <= 2 && r.x0 <= a0 + 5 && r.x1 >= a0 - 1));
+    };
+    // how much of the door's span is an opening in that edge's wall (0 when no wall runs beside it)
+    const opening = (side) => {
+      const vert = side === 'w' || side === 'e', a0 = vert ? d.gy : d.gx, rs = runsOn(side);
+      if (!rs.length) return 0;
+      let open = 0;
+      for (let a = a0; a < a0 + 4; a++) if (!rs.some((r) => (vert ? r.y0 <= a && a < r.y1 : r.x0 <= a && a < r.x1))) open++;
+      return open;
+    };
+    // the nearest room edge; between edges about as near (a door at a corner), the one whose wall has an
+    // opening at the door; on a tie still, the north / south wall (the source's 0° door symbols sit in one)
+    const dist = { n: Math.abs(cy - y0), s: Math.abs(cy - y1), w: Math.abs(cx - x0), e: Math.abs(cx - x1) };
+    const near = Math.min(...Object.values(dist));
+    const side = ['n', 's', 'w', 'e'].filter((k) => dist[k] <= near + 1)
+      .reduce((a, b) => (opening(b) > opening(a) || (opening(b) === opening(a) && dist[b] < dist[a]) ? b : a));
+    const vert = side === 'w' || side === 'e', edge = EDGE[side];
+    // the wall line: the centre of a wall / glass run along that edge beside the door, else the edge
+    const runs = runsOn(side);
+    const mid = (r) => (vert ? (r.x0 + r.x1) / 2 : (r.y0 + r.y1) / 2);
+    const line = (runs.length ? mid(runs.reduce((a, b) => (Math.abs(mid(b) - edge) < Math.abs(mid(a) - edge) ? b : a))) : edge) * CELL;
+    // the leaf fills the actual opening in that wall line, not the 80 cm door symbol (which overlaps the
+    // wall / glass either side): the free cells round the door's span, between the runs that bound them
+    const cover = lines.map((l) => l.r).filter((r) => (vert
+      ? r.y1 - r.y0 >= r.x1 - r.x0 && Math.abs((r.x0 + r.x1) / 2 - edge) <= 2
+      : r.x1 - r.x0 >= r.y1 - r.y0 && Math.abs((r.y0 + r.y1) / 2 - edge) <= 2)).map((r) => (vert ? [r.y0, r.y1] : [r.x0, r.x1]));
+    // …and never past the room's own extent along that edge (a crossing wall at a corner bounds it there)
+    const [e0, e1] = vert ? [y0, y1] : [x0, x1];
+    const free = (c) => c >= e0 && c < e1 && !cover.some(([c0, c1]) => c0 <= c && c < c1);
+    const s0 = vert ? d.gy : d.gx;
+    let g0 = s0, g1 = s0 + 4;
+    const start = [s0 + 1, s0 + 2, s0, s0 + 3].find(free);   // a free cell of the span, middle first
+    if (start !== undefined) {
+      g0 = start; while (g0 > s0 - 4 && free(g0 - 1)) g0--;
+      g1 = start + 1; while (g1 < s0 + 8 && free(g1)) g1++;
+    }
+    const len = (g1 - g0) * CELL - 2, a = d.flip ? g1 * CELL - 1 : g0 * CELL + 1, along = d.flip ? -1 : 1;
+    out.push({
+      id: d.id, len,
+      H: vert ? [line, a] : [a, line],
+      shut: vert ? [0, along] : [along, 0],
+      open: { w: [1, 0], e: [-1, 0], n: [0, 1], s: [0, -1] }[side],
+    });
+  }
+  return out;
+}
+
+/** Ids of the doors that roomDoors draws as swinging leaves (their flat floor symbol is hidden). */
+export const roomDoorIds = (items) => new Set(roomDoors(items).map((m) => m.id));
 
 /**
  * The upright leaf of door `d` (a 4 × 4-cell door part, hinge at its local (2, 2), shut along local +x,
@@ -28,13 +120,18 @@ export function entryDoors(items) {
  * negative: past the frame the other way).
  */
 function leaf(K, d, phi) {
-  const S = 4 * CELL, cx = d.gx * CELL + S / 2, cy = d.gy * CELL + S / 2, a = ((d.rot || 0) * Math.PI) / 180;
-  const rot = ([x, y]) => [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)];
-  // a mirrored leaf (d.flip, the right leaf of a double door) hinges at the other end and shuts the other way
-  const [hx, hy] = rot([d.flip ? S / 2 - 2 : 2 - S / 2, 2 - S / 2]), shut = rot([d.flip ? -1 : 1, 0]), open = rot([0, 1]);
-  const t = (phi * Math.PI) / 2, len = S - 4;
+  let H, shut, open, len;
+  if (d.H) ({ H, shut, open, len } = d);   // a room leaf descriptor (roomDoors)
+  else {
+    const S = 4 * CELL, cx = d.gx * CELL + S / 2, cy = d.gy * CELL + S / 2, a = ((d.rot || 0) * Math.PI) / 180;
+    const rot = ([x, y]) => [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)];
+    // a mirrored leaf (d.flip, the right leaf of a double door) hinges at the other end and shuts the other way
+    const [hx, hy] = rot([d.flip ? S / 2 - 2 : 2 - S / 2, 2 - S / 2]);
+    shut = rot([d.flip ? -1 : 1, 0]); open = rot([0, 1]); len = S - 4; H = [cx + hx, cy + hy];
+  }
+  const t = (phi * Math.PI) / 2;
   const dir = [shut[0] * Math.cos(t) + open[0] * Math.sin(t), shut[1] * Math.cos(t) + open[1] * Math.sin(t)];
-  const H = [cx + hx, cy + hy], T = [H[0] + dir[0] * len, H[1] + dir[1] * len], h = WALL_H * 0.85;
+  const T = [H[0] + dir[0] * len, H[1] + dir[1] * len], h = WALL_H * 0.85;
   return `<path class="door-panel" d="${K.path([[H[0], H[1], 0], [T[0], T[1], 0], [T[0], T[1], h], [H[0], H[1], h]])}Z"/>` +
     `<path class="door-panel-edge" d="${K.path([[T[0], T[1], 0], [T[0], T[1], h]])}"/>`;
 }

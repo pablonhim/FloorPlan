@@ -3,9 +3,10 @@ import { CELL, TILE, PILLAR_H, SLAB } from './units.js';
 import { esc, frame } from './kernel.js';
 import { footprint } from './grid.js';
 import { renderParts } from './parts.js';
-import { partsFor, SIZES, describe, zoneTag, LAYER, isLive } from '../model/catalog.js';
+import { partsFor, SIZES, zoneTag, LAYER, isLive, tipFor } from '../model/catalog.js';
 import { depthSort } from './depth.js';
 import { shadowLayer, rectsPath } from './shadow.js';
+import { roomDoorIds } from './doorSwing.js';
 
 const TW = TILE * CELL; // one tile in world units
 
@@ -18,6 +19,35 @@ export function planFrame(plan) {
   ], 0.03, 16 / 10);
 }
 
+/**
+ * Ids of the furniture that belongs to WeCafe (a cafe / barista zone) or a massage room: it is drawn in
+ * the building's neutral finish (`.it.cafe`) instead of the blue office furniture. An item belongs to the zone its
+ * footprint centre stands in; one standing in no room (the PDF's cafe zone stops short of the bar along
+ * the north wall) goes with the nearest room within CAFE_REACH cells, if that is the cafe. Service and
+ * marker zones (cabinet room, core, entrance, notes) are not rooms for this.
+ */
+const CAFE_REACH = 8;
+const NOT_ROOMS = new Set(['cabinet', 'core', 'entrance', 'note']);
+/** Rooms whose furniture takes the neutral finish: WeCafe (and its barista) and the massage rooms. */
+const NEUTRAL_ROOMS = new Set(['cafe', 'barista', 'massage']);
+export function cafeIds(items) {
+  const zones = items.filter((z) => z.type === 'zone' && !NOT_ROOMS.has(z.kind)).map((z) => {
+    const f = footprint(z);
+    return { cafe: NEUTRAL_ROOMS.has(z.kind), x0: z.gx, y0: z.gy, x1: z.gx + f.w, y1: z.gy + f.d };
+  });
+  const ids = new Set();
+  if (!zones.some((z) => z.cafe)) return ids;
+  const dist = (z, x, y) => Math.hypot(Math.max(z.x0 - x, 0, x - z.x1), Math.max(z.y0 - y, 0, y - z.y1));
+  for (const it of items) {
+    if (LAYER[it.type] !== 'furniture') continue;
+    const f = footprint(it), cx = it.gx + f.w / 2, cy = it.gy + f.d / 2;
+    const inside = zones.find((z) => cx >= z.x0 && cx < z.x1 && cy >= z.y0 && cy < z.y1);
+    const near = inside || zones.reduce((m, z) => (dist(z, cx, cy) < (m ? dist(m, cx, cy) : CAFE_REACH + 1e-9) ? z : m), null);
+    if (near?.cafe) ids.add(it.id);
+  }
+  return ids;
+}
+
 /** Depth-sort node for an item, in world units. */
 export function itemNode(item) {
   const f = footprint(item);
@@ -27,8 +57,13 @@ export function itemNode(item) {
 
 export function renderItem(K, item, cut = Infinity) {
   const { W0, D0, parts } = partsFor(item);
-  return `<title>${esc(describe(item))}</title>` +
-    renderParts(K, parts, { W0, D0, rot: item.rot, ox: item.gx * CELL, oy: item.gy * CELL, z0: 0, cut });
+  return renderParts(K, parts, { W0, D0, rot: item.rot, ox: item.gx * CELL, oy: item.gy * CELL, z0: 0, cut });
+}
+
+/** The hover card's text as attributes for an item's group (read by HoverTip), or '' for none. */
+export function tipAttrs(item) {
+  const t = tipFor(item);
+  return t ? ` data-tip="${esc(t.title)}" data-tip-sub="${esc(t.sub || '')}"` : '';
 }
 
 /** Zone name tag on the floor plane, for the overlay layer above the furniture. */
@@ -99,14 +134,17 @@ export function renderShadows(K, plan, items, edges = edgeItems(plan)) {
  * A whole static scene as one SVG string (read-only views and exports): plate, floor layer
  * (zones by area, then door swings), shell shadows, depth-sorted solids, then zone name tags.
  */
-export function renderScene(K, plan, items) {
-  const edges = edgeItems(plan);
+export function renderScene(K, plan, items, { bare = false } = {}) {
+  // bare: just the items (no plate, shell shadows or outer walls), e.g. the building core
+  // drawn around a unit, where `plan` has no plate of its own
+  const edges = bare ? [] : edgeItems(plan);
   const area = (it) => { const f = footprint(it); return f.w * f.d; };
-  const g = (it, extra = '') => `<g class="it${isLive(it) ? ' live' : ''}${extra}">${renderItem(K, it)}</g>`;
+  const cafe = cafeIds(items), swung = roomDoorIds(items);
+  const g = (it, extra = '') => `<g class="it${isLive(it) ? ' live' : ''}${cafe.has(it.id) ? ' cafe' : ''}${swung.has(it.id) ? ' swung' : ''}${extra}"${extra ? '' : tipAttrs(it)}>${renderItem(K, it)}</g>`;
   const floor = items.filter((it) => LAYER[it.type] === 'floor')
     .sort((a, b) => (a.type === b.type ? area(b) - area(a) : a.type === 'zone' ? -1 : 1));
-  let s = renderPlate(K, plan) + floor.map((it) => g(it)).join('');
-  s += renderShadows(K, plan, items, edges);
+  let s = (bare ? '' : renderPlate(K, plan)) + floor.map((it) => g(it)).join('');
+  if (!bare) s += renderShadows(K, plan, items, edges);
   s += depthSort([...items.filter((it) => LAYER[it.type] !== 'floor'), ...edges].map((it) => ({ ...itemNode(it), it })))
     .map((n) => g(n.it, n.it.id.startsWith('edge-') ? ' edge' : '')).join('');
   s += floor.filter((it) => it.type === 'zone').map((it) => `<g class="tag${isLive(it) ? ' live' : ''}">${renderZoneTag(K, it)}</g>`).join('');

@@ -21,7 +21,8 @@
   --shadow:#000000; --ao-a:.6;
   /* furniture: flat three-tone volumes (top / front / side) with blue linework; live and selected pieces
      turn solid blue */
-  --furn-top:#3a4272; --furn:#2b3258; --furn-side:#1f2546; --furn-edge:#6d8cff;
+  --chair-top:var(--accent); --chair-back-top:var(--desk-top); --chair:var(--furn); --chair-side:var(--furn-side); --chair-edge:var(--furn-edge); /* chairs at night: the desks' blue */
+  --furn-top:#3a4272; --desk-top:#3a4272; --furn:#2b3258; --furn-side:#1f2546; --furn-edge:#6d8cff;
   /* Host Grotesk for Latin; it has no Khmer glyphs, so Khmer (សសរ …) always renders in Google Sans.
      Neither covers Hangul, so Korean falls back to the system Korean UI fonts. */
   --font:"Host Grotesk","Google Sans","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;
@@ -35,7 +36,8 @@
   --accent:#1f7bff; --accent-hi:#0b5ed7; --accent-dim:rgba(31,123,255,.12);
   --warn:#d13438;
   --shadow:#1e1e1e; --ao-a:.35;
-  --furn-top:#fafcff; --furn:#e4ecfb; --furn-side:#cddbf5; --furn-edge:rgba(31,123,255,.5);
+  --chair-top:var(--accent); --chair-back-top:#ffffff; --chair:#f1f2f4; --chair-side:#e2e4e8; --chair-edge:var(--furn-edge);
+  --furn-top:#fafcff; --desk-top:#b9d5fb; --furn:#e4ecfb; --furn-side:#cddbf5; --furn-edge:rgba(31,123,255,.5);
   /* neutral architectural render: white volumes, soft grey shade, fine grey lines; tops of walls, pillars
      and rooftop objects dark grey */
   --struct-top:#ffffff; --struct-lit:#f7f7f7; --struct-shade:#dedede; --struct-glass:#cfd1d4;
@@ -68,11 +70,30 @@
 [data-labels="off"] .zone-badge, [data-labels="off"] .zone-tags { display:none; }
 
 /* ---- floor editor ---- */
+/* the object under the pointer (with its hover card, HoverTip) lights up; more so at night */
+.tip-hot { filter:brightness(1.12) saturate(1.15); }
+:root:not([data-theme="light"]) .tip-hot { filter:brightness(1.55) saturate(1.2); }
+/* neighbouring units around the one being edited: faded; hovered one lifts and is clickable (glide) */
+.nb { opacity:.28; cursor:pointer; transition:opacity .2s ease; }
+.nb.hot { opacity:.6; }
+.nb .it { cursor:pointer; }
+.nb.core { pointer-events:none; }   /* the building core round a unit: shown, not a target */
+/* units a floor does not rent (floor 4: A and B): their shell only, faded, not a target */
+.shell-units { opacity:.3; }
 /* floor tile grid: exactly 10% stroke alpha, drawn once per edge (see renderPlate) */
 .slab-grid { fill:none; stroke:var(--line); stroke-opacity:.1; stroke-width:1; vector-effect:non-scaling-stroke; }
 /* every grid-like line on a floor (tiles, room hatching, restroom tiles, tower paving): same colour, 10% */
 .zone-hatch, .tile-line, .floor-grid { stroke:var(--line) !important; stroke-opacity:.1 !important; opacity:1 !important; }
 .tick { fill:var(--ink); font-family:var(--font); opacity:.8; }
+/* floor and unit views at night: the office is lit, so the whole drawing (floor, walls, furniture, linework)
+   sits a few steps brighter than the night tower, without drawing any light itself */
+:root:not([data-theme="light"]) .office-lit {
+  --deck:#2b2f35; --body:#262a30; --line:#5b6169; --detail:#3f444b; --recess:#1d2025; --glass:#1d2127;
+  --ink:#a4a9ae;
+  --struct-top:#4b515b; --struct-lit:#41464f; --struct-shade:#353a42; --struct-cap:#5c626c; --struct-line:rgba(205,214,228,.4);
+  --furn-top:#505c99; --desk-top:#505c99; --furn:#3e487d; --furn-side:#303865;
+  --chair:var(--furn); --chair-side:var(--furn-side); --chair-back-top:var(--desk-top);   /* re-resolved on the brighter blues */
+}
 .face.bare { fill:none; stroke:none; }
 
 /* structural shell (벽, 기둥, slab edge, tower envelope): white render, fine cobalt lines */
@@ -104,14 +125,40 @@
 .face.furn { fill:var(--furn); stroke:var(--furn-edge); stroke-width:.7; }
 .face.furn.side { fill:var(--furn-side); }
 .face.furn.top { fill:var(--furn-top); }
+/* desk worktops (--desk-top: a light blue in the light theme); the extension table
+   (25 cm, butted against the desk's end) a shade off it so the join reads */
+.face.deskTop.furn.top { fill:var(--desk-top); }
+.face.deskExt.furn.top { fill:color-mix(in srgb, var(--desk-top) 82%, var(--furn-side)); }
 /* selected furniture: solid indigo */
 .it.sel .face.furn { fill:var(--accent); stroke:var(--accent-hi); }
 .it.sel .face.furn.top { fill:color-mix(in srgb, var(--accent) 72%, #fff); }
 /* lit screens (desk monitors, displays) read as solid indigo panels */
 .it.live .glass.hot { fill:var(--accent); stroke:var(--accent-hi); }
+/* desk monitors: always on, lit like the office glass (a pale blue-tinted pane with an accent edge) */
+.glass.monitor { fill:color-mix(in srgb, var(--accent) 22%, #ffffff); fill-opacity:.92; stroke:var(--accent); filter:url(#soft); }
+svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .it.live .scr-accent (white) */
+/* the ray of light from a monitor across its desk (light theme: a faint blue wash; at night brighter),
+   breathing in brightness on its own pace per desk */
+.ray-stop { stop-color:var(--accent); }
+.monitor-ray { --ray-lo:.3; --ray-hi:.65; opacity:var(--ray-hi); pointer-events:none; animation:beam-breathe 3.6s ease-in-out infinite; }
+:root:not([data-theme="light"]) .ray-stop { stop-color:var(--accent-hi); }
+:root:not([data-theme="light"]) .monitor-ray { --ray-lo:.5; --ray-hi:1; mix-blend-mode:screen; }
+/* the beam breathes like a live screen: a slow swell, a small flicker, back down (forever) */
+@keyframes beam-breathe { 0%, 100% { opacity:var(--ray-lo); } 45% { opacity:var(--ray-hi); } 52% { opacity:calc(var(--ray-hi) * .8); } 60% { opacity:var(--ray-hi); } }
+@media (prefers-reduced-motion: reduce) { .monitor-ray { animation:none; } }
+/* the back of a lit monitor (desk turned away): its plain back, and the screen's light glowing round it */
+.monitor-halo { fill:none; stroke:var(--accent); stroke-width:1.2; opacity:.55; filter:url(#soft); vector-effect:non-scaling-stroke; }
+.monitor-back { fill:var(--furn-side); stroke:var(--furn-edge); stroke-width:.4; vector-effect:non-scaling-stroke; }
+:root:not([data-theme="light"]) .monitor-halo { stroke:var(--accent-hi); opacity:.85; filter:url(#glow); }
+/* at night: the same lit pane, brighter, with a soft glow round it */
+:root:not([data-theme="light"]) .glass.monitor { fill:color-mix(in srgb, var(--accent) 30%, #e6f2ff); fill-opacity:.95; stroke:var(--accent-hi); filter:url(#soft); }
+:root:not([data-theme="light"]) .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.9; }
 .it.live .scr-accent { fill:#fff; opacity:.85; }
 .door-arc { fill:var(--accent-dim); stroke:none; opacity:.8; }
 .door-leaf { stroke:var(--ink-hi); stroke-width:1.6; vector-effect:non-scaling-stroke; }
+/* a meeting-room / executive-office door drawn as an upright swinging leaf (doorSwing.roomDoors): its flat symbol, stored
+   at 0° across the wall, is hidden (still there to pick the door in the editor) */
+.it.swung .door-arc, .it.swung .door-leaf { opacity:0; }
 
 /* zones: rooms and departments, flat on the floor */
 .face.zone { fill:color-mix(in srgb, var(--deck) 55%, transparent); stroke:none; }
@@ -139,7 +186,11 @@
 .face.pane.side { fill-opacity:.9; }
 .face.tile { fill:var(--recess); }
 /* sanitary fixtures (toilets, urinals) and basins in the core WCs */
-.face.fixture { fill:var(--struct-top); stroke:var(--furn-edge); stroke-width:.7; }
+/* sanitary fittings (toilets, urinals, basin counters, stall partitions): the building's neutral white /
+   grey finish with its grey linework, never the blue office furniture */
+.face.fixture { fill:var(--struct-top); stroke:var(--struct-line); stroke-width:.7; }
+.face.fixture.counter.front, .face.fixture.partition.front { fill:var(--struct-shade); }
+.face.fixture.counter.side, .face.fixture.partition.side { fill:var(--struct-lit); }
 /* frosted glass (storage rooms): dense milky panes; the contents inside are drawn blurred and faded
    (.frosted-inside), so what shows through is soft and out of focus */
 .face.frost-glass { fill:color-mix(in srgb, #ffffff 72%, var(--struct-glass)); fill-opacity:.86; stroke:var(--struct-line); stroke-width:.6; }
@@ -150,7 +201,13 @@
   fill:color-mix(in srgb, #9aa7b6 30%, var(--struct-glass)); }
 :root:not([data-theme="light"]) .frost-mullion { stroke:#7f8a97; }
 .frost-mullion { fill:none; stroke:#ffffff; stroke-width:1.2; vector-effect:non-scaling-stroke; opacity:.9; }
-.basin { fill:var(--glass); stroke:var(--furn-edge); stroke-width:.6; vector-effect:non-scaling-stroke; }
+/* WC wall lights: in daylight just the fitting; at night each throws a warm beam down the wall */
+.wc-lamp { fill:var(--struct-shade); stroke:var(--struct-line); stroke-width:.4; vector-effect:non-scaling-stroke; }
+.wc-beam { display:none; pointer-events:none; }
+.wall-beam-stop { stop-color:var(--night-light); }
+:root:not([data-theme="light"]) .wc-lamp { fill:var(--night-light-hi); stroke:none; filter:url(#soft); }
+:root:not([data-theme="light"]) .wc-beam { display:inline; mix-blend-mode:screen; }
+.basin { fill:color-mix(in srgb, var(--struct-shade) 60%, var(--struct-glass)); stroke:var(--struct-line); stroke-width:.6; vector-effect:non-scaling-stroke; }
 /* building-core zones (corridor, lift lobby, WCs): quiet neutral floor */
 .face.zone.zone-core { fill:color-mix(in srgb, var(--struct-shade) 35%, transparent); }
 .face.carpet { fill:var(--deck); }
@@ -159,8 +216,49 @@
 
 .it { cursor:grab; }
 /* hover = background tint only, never a border: the hovered item's footprint is filled (see .foot.hover) */
-.it.live .face.seat { fill:var(--accent); stroke:var(--accent-hi); }
-.it.live .face.seat.top { fill:color-mix(in srgb, var(--accent) 70%, #fff); }
+/* chairs: solid accent-blue seat top, white (light theme) / the desks' blue (dark) sides, blue furniture edge, assigned or not; an assigned desk still
+   shows in its accent outline and lit monitor */
+.face.seat.furn { fill:var(--chair); stroke:var(--chair-edge); }
+.face.seat.furn.side { fill:var(--chair-side); }
+.face.seat.furn.top { fill:var(--chair-top); }
+.face.seat.backrest.furn.top { fill:var(--chair-back-top); }   /* the backrest's top edge stays white */
+/* WeCafe furniture (tables, stools, chairs in a cafe / barista zone, see render.cafeIds): the building's
+   neutral white / grey finish and linework instead of the blue office furniture */
+.it.cafe .face.furn { fill:var(--struct-shade); stroke:var(--struct-line); }
+.it.cafe .face.furn.side { fill:var(--struct-lit); }
+.it.cafe .face.furn.top, .it.cafe .face.seat.furn.top, .it.cafe .face.tableTop.top { fill:var(--struct-top); }
+.it.cafe .face.tableTop { stroke:var(--struct-line); }
+/* …but a selected one still turns accent blue like any other item */
+.it.cafe.sel .face.furn { fill:var(--accent); stroke:var(--accent-hi); }
+.it.cafe.sel .face.furn.top, .it.cafe.sel .face.seat.furn.top { fill:color-mix(in srgb, var(--accent) 72%, #fff); }
+/* server racks: charcoal cabinets, the status LEDs blink forever (each its own rate / phase, set inline);
+   at night they glow */
+.face.rack { fill:#30343b; stroke:var(--struct-line); } .face.rack.side { fill:#3b4048; } .face.rack.top { fill:#4a5059; }
+.rack-door { fill:#24272d; stroke:#565c66; stroke-width:.4; vector-effect:non-scaling-stroke; }
+.rack-unit { fill:#16181c; stroke:#3d424a; stroke-width:.3; vector-effect:non-scaling-stroke; }
+.rack-vent { stroke:#23262b; stroke-width:.6; vector-effect:non-scaling-stroke; }
+/* at night the racks are near-black cabinets, so their LEDs and running light stand out */
+:root:not([data-theme="light"]) .face.rack { fill:#15171b; stroke:rgba(150,160,175,.22); }
+:root:not([data-theme="light"]) .face.rack.side { fill:#1b1e23; }
+:root:not([data-theme="light"]) .face.rack.top { fill:#23262c; }
+:root:not([data-theme="light"]) .rack-door { fill:#0f1114; stroke:#2c3037; }
+:root:not([data-theme="light"]) .rack-unit { fill:#07080a; stroke:#22262c; }
+:root:not([data-theme="light"]) .rack-vent { stroke:#0c0d10; }
+.rack-led { animation:rack-blink 1.2s steps(1) infinite; }
+.rack-led.green { fill:#34d27b; } .rack-led.blue { fill:var(--accent-hi); } .rack-led.amber { fill:#ffb020; }
+:root:not([data-theme="light"]) .rack-led { filter:url(#soft); }
+.rack-scan-stop { stop-color:#ffd24a; }
+/* the running light glows in both themes (#soft passes through in the light theme, so a CSS drop-shadow) */
+.rack-scan { opacity:1; mix-blend-mode:screen; animation:rack-scan 2.6s linear infinite;
+  filter:drop-shadow(0 0 1.2px #ffd24a) drop-shadow(0 0 3px rgb(255 196 60 / .75)); }
+:root:not([data-theme="light"]) .rack-scan { filter:drop-shadow(0 0 1.5px #ffe07a) drop-shadow(0 0 4px rgb(255 196 60 / .9)); }
+@keyframes rack-scan { to { transform:translateY(var(--run)); } }
+@keyframes rack-blink { 0%, 100% { opacity:1; } 45% { opacity:.15; } 60% { opacity:1; } 80% { opacity:.35; } }
+@media (prefers-reduced-motion: reduce) { .rack-led, .rack-scan { animation:none; } .rack-scan { display:none; } }
+/* massage chair: the same neutral building finish as the WeCafe furniture (white / grey, grey linework) */
+.face.mchair.furn { fill:var(--struct-shade); stroke:var(--struct-line); }
+.face.mchair.furn.side { fill:var(--struct-lit); }
+.face.mchair.furn.top { fill:var(--struct-top); }
 .it.live .face.deskTop { stroke:var(--accent); }
 .it.live .face.pane { fill:color-mix(in srgb, var(--accent) 14%, #ffffff); fill-opacity:.86; stroke:var(--accent); }
 .it.live .glass.hot { filter:url(#soft); }
@@ -188,14 +286,17 @@
 .meet-glow { fill:var(--accent); opacity:.35; animation:meet-pulse 2.2s ease-in-out infinite; }
 @keyframes meet-pulse { 50% { opacity:.55; } }
 .route-under { fill:none; stroke:var(--panel); stroke-width:7; stroke-linecap:round; stroke-linejoin:round; vector-effect:non-scaling-stroke; opacity:.85; }
-.route-line { fill:none; stroke:var(--accent); stroke-width:3.5; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:2 10; vector-effect:non-scaling-stroke; animation:route-flow .9s linear infinite; filter:url(#soft); }
-@keyframes route-flow { to { stroke-dashoffset:-12; } }
+.route-line { fill:none; stroke:var(--accent); stroke-width:3.5; stroke-linecap:round; stroke-linejoin:round; vector-effect:non-scaling-stroke; filter:url(#soft); }
+/* the light running along the solid line toward the room (dash + gap = the offset per loop) */
+.route-glint { fill:none; stroke:var(--accent-hi); stroke-width:3.5; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:18 72; vector-effect:non-scaling-stroke; animation:route-flow 1.4s linear infinite; filter:url(#soft); }
+:root[data-theme="light"] .route-glint { stroke:#ffffff; }
+@keyframes route-flow { to { stroke-dashoffset:-90; } }
 .route-start { fill:var(--panel); stroke:var(--accent); stroke-width:2.5; vector-effect:non-scaling-stroke; }
 .route-end { fill:var(--accent); stroke:var(--panel); stroke-width:2; vector-effect:non-scaling-stroke; }
 .route-pulse { fill:none; stroke:var(--accent); stroke-width:2; vector-effect:non-scaling-stroke; transform-box:fill-box; transform-origin:center; animation:route-ping 1.6s ease-out infinite; }
 @keyframes route-ping { from { transform:scale(1); opacity:.9; } to { transform:scale(3.2); opacity:0; } }
 .route-tag { fill:var(--accent-hi); font-family:var(--font); font-weight:600; paint-order:stroke; stroke:var(--panel); stroke-width:3px; }
-@media (prefers-reduced-motion: reduce) { .meet-hi, .meet-glow, .route-line, .route-pulse { animation:none; } }
+@media (prefers-reduced-motion: reduce) { .meet-hi, .meet-glow, .route-glint, .route-pulse { animation:none; } .route-glint { display:none; } }
 
 /* ---- tower ---- */
 /* night: everything that marks a floor (outline, hover tint, lit windows, leader line, tag, hover card)
@@ -210,6 +311,9 @@
 /* hovered / keyboard-cursor floor: background tint only, no outline */
 .twr .fl.rent.cursor .band, .twr .fl.rent:hover .band { fill:color-mix(in srgb, var(--accent) 22%, var(--struct-lit)); }
 .twr .fl:not(.rent).cursor .band { fill:color-mix(in srgb, var(--ink) 14%, var(--struct-lit)); }
+/* the lobby (lit all night) is hovered like a rented floor: its band takes the accent (the warm night
+   light in the dark theme), so the highlight still reads over its glowing glass */
+.twr .fl.lobby.cursor .band, .twr .fl.lobby:hover .band { fill:color-mix(in srgb, var(--accent) 22%, var(--struct-lit)); }
 .twr .pn { fill:var(--struct-glass); stroke:var(--struct-line); stroke-width:.6; vector-effect:non-scaling-stroke; }
 /* only the rented floors (2 and 4) keep pane outlines; every other floor shows plain glass */
 .twr .fl:not(.rent) .pn { stroke:none; }
@@ -278,7 +382,6 @@
 /* ATM kiosk: frosted glass, the cash machine inside, its screen breathing in brightness */
 .atm-kiosk { pointer-events:none; }
 .atm-glass { fill:color-mix(in srgb, #ffffff 42%, transparent); stroke:var(--struct-line); stroke-width:.5; vector-effect:non-scaling-stroke; }
-:root:not([data-theme="light"]) .atm-glass { fill:color-mix(in srgb, #b9c3cf 22%, transparent); }
 .atm-mullion { stroke:var(--struct-line); stroke-width:.8; vector-effect:non-scaling-stroke; }
 .atm-door { fill:none; stroke:var(--struct-line); stroke-width:.7; vector-effect:non-scaling-stroke; }
 .face.atm-body { fill:#5d646d; stroke:var(--struct-line); stroke-width:.4; vector-effect:non-scaling-stroke; }
@@ -396,20 +499,18 @@
 /* the lift car riding up during "Go to KOSIGN" */
 /* "Go to KOSIGN": floors 2 and 4 stay solid, every other floor, the walls and the roof go see-through */
 .twr .bld .face, .twr .bld .bld-grain, .twr .bld .fl, .twr .bld .detail, .twr .bld .roof-shadow { transition:opacity .25s ease-out; }
-.twr.xray-floors .bld .face, .twr.xray-floors .bld .bld-grain, .twr.xray-floors .bld .detail, .twr.xray-floors .bld .roof-shadow { opacity:.16; }
-.twr.xray-floors .bld .fl:not([data-f="2"]):not([data-f="4"]) { opacity:.3; }
-.twr.xray-floors .bld .fl[data-f="2"] .face, .twr.xray-floors .bld .fl[data-f="4"] .face { opacity:1; }
-.twr.xray-floors .tower-shadow, .twr.xray-floors .pwc-shadow { opacity:0; }
-.twr.xray-floors .bld-outline { opacity:.55; }
 /* the lift's dual doors */
 .lift-gap { fill:var(--night-light-hi); }
 .lift-door { fill:var(--struct-lit); stroke:var(--struct-line); stroke-width:.4; vector-effect:non-scaling-stroke; }
-.lift-shaft { fill:none; stroke:color-mix(in srgb, var(--accent) 55%, transparent); stroke-width:.8; stroke-dasharray:3 2; vector-effect:non-scaling-stroke; }
-.lift-level { fill:none; stroke:color-mix(in srgb, var(--accent) 45%, transparent); stroke-width:.7; vector-effect:non-scaling-stroke; }
-.lift-level.g { stroke:var(--accent); stroke-width:1.4; }
-.lift-level-tag { fill:color-mix(in srgb, var(--accent) 70%, var(--ink)); font-family:var(--font); font-weight:600; }
-.lift-level-tag.g { fill:var(--accent); font-weight:800; }
 .lift-ground { fill:var(--accent); opacity:.18; }
+/* "Go to KOSIGN": the rented floors as bands round the frosted building (the destination brightest) */
+.lift-band path { fill:color-mix(in srgb, var(--accent) 16%, transparent); stroke:var(--accent); stroke-width:.8; stroke-linejoin:round; vector-effect:non-scaling-stroke; }
+.lift-band { opacity:.55; }
+.lift-band.dest { opacity:1; }
+.lift-band.dest path { fill:color-mix(in srgb, var(--accent) 28%, transparent); filter:url(#soft); }
+:root:not([data-theme="light"]) .lift-band path { fill:color-mix(in srgb, var(--night-light) 22%, transparent); stroke:var(--night-light); }
+:root:not([data-theme="light"]) .lift-band.dest path { fill:color-mix(in srgb, var(--night-light) 38%, transparent); }
+.lift-dest-tag { fill:var(--accent-hi); font-family:var(--font); font-weight:800; paint-order:stroke; stroke:var(--panel); stroke-width:1.2px; }
 .lift-floor { fill:var(--accent-hi); font-family:var(--font); font-weight:700; }
 .lift-frame { fill:none; stroke:var(--struct-line); stroke-width:.6; vector-effect:non-scaling-stroke; }
 .face.lift-car { fill:var(--accent); stroke:var(--accent-hi); stroke-width:.5; vector-effect:non-scaling-stroke; }
@@ -480,7 +581,15 @@
 :root:not([data-theme="light"]) .twr.dusk .canopy-light { animation:halo-on 1s ease-out 1.1s both; }
 @media (prefers-reduced-motion: reduce) { .twr.dusk .canopy-light { animation:none !important; } }
 .pwc-sign { fill:var(--ink-hi); font-family:var(--font); font-weight:600; }
-.pwc-glyph { fill:var(--accent); font-family:var(--font); font-weight:600; }
+.pwc-glyph { fill:var(--ink-hi); font-family:var(--font); font-weight:600; }   /* ♀ ♂ sign: neutral like the building */
+/* night (dark theme): the VIP booth, the ATM room and the public restroom door are lit from inside with
+   the same warm light as the tower's windows; booth and door flicker on at nightfall like the windows */
+:root:not([data-theme="light"]) .booth-glass,
+:root:not([data-theme="light"]) .face.pwc-door { --lit:var(--night-light); fill:var(--night-light); stroke:var(--night-light-hi); filter:url(#glow); }
+:root:not([data-theme="light"]) .atm-glass { fill:color-mix(in srgb, var(--night-light) 38%, transparent); stroke:var(--night-light-hi); filter:url(#soft); }
+:root:not([data-theme="light"]) .twr.dusk .booth-glass { animation:win-on .9s linear 1.3s both; }
+:root:not([data-theme="light"]) .twr.dusk .face.pwc-door { animation:win-on .9s linear 1.6s both; }
+@media (prefers-reduced-motion: reduce) { .twr.dusk .booth-glass, .twr.dusk .face.pwc-door { animation:none !important; } }
 /* pillar grid expressed on the façade */
 .face.struct.pilaster { fill:var(--struct-lit); }
 .face.struct.pilaster.front { fill:color-mix(in srgb, var(--struct-shade) 70%, var(--struct-lit)); }
@@ -512,8 +621,21 @@
 :root:not([data-theme="light"]) .twr.dusk .pn.on { animation:win-on .9s linear var(--d, 0ms) both; }
 :root:not([data-theme="light"]) .twr.dusk .fl.rent .halo { animation:halo-on 1.4s ease-out 1.8s both; }
 @media (prefers-reduced-motion: reduce) { .twr.dusk .pn.on, .twr.dusk .fl.rent .halo { animation:none !important; } }
-:root:not([data-theme="light"]) .twr .pn.lobby { fill:color-mix(in srgb, var(--night-light) 45%, var(--struct-glass)); }
-:root:not([data-theme="light"]) .twr .fl:not(.rent) .pn { fill:var(--struct-glass); }
+/* the ground-floor lobby is lit all night like the rented floors: warm glowing glass and a bloom round
+   its band; at nightfall its lights come on first */
+/* (.fl.lobby .pn.lobby: must outrank the dark-glass rule for every non-rented floor below, so the lobby
+   stays lit whether or not it is hovered) */
+:root:not([data-theme="light"]) .twr .fl.lobby .pn.lobby { --lit:var(--night-light); fill:var(--night-light); stroke:var(--night-light-hi); }
+:root:not([data-theme="light"]) .twr .fl.lobby .win { filter:url(#glow); }
+:root:not([data-theme="light"]) .twr .fl.lobby .halo { opacity:.38; }
+/* hovered (or the arrow-key cursor) at night: the band tint is hidden under the glowing glass, so the
+   highlight is the light itself — the lobby glass burns hotter and its bloom swells */
+:root:not([data-theme="light"]) .twr .fl.lobby.cursor .pn.lobby, :root:not([data-theme="light"]) .twr .fl.lobby:hover .pn.lobby { fill:var(--night-light-hi); stroke:#ffffff; }
+:root:not([data-theme="light"]) .twr .fl.lobby.cursor .halo, :root:not([data-theme="light"]) .twr .fl.lobby:hover .halo { opacity:.75; }
+:root:not([data-theme="light"]) .twr.dusk .pn.lobby { animation:win-on .9s linear .3s both; }
+:root:not([data-theme="light"]) .twr.dusk .fl.lobby .halo { animation:halo-on 1.4s ease-out 1.2s both; }
+@media (prefers-reduced-motion: reduce) { .twr.dusk .pn.lobby, .twr.dusk .fl.lobby .halo { animation:none !important; } }
+:root:not([data-theme="light"]) .twr .fl:not(.rent):not(.lobby) .pn { fill:var(--struct-glass); }   /* vacant floors: dark glass (not the lit lobby) */
 .twr .cur { display:none; }
 .twr .lead { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; }
 .twr .fl.rent .lead { stroke:var(--accent); }
