@@ -1,0 +1,532 @@
+/* iso-glow tokens + SVG vocabulary. Colour only through tokens: the accent is the only hue.
+   This file is also inlined into exported PNGs (see lib/exportPng.js). */
+
+:root {
+  color-scheme: dark;
+  --bg:#0c0d0e; --panel:#141516; --edge:#222426;
+  --line:#3d4144; --detail:#2b2e30; --body:#17181a; --deck:#1b1d1f;
+  --ink:#868b8f; --ink-hi:#e6e8e9; --live:#f4f5f5;
+  --glass:#0f1011; --glass-on:#0f1a33; --recess:#0e0f10;
+  --accent:#2f8fff; --accent-hi:#9fd0ff; --accent-dim:rgba(47,143,255,.16);
+  --warn:#e5484d;
+  /* dark theme = night: charcoal / slate structure, soft light linework, dark ground and glass */
+  --struct-top:#2c3037; --struct-lit:#252930; --struct-shade:#1c1f24; --struct-glass:#13161b;
+  --struct-line:rgba(175,185,200,.28);
+  --struct-cap:#41464f; /* top face (seen from above) of walls, pillars and rooftop parapet/objects */
+  --concrete:#1f2227; --concrete-lit:#272a30; --concrete-ramp:#1d2025;
+  /* driving routes a little darker than the paving around them */
+  --paving:#1d2025; --asphalt:#16181c; --lawn:#17202c; --marking:#4b525b;
+  /* warm interior light of occupied floors at night */
+  --night-light:#ffd58a; --night-light-hi:#fff0cc;
+  --shadow:#000000; --ao-a:.6;
+  /* furniture: flat three-tone volumes (top / front / side) with blue linework; live and selected pieces
+     turn solid blue */
+  --furn-top:#3a4272; --furn:#2b3258; --furn-side:#1f2546; --furn-edge:#6d8cff;
+  /* Host Grotesk for Latin; it has no Khmer glyphs, so Khmer (សសរ …) always renders in Google Sans.
+     Neither covers Hangul, so Korean falls back to the system Korean UI fonts. */
+  --font:"Host Grotesk","Google Sans","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg:#f2f2f2; --panel:#ffffff; --edge:#e0e0e0;
+  --line:#909296; --detail:#d0d1d3; --body:#ededed; --deck:#efefef;
+  --ink:#6a6f73; --ink-hi:#16181a; --live:#0c0d0e;
+  --glass:#dcdede; --glass-on:#dbe6ff; --recess:#e2e4e4;
+  --accent:#1f7bff; --accent-hi:#0b5ed7; --accent-dim:rgba(31,123,255,.12);
+  --warn:#d13438;
+  --shadow:#1e1e1e; --ao-a:.35;
+  --furn-top:#fafcff; --furn:#e4ecfb; --furn-side:#cddbf5; --furn-edge:rgba(31,123,255,.5);
+  /* neutral architectural render: white volumes, soft grey shade, fine grey lines; tops of walls, pillars
+     and rooftop objects dark grey */
+  --struct-top:#ffffff; --struct-lit:#f7f7f7; --struct-shade:#dedede; --struct-glass:#cfd1d4;
+  --struct-line:rgba(40,40,40,.42);
+  --struct-cap:#8f959d;
+  --concrete:#c9cbce; --concrete-lit:#d9dbdd; --concrete-ramp:#dfe1e4;
+  /* walkways and open ground in light grey; driving routes a little darker, with grain; white markings */
+  --paving:#dfe1e4; --asphalt:#cdd0d4; --lawn:#d9e5f3; --marking:#ffffff;
+}
+
+/* ---- shared figure vocabulary (from the iso-glow template) ---- */
+.face { fill:var(--body); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; stroke-linejoin:round; }
+.face.top { fill:var(--deck); }
+.face.recess { fill:var(--recess); }
+.detail { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; }
+.label { fill:var(--ink); font-family:var(--font); }
+.glass { fill:var(--glass); stroke:var(--line); stroke-width:.8; vector-effect:non-scaling-stroke; transition:fill .3s, stroke .3s; }
+.glass.hot { fill:var(--glass-on); stroke:var(--accent); }
+.halo { fill:var(--accent); opacity:0; transition:opacity .4s; }
+.halo.hot { opacity:.22; }
+.scr { fill:var(--accent-hi); font-family:var(--font); }
+.scr-accent { fill:var(--accent); }
+.led { fill:var(--detail); transition:fill .2s; }
+.led.hot { fill:var(--accent); }
+:root[data-theme="light"] .halo { display:none; }
+
+/* Labels off: hide every piece of text drawn in the scene (names, signs, ground markings, ticks) and the
+   zone number badges. Works in the page (attribute on <html>) and in PNG exports (on the <svg>). */
+[data-labels="off"] svg text, svg[data-labels="off"] text,
+[data-labels="off"] .zone-badge, [data-labels="off"] .zone-tags { display:none; }
+
+/* ---- floor editor ---- */
+/* floor tile grid: exactly 10% stroke alpha, drawn once per edge (see renderPlate) */
+.slab-grid { fill:none; stroke:var(--line); stroke-opacity:.1; stroke-width:1; vector-effect:non-scaling-stroke; }
+/* every grid-like line on a floor (tiles, room hatching, restroom tiles, tower paving): same colour, 10% */
+.zone-hatch, .tile-line, .floor-grid { stroke:var(--line) !important; stroke-opacity:.1 !important; opacity:1 !important; }
+.tick { fill:var(--ink); font-family:var(--font); opacity:.8; }
+.face.bare { fill:none; stroke:none; }
+
+/* structural shell (벽, 기둥, slab edge, tower envelope): white render, fine cobalt lines */
+.face.struct { fill:var(--struct-shade); stroke:var(--struct-line); stroke-width:.6; shape-rendering:geometricPrecision; }
+.face.struct.side { fill:var(--struct-lit); }
+.face.struct.top { fill:var(--struct-top); }
+.face.slab.front { fill:var(--struct-shade); stroke:var(--struct-line); stroke-width:.6; }
+.face.slab.side { fill:var(--struct-lit); stroke:var(--struct-line); stroke-width:.6; }
+/* the floor surface itself: one even tone, no seam outline between the per-row slab boxes */
+.face.slab.top { fill:var(--deck); stroke:none; }
+.pillar-cap { display:none; }
+/* plan cut: walls and pillars read as solid cobalt from above */
+.face.wall.top, .face.pillar.top, .face.cap.top { fill:var(--struct-cap); stroke:var(--struct-line); }
+
+/* sharp cast shadows + soft contact shadows; one group each so overlaps merge */
+.cast-shadow { pointer-events:none; }
+/* each slice is faint (opacity set per layer count in shadow.js); they all overlap near the caster */
+.shadow-slice path { fill:var(--shadow); }
+.ao { opacity:var(--ao-a); pointer-events:none; }
+.ao path { fill:var(--shadow); }
+.shell-shadows { pointer-events:none; }
+/* tower: a lighter contact shadow around the building's base */
+.twr-ground-shadow .ao { opacity:calc(var(--ao-a) * .5); }
+.tower-shadow .ao { opacity:calc(var(--ao-a) * .12); }   /* the building's base rim: barely there on its lit (right) sides */
+.roof-shadow .ao { opacity:calc(var(--ao-a) * .4); }
+:root[data-theme="light"] .desk-name { fill:var(--ink-hi); }
+:root[data-theme="light"] .desk-name.scr { fill:var(--accent-hi); font-weight:500; }
+.mullion { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+.face.furn { fill:var(--furn); stroke:var(--furn-edge); stroke-width:.7; }
+.face.furn.side { fill:var(--furn-side); }
+.face.furn.top { fill:var(--furn-top); }
+/* selected furniture: solid indigo */
+.it.sel .face.furn { fill:var(--accent); stroke:var(--accent-hi); }
+.it.sel .face.furn.top { fill:color-mix(in srgb, var(--accent) 72%, #fff); }
+/* lit screens (desk monitors, displays) read as solid indigo panels */
+.it.live .glass.hot { fill:var(--accent); stroke:var(--accent-hi); }
+.it.live .scr-accent { fill:#fff; opacity:.85; }
+.door-arc { fill:var(--accent-dim); stroke:none; opacity:.8; }
+.door-leaf { stroke:var(--ink-hi); stroke-width:1.6; vector-effect:non-scaling-stroke; }
+
+/* zones: rooms and departments, flat on the floor */
+.face.zone { fill:color-mix(in srgb, var(--deck) 55%, transparent); stroke:none; }
+/* zones have no dashed border; only enclosed rooms (meeting, CEO, server) keep a fine solid edge */
+.zone-edge { fill:none; stroke:none; }
+.zone-meeting .zone-edge, .zone-ceo .zone-edge, .zone-server .zone-edge { stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+.zone-label { fill:var(--ink-hi); font-family:var(--font); font-weight:500; }
+.zone-sub { fill:var(--ink); font-family:var(--font); }
+.zone-status { fill:var(--ink); font-family:var(--font); letter-spacing:.6px; }
+.zone-hatch { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; }
+.zone-badge { fill:var(--recess); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+.zone-badge-n { fill:var(--ink-hi); font-family:var(--font); }
+.face.zone.live { fill:var(--accent-dim); }
+.it.live.zone-meeting .zone-edge, .it.live .zone-meeting .zone-edge, .it.live .zone-server .zone-edge { stroke:var(--accent); }
+.zone-tags { pointer-events:none; }
+.zone-label, .zone-sub, .zone-status, .zone-badge-n { paint-order:stroke; stroke:var(--panel); stroke-width:3px; stroke-linejoin:round; }
+.tag.live .zone-label, .tag.live .zone-status { fill:var(--accent-hi); }
+.tag.live .zone-status { filter:url(#soft); }
+.tag.live .zone-badge { stroke:var(--accent); }
+.it.edge { pointer-events:none; }
+.it.locked { cursor:default; }
+/* every glass wall (meeting rooms, partitions, storage rooms) is frosted: dense milky white that only
+   lets a faint smudge of what is behind through; see .frost-glass below */
+.face.pane { fill:color-mix(in srgb, #ffffff 72%, var(--struct-glass)); fill-opacity:.86; stroke:var(--struct-line); stroke-width:.6; }
+.face.pane.side { fill-opacity:.9; }
+.face.tile { fill:var(--recess); }
+/* sanitary fixtures (toilets, urinals) and basins in the core WCs */
+.face.fixture { fill:var(--struct-top); stroke:var(--furn-edge); stroke-width:.7; }
+/* frosted glass (storage rooms): dense milky panes; the contents inside are drawn blurred and faded
+   (.frosted-inside), so what shows through is soft and out of focus */
+.face.frost-glass { fill:color-mix(in srgb, #ffffff 72%, var(--struct-glass)); fill-opacity:.86; stroke:var(--struct-line); stroke-width:.6; }
+.face.frost-glass.side { fill-opacity:.9; }
+.face.frost-glass.top { fill-opacity:.82; }
+.frosted-inside { filter:url(#frost-blur); opacity:.55; }
+:root:not([data-theme="light"]) .face.pane, :root:not([data-theme="light"]) .face.frost-glass {
+  fill:color-mix(in srgb, #9aa7b6 30%, var(--struct-glass)); }
+:root:not([data-theme="light"]) .frost-mullion { stroke:#7f8a97; }
+.frost-mullion { fill:none; stroke:#ffffff; stroke-width:1.2; vector-effect:non-scaling-stroke; opacity:.9; }
+.basin { fill:var(--glass); stroke:var(--furn-edge); stroke-width:.6; vector-effect:non-scaling-stroke; }
+/* building-core zones (corridor, lift lobby, WCs): quiet neutral floor */
+.face.zone.zone-core { fill:color-mix(in srgb, var(--struct-shade) 35%, transparent); }
+.face.carpet { fill:var(--deck); }
+.face.sill { fill:var(--recess); }
+.tile-line { opacity:.6; }
+
+.it { cursor:grab; }
+/* hover = background tint only, never a border: the hovered item's footprint is filled (see .foot.hover) */
+.it.live .face.seat { fill:var(--accent); stroke:var(--accent-hi); }
+.it.live .face.seat.top { fill:color-mix(in srgb, var(--accent) 70%, #fff); }
+.it.live .face.deskTop { stroke:var(--accent); }
+.it.live .face.pane { fill:color-mix(in srgb, var(--accent) 14%, #ffffff); fill-opacity:.86; stroke:var(--accent); }
+.it.live .glass.hot { filter:url(#soft); }
+.it.sel .face { stroke:var(--accent-hi); }
+.it.lifted { opacity:.25; }
+.it.ghost { opacity:.72; pointer-events:none; }
+.it.ghost.bad .face { stroke:var(--warn); }
+
+.foot { fill:var(--accent-dim); stroke:var(--accent); stroke-width:1.4; vector-effect:non-scaling-stroke; stroke-dasharray:4 3; pointer-events:none; }
+.foot.sel { stroke-dasharray:none; filter:url(#soft); }
+.foot.hover { fill:var(--accent-dim); stroke:none; }
+
+/* floor overview: each unit is one clickable area; hover = background tint only */
+.unit-hit { cursor:pointer; }
+.unit-area { fill:var(--accent); fill-opacity:0; stroke:none; transition:fill-opacity .15s; }
+.units.hover-C [data-unit="C"] .unit-area, .units.hover-D [data-unit="D"] .unit-area,
+.units.hover-A [data-unit="A"] .unit-area, .units.hover-B [data-unit="B"] .unit-area { fill-opacity:.12; }
+.unit-name { fill:var(--ink-hi); font-family:var(--font); font-weight:500; letter-spacing:4px; opacity:.75; paint-order:stroke; stroke:var(--panel); stroke-width:4px; }
+.unit-sub { fill:var(--ink); font-family:var(--font); paint-order:stroke; stroke:var(--panel); stroke-width:3px; }
+.foot.bad { fill:color-mix(in srgb, var(--warn) 18%, transparent); stroke:var(--warn); }
+.cellhint { fill:none; stroke:var(--accent); stroke-width:1; vector-effect:non-scaling-stroke; opacity:.6; pointer-events:none; }
+
+/* ---- floor features: meeting-room highlight and wayfinding route ---- */
+.meet-hi { fill:color-mix(in srgb, var(--accent) 22%, transparent); stroke:var(--accent); stroke-width:2; vector-effect:non-scaling-stroke; animation:meet-pulse 2.2s ease-in-out infinite; }
+.meet-glow { fill:var(--accent); opacity:.35; animation:meet-pulse 2.2s ease-in-out infinite; }
+@keyframes meet-pulse { 50% { opacity:.55; } }
+.route-under { fill:none; stroke:var(--panel); stroke-width:7; stroke-linecap:round; stroke-linejoin:round; vector-effect:non-scaling-stroke; opacity:.85; }
+.route-line { fill:none; stroke:var(--accent); stroke-width:3.5; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:2 10; vector-effect:non-scaling-stroke; animation:route-flow .9s linear infinite; filter:url(#soft); }
+@keyframes route-flow { to { stroke-dashoffset:-12; } }
+.route-start { fill:var(--panel); stroke:var(--accent); stroke-width:2.5; vector-effect:non-scaling-stroke; }
+.route-end { fill:var(--accent); stroke:var(--panel); stroke-width:2; vector-effect:non-scaling-stroke; }
+.route-pulse { fill:none; stroke:var(--accent); stroke-width:2; vector-effect:non-scaling-stroke; transform-box:fill-box; transform-origin:center; animation:route-ping 1.6s ease-out infinite; }
+@keyframes route-ping { from { transform:scale(1); opacity:.9; } to { transform:scale(3.2); opacity:0; } }
+.route-tag { fill:var(--accent-hi); font-family:var(--font); font-weight:600; paint-order:stroke; stroke:var(--panel); stroke-width:3px; }
+@media (prefers-reduced-motion: reduce) { .meet-hi, .meet-glow, .route-line, .route-pulse { animation:none; } }
+
+/* ---- tower ---- */
+/* night: everything that marks a floor (outline, hover tint, lit windows, leader line, tag, hover card)
+   takes the warm interior light instead of the blue accent */
+:root:not([data-theme="light"]) .twr .fl, :root:not([data-theme="light"]) .floor-tip {
+  --accent:var(--night-light); --accent-hi:var(--night-light-hi);
+  --accent-dim:color-mix(in srgb, var(--night-light) 18%, transparent);
+}
+.twr .fl .band { transition:none; }   /* hover / arrow-key floor highlight: instant */
+.twr .fl.rent { cursor:pointer; }
+/* rented floors keep the building's own outline; only their windows and the wall band (on hover) take colour */
+/* hovered / keyboard-cursor floor: background tint only, no outline */
+.twr .fl.rent.cursor .band, .twr .fl.rent:hover .band { fill:color-mix(in srgb, var(--accent) 22%, var(--struct-lit)); }
+.twr .fl:not(.rent).cursor .band { fill:color-mix(in srgb, var(--ink) 14%, var(--struct-lit)); }
+.twr .pn { fill:var(--struct-glass); stroke:var(--struct-line); stroke-width:.6; vector-effect:non-scaling-stroke; }
+/* only the rented floors (2 and 4) keep pane outlines; every other floor shows plain glass */
+.twr .fl:not(.rent) .pn { stroke:none; }
+.twr .lobby-glass { stroke:none !important; }
+.twr .pn.lobby { fill:color-mix(in srgb, var(--struct-glass) 80%, var(--ink)); stroke:none; }
+/* B1 parking: concrete basement and ramps */
+.face.basement { fill:var(--concrete); stroke:var(--struct-line); stroke-width:.6; }
+.face.basement.side { fill:var(--concrete-lit); }
+.ramp { fill:url(#asphalt-grain); stroke:var(--struct-line); stroke-width:.6; vector-effect:non-scaling-stroke; }
+.ramp-groove { stroke:var(--line); stroke-opacity:.35; stroke-width:1; vector-effect:non-scaling-stroke; }
+.ramp-text { fill:var(--ink-hi); font-family:var(--font); font-weight:600; letter-spacing:.6px; opacity:.6; }
+.ramp-sign { fill:var(--ink-hi); font-family:var(--font); font-weight:600; paint-order:stroke; stroke:var(--panel); stroke-width:2px; }
+.tunnel { fill:#26282b; }
+/* basement car park light glowing out of the ramp tunnels: accent in light mode, warm night light in
+   dark mode, fading in at nightfall */
+.twr .park-halo { fill:var(--accent); opacity:.35; }
+.twr .park-spill { fill:var(--accent); opacity:.14; }
+:root:not([data-theme="light"]) .twr .park-halo { fill:var(--night-light); opacity:.85; }
+:root:not([data-theme="light"]) .twr .park-spill { fill:var(--night-light); opacity:.4; }
+:root:not([data-theme="light"]) .twr.dusk .park-halo { animation:halo-on 1.2s ease-out 1.2s both; }
+/* fireflies round the underground ramp mouths: dark mode only */
+.fireflies { display:none; pointer-events:none; }
+:root:not([data-theme="light"]) .fireflies { display:inline; }
+.firefly { animation:ff-drift var(--dur) ease-in-out var(--delay) infinite alternate, ff-blink var(--blink) ease-in-out var(--delay) infinite; }
+.ff-core { fill:var(--night-light-hi); }
+@keyframes ff-drift { 0% { transform:translate(0, 0); } 50% { transform:translate(var(--dx), var(--dy)); } 100% { transform:translate(var(--ex), var(--ey)); } }
+@keyframes ff-blink { 0%, 100% { opacity:.15; } 40% { opacity:1; } 60% { opacity:.85; } }
+@media (prefers-reduced-motion: reduce) { .firefly { animation:none; opacity:.7; } }
+:root:not([data-theme="light"]) .twr.dusk .park-spill { animation:halo-on 1.2s ease-out 1.4s both; }
+@media (prefers-reduced-motion: reduce) { .twr.dusk .park-halo, .twr.dusk .park-spill { animation:none !important; } }
+/* front courtyard: paving, driveway, parking bays, lawns, cars and the main entrance */
+/* inner perimeter of the concrete platform: the line all paving runs flush to */
+.plate-edge { fill:none; stroke:var(--struct-line); stroke-width:.6; vector-effect:non-scaling-stroke; }
+.yard-paving { fill:var(--paving); }
+/* the site platform's top (the open ground between the areas): the same surface as every path */
+.face.site.top { fill:var(--paving); }   /* open ground elsewhere (beside the building, margins): light grey */
+/* driving routes: a little darker than the paving, with a fine asphalt noise (pattern in the scene) */
+.yard-road { fill:url(#asphalt-grain); }
+.grain-base { fill:var(--asphalt); }
+/* the front plaza's pedestrian pavers */
+.yard-plaza { fill:url(#paver-tiles); }
+.paver-base { fill:var(--paving); }
+.paver-joint { fill:none; stroke:color-mix(in srgb, var(--ink) 24%, var(--paving)); stroke-width:.14; }
+.asphalt-noise { opacity:.55; }
+/* a faint concrete grain over the building's walls and roof (never in the way of the pointer) */
+.bld-grain { fill:url(#bld-noise); opacity:.28; pointer-events:none; }
+:root:not([data-theme="light"]) .bld-grain { opacity:.45; }
+:root:not([data-theme="light"]) .asphalt-noise { opacity:.8; }
+/* raised VIP deck: asphalt (paving for the bay apron) on top, concrete retaining faces */
+.face.vip-deck { fill:var(--struct-shade); stroke:var(--struct-line); stroke-width:.4; vector-effect:non-scaling-stroke; }
+.face.vip-deck.top { fill:url(#asphalt-grain); stroke:none; }
+.face.vip-deck.pave.top { fill:var(--paving); }
+/* "no entry" road signs at the exits */
+.sign-disc { fill:#d7262e; stroke:#ffffff; stroke-width:.35; }
+.sign-bar { fill:#ffffff; }
+.sign-plate { fill:#ffffff; stroke:#d7262e; stroke-width:.25; }
+.sign-text { fill:#d7262e; font-family:var(--font); font-weight:700; letter-spacing:.05px; }
+.no-entry { pointer-events:none; }
+/* reflecting pool in front of the garden wall */
+.pool-water { fill:color-mix(in srgb, var(--accent) 22%, #cfdbe6); }
+:root:not([data-theme="light"]) .pool-water { fill:color-mix(in srgb, var(--accent) 30%, #0c1520); }
+.pool-ripple { fill:none; stroke:#ffffff; stroke-width:.9; stroke-linecap:round; stroke-dasharray:6 14; opacity:.55; vector-effect:non-scaling-stroke; animation:pool-drift 5s linear infinite; }
+:root:not([data-theme="light"]) .pool-ripple { stroke:var(--accent-hi); opacity:.35; }
+@keyframes pool-drift { to { stroke-dashoffset:-40; } }
+@media (prefers-reduced-motion: reduce) { .pool-ripple { animation:none; } }
+/* ATM kiosk: frosted glass, the cash machine inside, its screen breathing in brightness */
+.atm-kiosk { pointer-events:none; }
+.atm-glass { fill:color-mix(in srgb, #ffffff 42%, transparent); stroke:var(--struct-line); stroke-width:.5; vector-effect:non-scaling-stroke; }
+:root:not([data-theme="light"]) .atm-glass { fill:color-mix(in srgb, #b9c3cf 22%, transparent); }
+.atm-mullion { stroke:var(--struct-line); stroke-width:.8; vector-effect:non-scaling-stroke; }
+.atm-door { fill:none; stroke:var(--struct-line); stroke-width:.7; vector-effect:non-scaling-stroke; }
+.face.atm-body { fill:#5d646d; stroke:var(--struct-line); stroke-width:.4; vector-effect:non-scaling-stroke; }
+.face.atm-body.top { fill:#78808a; } .face.atm-body.front { fill:#4a5058; }
+.atm-hood { fill:#2c3036; } .atm-bezel { fill:#1d2025; } .atm-keys { fill:#9aa1a9; } .atm-slot { fill:#0f1114; }
+.atm-screen { fill:var(--accent); animation:atm-breathe 2.6s ease-in-out infinite; }
+@keyframes atm-breathe { 0%, 100% { opacity:.45; } 50% { opacity:1; } }
+.atm-sign { fill:var(--accent); font-family:var(--font); font-weight:700; }
+@media (prefers-reduced-motion: reduce) { .atm-screen { animation:none; opacity:.85; } }
+/* automatic sliding gates at the site entrance / exit */
+.gate-track { stroke:var(--struct-line); stroke-width:1.2; vector-effect:non-scaling-stroke; }
+.gate-panel { fill:color-mix(in srgb, var(--struct-lit) 55%, transparent); stroke:var(--struct-line); stroke-width:.6; vector-effect:non-scaling-stroke; }
+.gate-rail { fill:var(--struct-shade); }
+.gate-bars { stroke:var(--struct-line); stroke-width:.8; vector-effect:non-scaling-stroke; }
+.site-gate .gate-slide { transition:transform .75s cubic-bezier(.45,0,.2,1); }
+.site-gate.open .gate-slide { transform:translateX(var(--slide)); }
+.gate-beacon { fill:#9a6a1c; }
+.gate-beacon.open { fill:#ffb020; animation:beacon-flash .6s steps(1) infinite; }
+@keyframes beacon-flash { 50% { fill:#9a6a1c; } }
+.site-gate, .gate-beacon { pointer-events:none; }
+@media (prefers-reduced-motion: reduce) { .site-gate .gate-slide { transition:none; } .gate-beacon.open { animation:none; } }
+/* VIP checkpoint: booth glass, barrier arms (swing up about their pivot when .open) */
+.booth-glass { fill:color-mix(in srgb, var(--struct-glass) 70%, var(--accent)); stroke:var(--struct-line); stroke-width:.4; vector-effect:non-scaling-stroke; }
+.gate-bar { fill:#ffffff; stroke:var(--struct-line); stroke-width:.4; vector-effect:non-scaling-stroke; }
+.gate-stripe { fill:#e5484d; }
+.gate-lamp { fill:#e5484d; transition:fill .2s; }
+.vip-gate.open .gate-lamp { fill:#30c46b; }
+.vip-gate .gate-arm { transform-box:view-box; transform-origin:0 0; transition:transform .55s cubic-bezier(.3,.8,.3,1); }
+.vip-gate.in.open .gate-arm { transform:rotate(-82deg); }
+.vip-gate.out.open .gate-arm { transform:rotate(82deg); }
+:root:not([data-theme="light"]) .gate-bar { fill:#c9ced4; }
+@media (prefers-reduced-motion: reduce) { .vip-gate .gate-arm { transition:none; } }
+.yard-lawn { fill:var(--lawn); }
+.road-line { stroke:#ffffff; stroke-width:1.2; stroke-dasharray:6 5; vector-effect:non-scaling-stroke; opacity:.9; }
+.road-arrow { fill:var(--marking); opacity:.9; }
+.slot-line { stroke:var(--marking); stroke-width:1.2; vector-effect:non-scaling-stroke; }
+.slot-text { fill:var(--ink); font-family:var(--font); opacity:.8; }
+.yard-text { fill:var(--ink-hi); font-family:var(--font); font-weight:600; opacity:.55; }
+.lane-text { fill:var(--marking); font-family:var(--font); font-weight:600; opacity:.95; }
+.dropoff-hatch { stroke:var(--marking); stroke-width:1; vector-effect:non-scaling-stroke; opacity:.6; }
+/* VIP bays: accent-outlined, tinted, labelled — distinct from the white-lined regular bays */
+/* VIP bays: plain marking lines on the deck (neutral in both themes, no blue) */
+.vip-bay { fill:none; stroke:var(--marking); stroke-width:1.2; vector-effect:non-scaling-stroke; }
+:root:not([data-theme="light"]) .vip-bay { stroke:color-mix(in srgb, var(--ink) 55%, transparent); }
+.vip-text { fill:var(--ink); font-family:var(--font); font-weight:600; letter-spacing:.8px; opacity:.85; }
+/* low-poly vehicles (iso/vehicles.js): each face is filled inline as color-mix(--X, --X-dk) by its lambert
+   shade. No colour: every paint is the building's own neutral finish (white by day, slate at night),
+   with neutral grey glass and dark tyres */
+:root {
+  --car-body:#ffffff; --car-body-dk:#c9cdd2;
+  --glass-car:#aeb3b9; --glass-car-dk:#6f747a;
+  --tyre:#5a5d62; --tyre-dk:#2c2e32;
+  --car-rim:#e3e5e8; --car-well:#3a3d42; --car-edge:rgba(20,22,26,.35);
+}
+:root:not([data-theme="light"]) {
+  --car-body:#5a616b; --car-body-dk:#2e3339;
+  --glass-car:#353b43; --glass-car-dk:#1a1e23;
+  --tyre:#2a2d31; --tyre-dk:#121417;
+  --car-rim:#80878f; --car-well:#060708; --car-edge:rgba(175,185,200,.22);
+}
+:root { --paint-white:var(--car-body); --paint-white-dk:var(--car-body-dk); --paint-black:var(--car-body); --paint-black-dk:var(--car-body-dk);
+  --paint-red:var(--car-body); --paint-red-dk:var(--car-body-dk); --paint-steel:var(--car-body); --paint-steel-dk:var(--car-body-dk);
+  --paint-blue:var(--car-body); --paint-blue-dk:var(--car-body-dk); --paint-grey:var(--car-body); --paint-grey-dk:var(--car-body-dk);
+  --paint-silver:var(--car-body); --paint-silver-dk:var(--car-body-dk); }
+/* walking figure (iso/scenes.js) */
+.face.person { fill:#5f666f; stroke:var(--car-edge); stroke-width:.3; vector-effect:non-scaling-stroke; }
+.face.person.top { fill:#7c838c; } .face.person.front { fill:#4c5259; }
+.face.person.legs { fill:#3c4046; } .face.person.legs.top { fill:#50555b; } .face.person.legs.front { fill:#2f3337; }
+.face.person.skin { fill:#e2d4c4; } .face.person.skin.top { fill:#eadfd2; } .face.person.skin.front { fill:#cdbdab; }
+:root:not([data-theme="light"]) .face.person { fill:#9aa1aa; } :root:not([data-theme="light"]) .face.person.top { fill:#b4bac2; }
+:root:not([data-theme="light"]) .face.person.front { fill:#80878f; } :root:not([data-theme="light"]) .face.person.legs { fill:#6b7179; }
+:root:not([data-theme="light"]) .face.person.legs.front { fill:#585e66; } :root:not([data-theme="light"]) .face.person.legs.top { fill:#7d838b; }
+.walker-shadow { fill:var(--shadow); opacity:.45; }
+.anim-back, .anim-front, .anim-mid1, .anim-mid2, .anim-ramp-in, .anim-ramp-out { pointer-events:none; }
+/* driving cars at night: warm headlight beams on the road, lit head lamps, red tail lamps */
+.car-lights { display:none; }
+:root:not([data-theme="light"]) .car-lights { display:inline; }
+.car-beam { fill:var(--night-light); opacity:.3; }
+.car-beam.core { opacity:.45; }
+.car-head { fill:var(--night-light-hi); filter:url(#glow); }
+.car-tail { fill:#ff4a3d; filter:url(#soft); }
+/* see-through: the building while the camera looks at a car parked behind it; an x-rayed car cabin */
+/* see-through building: it vanishes at once, leaving only its outline; its ground shadows go too */
+.twr .bld, .twr .tower-shadow, .twr .bld-outline, .twr .bld-frost { transition:opacity .2s ease-out; }
+/* frosted glass: a milky semi-opaque body, and whatever moves behind it softly blurred */
+.twr .bld-frost { opacity:0; pointer-events:none; }
+.twr .bld-frost path { fill:color-mix(in srgb, var(--panel) 70%, #ffffff); }
+:root:not([data-theme="light"]) .twr .bld-frost path { fill:color-mix(in srgb, var(--struct-top) 75%, #ffffff 10%); }
+.twr.xray-bld .bld-frost { opacity:.8; }
+/* frosted glass: what is behind the frosted building (or restroom) is softly blurred */
+.twr.xray-bld .anim-back, .twr.xray-pwc .anim-pwc { filter:url(#frost-soft); }
+.twr.xray-bld .bld, .twr.xray-bld .tower-shadow { opacity:0; }
+.twr .bld-outline { opacity:0; fill:none; stroke:color-mix(in srgb, var(--ink) 55%, var(--panel)); stroke-width:.5px; stroke-linejoin:round; vector-effect:non-scaling-stroke; pointer-events:none; }
+.twr.xray-bld .bld-outline { opacity:.55; }
+.twr .pwc, .twr .pwc-frost, .twr .pwc-outline { transition:opacity .2s ease-out; }
+.twr.xray-pwc .pwc, .twr.xray-pwc .pwc-shadow { opacity:0; }
+.twr .pwc-frost { opacity:0; pointer-events:none; }
+.twr .pwc-frost path { fill:color-mix(in srgb, var(--panel) 70%, #ffffff); }
+:root:not([data-theme="light"]) .twr .pwc-frost path { fill:color-mix(in srgb, var(--struct-top) 75%, #ffffff 10%); }
+.twr.xray-pwc .pwc-frost { opacity:.8; }
+.twr .pwc-outline { opacity:0; fill:none; stroke:color-mix(in srgb, var(--ink) 55%, var(--panel)); stroke-width:.5px; stroke-linejoin:round; vector-effect:non-scaling-stroke; pointer-events:none; }
+.twr.xray-pwc .pwc-outline { opacity:.55; }
+.anim-pwc, .anim-over { pointer-events:none; }
+/* entrance landing, steps and accessible ramp */
+.face.entry-deck.top { fill:var(--paving); }
+.face.entry-step.top { fill:var(--paving); }
+/* entrance flower beds: white concrete walls (struct), soil, low-poly shrubs and flowers, in blue shades */
+.planter-soil { fill:#6b5a48; }
+.face.shrub { fill:#5b86c4; stroke:color-mix(in srgb, #2c4a78 60%, transparent); stroke-width:.4; vector-effect:non-scaling-stroke; }
+.face.shrub.top { fill:#7ea5dc; }
+.flower { stroke:none; }
+.flower.f0 { fill:#ffffff; } .flower.f1 { fill:#b9d6ff; } .flower.f2 { fill:#2f6fd6; }
+:root:not([data-theme="light"]) .planter-soil { fill:#2b241d; }
+:root:not([data-theme="light"]) .face.shrub { fill:#2a3f63; } :root:not([data-theme="light"]) .face.shrub.top { fill:#36507c; }
+/* the lift car riding up during "Go to KOSIGN" */
+/* "Go to KOSIGN": floors 2 and 4 stay solid, every other floor, the walls and the roof go see-through */
+.twr .bld .face, .twr .bld .bld-grain, .twr .bld .fl, .twr .bld .detail, .twr .bld .roof-shadow { transition:opacity .25s ease-out; }
+.twr.xray-floors .bld .face, .twr.xray-floors .bld .bld-grain, .twr.xray-floors .bld .detail, .twr.xray-floors .bld .roof-shadow { opacity:.16; }
+.twr.xray-floors .bld .fl:not([data-f="2"]):not([data-f="4"]) { opacity:.3; }
+.twr.xray-floors .bld .fl[data-f="2"] .face, .twr.xray-floors .bld .fl[data-f="4"] .face { opacity:1; }
+.twr.xray-floors .tower-shadow, .twr.xray-floors .pwc-shadow { opacity:0; }
+.twr.xray-floors .bld-outline { opacity:.55; }
+/* the lift's dual doors */
+.lift-gap { fill:var(--night-light-hi); }
+.lift-door { fill:var(--struct-lit); stroke:var(--struct-line); stroke-width:.4; vector-effect:non-scaling-stroke; }
+.lift-shaft { fill:none; stroke:color-mix(in srgb, var(--accent) 55%, transparent); stroke-width:.8; stroke-dasharray:3 2; vector-effect:non-scaling-stroke; }
+.lift-level { fill:none; stroke:color-mix(in srgb, var(--accent) 45%, transparent); stroke-width:.7; vector-effect:non-scaling-stroke; }
+.lift-level.g { stroke:var(--accent); stroke-width:1.4; }
+.lift-level-tag { fill:color-mix(in srgb, var(--accent) 70%, var(--ink)); font-family:var(--font); font-weight:600; }
+.lift-level-tag.g { fill:var(--accent); font-weight:800; }
+.lift-ground { fill:var(--accent); opacity:.18; }
+.lift-floor { fill:var(--accent-hi); font-family:var(--font); font-weight:700; }
+.lift-frame { fill:none; stroke:var(--struct-line); stroke-width:.6; vector-effect:non-scaling-stroke; }
+.face.lift-car { fill:var(--accent); stroke:var(--accent-hi); stroke-width:.5; vector-effect:non-scaling-stroke; }
+.face.lift-car.top { fill:var(--accent-hi); }
+.face.lift-car.front { fill:color-mix(in srgb, var(--accent) 80%, #000); }
+/* floor view: the guide walking the route to KOSIGN */
+.guide-dot { fill:var(--accent); stroke:var(--panel); stroke-width:2.5; vector-effect:non-scaling-stroke; }
+.guide-halo { fill:var(--accent); opacity:.25; }
+.twr .pwc { transition:opacity .5s ease; }
+/* while the building is see-through, the other ground shadows go; the building's own shadow (cast to
+   the left, beside the underground exit) always stays */
+.twr .pwc-shadow { transition:opacity .5s ease; }
+.twr.xray-bld .pwc-shadow { opacity:0; }
+/* core stairs going down: each tread a shade deeper */
+.face.stair-step.s0 { fill:color-mix(in srgb, var(--struct-lit) 100%, #000); stroke:var(--struct-line); stroke-width:.5; vector-effect:non-scaling-stroke; }
+.face.stair-step.s1 { fill:color-mix(in srgb, var(--struct-lit) 94%, #000); stroke:var(--struct-line); stroke-width:.5; vector-effect:non-scaling-stroke; }
+.face.stair-step.s2 { fill:color-mix(in srgb, var(--struct-lit) 88%, #000); stroke:var(--struct-line); stroke-width:.5; vector-effect:non-scaling-stroke; }
+.face.stair-step.s3 { fill:color-mix(in srgb, var(--struct-lit) 82%, #000); stroke:var(--struct-line); stroke-width:.5; vector-effect:non-scaling-stroke; }
+.face.stair-step.s4 { fill:color-mix(in srgb, var(--struct-lit) 76%, #000); stroke:var(--struct-line); stroke-width:.5; vector-effect:non-scaling-stroke; }
+.face.stair-step.s5 { fill:color-mix(in srgb, var(--struct-lit) 70%, #000); stroke:var(--struct-line); stroke-width:.5; vector-effect:non-scaling-stroke; }
+.face.stair-step.s6 { fill:color-mix(in srgb, var(--struct-lit) 64%, #000); stroke:var(--struct-line); stroke-width:.5; vector-effect:non-scaling-stroke; }
+.face.stair-step.s7 { fill:color-mix(in srgb, var(--struct-lit) 58%, #000); stroke:var(--struct-line); stroke-width:.5; vector-effect:non-scaling-stroke; }
+.face.stair-step.s8 { fill:color-mix(in srgb, var(--struct-lit) 52%, #000); stroke:var(--struct-line); stroke-width:.5; vector-effect:non-scaling-stroke; }
+.face.stair-step.s9 { fill:color-mix(in srgb, var(--struct-lit) 46%, #000); stroke:var(--struct-line); stroke-width:.5; vector-effect:non-scaling-stroke; }
+.face.stair-step.s10 { fill:color-mix(in srgb, var(--struct-lit) 40%, #000); stroke:var(--struct-line); stroke-width:.5; vector-effect:non-scaling-stroke; }
+.face.stair-step.s11 { fill:color-mix(in srgb, var(--struct-lit) 34%, #000); stroke:var(--struct-line); stroke-width:.5; vector-effect:non-scaling-stroke; }
+/* welcome door swing (iso/doorSwing.js): upright door leaves on the entrance doors */
+.door-panel { fill:color-mix(in srgb, var(--struct-lit) 80%, var(--accent) 20%); stroke:var(--struct-line); stroke-width:.8; vector-effect:non-scaling-stroke; }
+.door-panel-edge { stroke:var(--ink-hi); stroke-width:1.2; vector-effect:non-scaling-stroke; }
+.car-face.xray { fill-opacity:.22; }
+:root { --seat:#6d737b; --seat-dk:#3b3f45; }
+:root:not([data-theme="light"]) { --seat:#4c535c; --seat-dk:#1d2024; }
+.car-seat { stroke:var(--car-edge); stroke-width:.3; vector-effect:non-scaling-stroke; }
+/* mini-map (bird's-eye plan, live route) */
+/* mini-map: no panel, just a light plan drawn straight on the stage, hairline strokes */
+.mm-plate { fill:none; stroke:color-mix(in srgb, var(--ink) 40%, transparent); stroke-width:.75; vector-effect:non-scaling-stroke; }
+.mm-road { fill:color-mix(in srgb, var(--ink) 16%, transparent); }
+.mm-bays { fill:color-mix(in srgb, var(--ink) 9%, transparent); }
+.mm-ramp { fill:color-mix(in srgb, var(--ink) 30%, transparent); }
+.mm-bld { fill:color-mix(in srgb, var(--ink) 38%, transparent); }
+.mm-route { fill:none; stroke:var(--accent); stroke-width:1; stroke-dasharray:2 3; stroke-linecap:round; vector-effect:non-scaling-stroke; opacity:.55; }
+.mm-trail { fill:none; stroke:var(--accent); stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; vector-effect:non-scaling-stroke; }
+.mm-car { fill:var(--accent); stroke:var(--panel); stroke-width:1; vector-effect:non-scaling-stroke; }
+.mm-halo { fill:var(--accent); opacity:.15; }
+.car-face, .car-tyre { stroke:var(--car-edge); stroke-width:.35; stroke-linejoin:round; vector-effect:non-scaling-stroke; }
+.car-rim { fill:var(--car-rim); stroke:var(--car-edge); stroke-width:.35; vector-effect:non-scaling-stroke; }
+.car-well { fill:var(--car-well); }
+.car-window { fill:color-mix(in srgb, var(--glass-car) 70%, var(--glass-car-dk)); stroke:var(--car-edge); stroke-width:.35; vector-effect:non-scaling-stroke; }
+.car-shadow { pointer-events:none; }
+.car-shadow .cast { fill:var(--shadow); opacity:.24; }
+.car-shadow .ao { fill:var(--shadow); opacity:.45; }
+.car-shadow .tyre-ao { fill:#000; opacity:.4; }
+.face.car { fill:var(--struct-lit); stroke:var(--struct-line); stroke-width:.6; }
+.face.car.front { fill:var(--struct-shade); }
+.face.car.cabin { fill:color-mix(in srgb, var(--struct-glass) 75%, var(--ink)); }
+.entry-glass { fill:var(--accent); stroke:var(--accent-hi); stroke-width:.6; vector-effect:non-scaling-stroke; }   /* lit like the rented floors' windows */
+:root:not([data-theme="light"]) .entry-glass { fill:var(--night-light); stroke:var(--night-light-hi); }       /* warm lobby light at night */
+.entry-mullion { stroke:var(--struct-top); stroke-width:1.2; vector-effect:non-scaling-stroke; }
+.entry-handle { stroke:var(--ink-hi); stroke-width:1.4; vector-effect:non-scaling-stroke; }
+.canopy-text { fill:var(--ink); font-family:var(--font); font-weight:600; }
+/* canopy downlights: only at night (dark mode), fading in at nightfall with the windows */
+.canopy-light { display:none; }
+:root:not([data-theme="light"]) .canopy-light { display:inline; }
+.canopy-pool { fill:var(--night-light); opacity:.32; }
+.canopy-pool.core { opacity:.4; }
+.cone-stop { stop-color:var(--night-light); }
+.canopy-lamp { fill:var(--night-light-hi); }
+:root:not([data-theme="light"]) .twr.dusk .canopy-light { animation:halo-on 1s ease-out 1.1s both; }
+@media (prefers-reduced-motion: reduce) { .twr.dusk .canopy-light { animation:none !important; } }
+.pwc-sign { fill:var(--ink-hi); font-family:var(--font); font-weight:600; }
+.pwc-glyph { fill:var(--accent); font-family:var(--font); font-weight:600; }
+/* pillar grid expressed on the façade */
+.face.struct.pilaster { fill:var(--struct-lit); }
+.face.struct.pilaster.front { fill:color-mix(in srgb, var(--struct-shade) 70%, var(--struct-lit)); }
+.twr .pn.on { fill:var(--accent); stroke:var(--accent-hi); }
+.twr .pn.on.hi { fill:var(--accent-hi); }
+.twr .pn.on.dim { opacity:.5; }
+.twr .fl.rent .win { filter:url(#soft); }
+.twr .fl.rent .halo { opacity:.32; }
+/* night (dark theme): occupied windows burn warm interior light and glow; the floor band blooms */
+:root:not([data-theme="light"]) .twr .pn.on { fill:var(--night-light); stroke:var(--night-light-hi); }
+:root:not([data-theme="light"]) .twr .pn.on.hi { fill:var(--night-light-hi); }
+:root:not([data-theme="light"]) .twr .pn.on.dim { opacity:.6; }
+:root:not([data-theme="light"]) .twr .fl.rent .win { filter:url(#glow); }
+:root:not([data-theme="light"]) .twr .fl .halo { fill:var(--night-light); opacity:0; }
+:root:not([data-theme="light"]) .twr .fl.rent .halo { opacity:.38; }
+/* nightfall (on entering dark mode, TowerView adds .dusk for a few seconds): each occupied window starts
+   dark, flickers and then stays lit at its own moment (--d); the floor halo blooms once most are on */
+:root:not([data-theme="light"]) .twr .pn.on { --lit:var(--night-light); }
+:root:not([data-theme="light"]) .twr .pn.on.hi { --lit:var(--night-light-hi); }
+@keyframes win-on {
+  0%   { fill:var(--struct-glass); stroke:var(--struct-line); }
+  25%  { fill:color-mix(in srgb, var(--lit) 70%, var(--struct-glass)); stroke:var(--lit); }
+  34%  { fill:var(--struct-glass); stroke:var(--struct-line); }
+  52%  { fill:var(--lit); }
+  62%  { fill:color-mix(in srgb, var(--lit) 55%, var(--struct-glass)); }
+  100% { fill:var(--lit); }
+}
+@keyframes halo-on { from { opacity:0; } }
+:root:not([data-theme="light"]) .twr.dusk .pn.on { animation:win-on .9s linear var(--d, 0ms) both; }
+:root:not([data-theme="light"]) .twr.dusk .fl.rent .halo { animation:halo-on 1.4s ease-out 1.8s both; }
+@media (prefers-reduced-motion: reduce) { .twr.dusk .pn.on, .twr.dusk .fl.rent .halo { animation:none !important; } }
+:root:not([data-theme="light"]) .twr .pn.lobby { fill:color-mix(in srgb, var(--night-light) 45%, var(--struct-glass)); }
+:root:not([data-theme="light"]) .twr .fl:not(.rent) .pn { fill:var(--struct-glass); }
+.twr .cur { display:none; }
+.twr .lead { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; }
+.twr .fl.rent .lead { stroke:var(--accent); }
+.twr .tag { fill:var(--ink); font-family:var(--font); }
+.twr .fl.rent .tag { fill:var(--accent-hi); }
+.twr .fl.rent .tag.big { filter:url(#soft); }
+.twr .beacon { fill:var(--accent-hi); animation:tower-blink 1.4s steps(1) infinite; }
+.twr .beacon-halo { fill:var(--accent); opacity:.5; animation:tower-blink 1.4s steps(1) infinite; }
+.twr .mast { fill:none; stroke:var(--line); stroke-width:1.2; vector-effect:non-scaling-stroke; }
+.twr .lobby-glass { fill:var(--accent); stroke:var(--accent-hi); stroke-width:1; vector-effect:non-scaling-stroke; opacity:.85; }
+.twr .lobby-door { fill:var(--accent-hi); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+@keyframes tower-blink { 0% { opacity:1; } 45% { opacity:.08; } }
+@media (prefers-reduced-motion:reduce) {
+  .twr .beacon, .twr .beacon-halo { animation:none; }
+  .twr .pn, .glass, .halo, .twr .fl .band { transition:none; }
+}

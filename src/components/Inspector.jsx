@@ -1,0 +1,170 @@
+// Selected-item inspector, the unit legend from the PDF, and the unit's seating roster.
+import { useEffect, useState } from 'react';
+import { baseSize, footprint } from '../iso/grid.js';
+import { SIZES, ZONE_KINDS } from '../model/catalog.js';
+import Switch, { ICONS } from './Switch.jsx';
+
+const inputCls = 'w-full rounded-md border border-edge bg-recess px-2 py-1.5 text-[12px] text-ink-hi outline-none focus:border-accent placeholder:text-ink/60';
+const capCls = 'text-[10px] uppercase tracking-[.16em] text-ink';
+
+function Field({ label, value, onCommit, placeholder, list }) {
+  const [draft, setDraft] = useState(value || '');
+  useEffect(() => { setDraft(value || ''); }, [value]);
+  const commit = () => { if (draft.trim() !== (value || '')) onCommit(draft.trim()); };
+  return (
+    <label className="flex flex-col gap-1">
+      <span className={capCls}>{label}</span>
+      <input value={draft} placeholder={placeholder} list={list} className={inputCls}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') { commit(); e.currentTarget.blur(); } if (e.key === 'Escape') { setDraft(value || ''); e.currentTarget.blur(); } }} />
+    </label>
+  );
+}
+
+function NumField({ label, value, onCommit, min = 1, max = 200 }) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => { setDraft(String(value)); }, [value]);
+  const commit = () => {
+    const n = Math.round(Number(draft));
+    if (Number.isFinite(n) && n >= min && n <= max && n !== value) onCommit(n);
+    else setDraft(String(value));
+  };
+  return (
+    <label className="flex flex-col gap-1 flex-1">
+      <span className={capCls}>{label}</span>
+      <input type="number" min={min} max={max} value={draft} className={`${inputCls} tabular-nums`}
+        onChange={(e) => setDraft(e.target.value)} onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') { commit(); e.currentTarget.blur(); } }} />
+    </label>
+  );
+}
+
+const Btn = ({ children, onClick, on, title }) => (
+  <button type="button" onClick={onClick} title={title} aria-pressed={on}
+    className={`rounded-md border px-2.5 py-1.5 text-[12px] transition-colors ${on ? 'border-accent bg-accent-dim text-accent-hi' : 'border-edge text-ink-hi hover:border-line'}`}>
+    {children}
+  </button>
+);
+
+function Legend({ plan }) {
+  return (
+    <section className="flex flex-col gap-1.5">
+      <div className="text-[13px] text-ink-hi">{plan.title}</div>
+      <div className="text-[11px] text-ink">{plan.subtitle} · {plan.subtitleEn}</div>
+      <ol className="mt-1 space-y-0.5 text-[12px]">
+        {plan.legend.map((l, i) => (
+          <li key={l} className="flex gap-2"><span className="w-4 text-accent tabular-nums">{i + (plan.legendStart || 1)}</span><span className="text-ink-hi">{l}</span></li>
+        ))}
+      </ol>
+      <div className="mt-1 text-[11px] leading-relaxed text-ink">
+        Desk 140 × 120 cm · grid 20 cm · tile 60 cm. Pillars (សសរ), walls, glass and rooms are locked: click to select,
+        unlock to move. Desks and partitions drag freely.
+      </div>
+    </section>
+  );
+}
+
+export default function Inspector({ plan, item, items, patch, resize, rotate, remove, select }) {
+  const [q, setQ] = useState('');
+  const teams = [...new Set(items.filter((i) => i.type === 'zone' && ['dept', 'ceo'].includes(i.kind)).map((i) => i.label))];
+  const desks = items.filter((i) => i.type === 'desk')
+    .filter((d) => !q || `${d.label} ${d.name || ''} ${d.team || ''}`.toLowerCase().includes(q.toLowerCase()))
+    .sort((a, b) => (a.team || '~').localeCompare(b.team || '~') || (a.label || '').localeCompare(b.label || ''));
+  const all = items.filter((i) => i.type === 'desk');
+  const s = item && SIZES[item.type];
+  const size = item && baseSize(item);
+
+  return (
+    <div className="flex flex-col gap-5 min-h-0 overflow-auto">
+      <datalist id="teams">{teams.map((t) => <option key={t} value={t} />)}</datalist>
+      {item ? (
+        <section className="flex flex-col gap-3">
+          <div>
+            <div className="text-[13px] text-ink-hi">
+              {s.label}{s.km ? ` · ${s.km}` : ''}{s.kr ? ` · ${s.kr}` : ''}
+              {item.type === 'desk' && item.label ? <span className="text-ink"> · {item.label}</span> : null}
+            </div>
+            <div className="text-[11px] text-ink tabular-nums">
+              cell {item.gx},{item.gy} · {footprint(item).w}×{footprint(item).d} cells ({footprint(item).w * 20}×{footprint(item).d * 20} cm) · {item.rot}°
+            </div>
+          </div>
+
+          {item.type === 'desk' && (
+            <>
+              <Field label="Employee" value={item.name} onCommit={(v) => patch({ name: v })} placeholder="Unassigned" />
+              <Field label="Team" value={item.team} onCommit={(v) => patch({ team: v })} placeholder="—" list="teams" />
+              <Field label="Desk code" value={item.label} onCommit={(v) => patch({ label: v })} placeholder="2C-01" />
+              <Field label="Note" value={item.note} onCommit={(v) => patch({ note: v })} placeholder="e.g. 원격 PC" />
+              {item.name ? <Btn onClick={() => patch({ name: '', team: '' })}>Unassign seat</Btn> : null}
+            </>
+          )}
+          {item.type === 'zone' && (
+            <>
+              <Field label="Name" value={item.label} onCommit={(v) => patch({ label: v })} placeholder="Zone" />
+              <Field label="English" value={item.en} onCommit={(v) => patch({ en: v })} placeholder="—" />
+              <label className="flex flex-col gap-1">
+                <span className={capCls}>Kind</span>
+                <select value={item.kind || 'dept'} onChange={(e) => patch({ kind: e.target.value })} className={inputCls}>
+                  {Object.entries(ZONE_KINDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </label>
+              {item.kind === 'meeting' && <Switch checked={!!item.on} onChange={(on) => patch({ on })} label="In use" icon={ICONS.inUse} title={item.on ? 'In use' : 'Free'} />}
+              {['cafe', 'barista'].includes(item.kind) && <Switch checked={!!item.on} onChange={(on) => patch({ on })} label="Open" icon={ICONS.open} title={item.on ? 'Open' : 'Closed'} />}
+            </>
+          )}
+          {item.type === 'counter' && <Switch checked={!!item.on} onChange={(on) => patch({ on })} label="Open" icon={ICONS.open} title={item.on ? 'Open' : 'Closed'} />}
+
+          {s.sizable && (
+            <div className="flex gap-2">
+              <NumField label={s.sizable === 'w' ? 'Length (cells)' : 'Width (cells)'} value={size.w} onCommit={(n) => resize(n, null)} />
+              {s.sizable.includes('d') && <NumField label="Depth (cells)" value={size.d} onCommit={(n) => resize(null, n)} />}
+            </div>
+          )}
+
+          <Switch checked={!!item.locked} onChange={(locked) => patch({ locked })} label="Locked" icon={ICONS.lock}
+            title={item.locked ? 'Locked: can be selected but not dragged, nudged, rotated or deleted' : 'Unlocked'} />
+          <div className="flex flex-wrap gap-2">
+            <Btn onClick={rotate} title="R">Rotate 90° <span className="text-ink">R</span></Btn>
+            <Btn onClick={remove} title="Delete">Delete <span className="text-ink">Del</span></Btn>
+          </div>
+        </section>
+      ) : (
+        <>
+          <Legend plan={plan} />
+          <section className="text-[11px] leading-relaxed text-ink">
+            <ul className="space-y-0.5">
+              <li><span className="text-ink-hi">drag</span> move · snaps to 20 cm cells</li>
+              <li><span className="text-ink-hi">R</span> rotate 90° (also mid-drag)</li>
+              <li><span className="text-ink-hi">←↑↓→</span> nudge one cell · <span className="text-ink-hi">Del</span> delete</li>
+              <li><span className="text-ink-hi">Ctrl Z</span> undo · <span className="text-ink-hi">wheel</span> zoom · drag floor to pan</li>
+            </ul>
+          </section>
+        </>
+      )}
+
+      <section className="flex flex-col gap-2 min-h-0">
+        <div className="flex items-baseline justify-between">
+          <h3 className={capCls.replace('16em', '18em')}>Seating</h3>
+          <span className="text-[11px] text-ink tabular-nums">{all.filter((d) => d.name).length}/{all.length}</span>
+        </div>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search desk, name, team" className={inputCls} />
+        <ul className="-mx-1">
+          {desks.map((d, i) => (
+            <li key={d.id}>
+              {(i === 0 || desks[i - 1].team !== d.team) && (
+                <div className="px-1 pt-2 pb-0.5 text-[10px] uppercase tracking-[.14em] text-ink">{d.team || 'Unassigned / other'}</div>
+              )}
+              <button type="button" onClick={() => select(d.id)}
+                className={`w-full flex items-center gap-2 rounded px-1 py-1 text-left text-[12px] hover:bg-recess ${item?.id === d.id ? 'bg-recess' : ''}`}>
+                <span className={`size-1.5 shrink-0 rounded-full ${d.name ? 'bg-accent' : 'bg-detail'}`} />
+                <span className="w-12 shrink-0 text-ink tabular-nums">{d.label || '—'}</span>
+                <span className={`truncate ${d.name ? 'text-ink-hi' : 'text-ink'}`}>{d.name || d.note || 'unassigned'}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
+  );
+}
