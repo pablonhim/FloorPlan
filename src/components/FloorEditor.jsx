@@ -9,7 +9,7 @@ import { centerGrab, collides, footprint, normRot, rotateItem, snapOrigin, valid
 import { depthSort } from '../iso/depth.js';
 import { planFrame, itemNode, renderCell, renderFoot, renderItem, renderPlate, renderZoneTag, renderShadows, renderScene, edgeItems, cafeIds } from '../iso/render.js';
 import { isLive, describe, defaults, LAYER, CORE, tipFor } from '../model/catalog.js';
-import { PLANS, RENTED, UNITS, stats, floorPlan, coreItems, toFloor, CORE as CORE_AT } from '../model/floors.js';
+import { PLANS, UNITS, stats, floorPlan, coreItems, toFloor, CORE as CORE_AT } from '../model/floors.js';
 import { exportPng } from '../lib/exportPng.js';
 import IsoDefs from './IsoDefs.jsx';
 import { entryDoors, roomDoorIds, useDoorSwing } from '../iso/doorSwing.js';
@@ -18,6 +18,8 @@ import Palette from './Palette.jsx';
 import Inspector from './Inspector.jsx';
 import Switch, { ICONS } from './Switch.jsx';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
+import SceneButton, { icon } from './SceneButton.jsx';
+import { HeaderTools, Divider, FloorUnitButtons } from './HeaderTools.jsx';
 import Credit from './Credit.jsx';
 
 const ItemG = memo(function ItemG({ K, item, cls, cut, ghost }) {
@@ -37,7 +39,7 @@ function nextDeskLabel(items, pid) {
 
 const area = (it) => { const f = footprint(it); return f.w * f.d; };
 
-export default function FloorEditor({ pid, items: allItems, plans, dispatch, onBack, onSwitch, onFloor, light, savedAt }) {
+export default function FloorEditor({ pid, items: allItems, plans, dispatch, onBack, onSwitch, light, savedAt }) {
   // Building-core (schematic) mode shows elevators, restrooms and stairwells; the office view hides
   // them. Hidden core items still block placement, so nothing can be stacked onto the real core.
   const [showCore, setShowCore] = useState(false);
@@ -365,31 +367,30 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   ].filter(Boolean).join(' · ');
 
   const tb = 'rounded-md border border-edge px-2.5 py-1 text-[12px] text-ink-hi hover:border-line transition-colors disabled:opacity-40 disabled:hover:border-edge';
-  const seg = (on) => `px-2.5 py-1 text-[12px] ${on ? 'bg-accent-dim text-accent-hi' : 'text-ink hover:text-ink-hi'}`;
+
+  // navigation as one row of round buttons centred in the app header (as on the floor view): back to the
+  // floor, the floors with this floor's units (this one ringed; another glides over to it), and fit
+  const tools = (
+    <HeaderTools>
+      <SceneButton below label={`Floor ${plan.floor}`} tip={`Back to every unit of floor ${plan.floor}`} onClick={onBack}>{icon(<path d="M10 3 5 8l5 5" />)}</SceneButton>
+      <Divider />
+      <FloorUnitButtons floor={plan.floor} unit={plan.unit}
+        onFloor={(f) => onSwitch(f, UNITS[f].includes(plan.unit) ? plan.unit : UNITS[f][0])}
+        onUnit={(f, u) => glide(u)} />
+      <Divider />
+      <SceneButton below label="Fit" tip="Fit the whole unit in the view" onClick={() => setVb(VB0)}>{icon(<path d="M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3" />)}</SceneButton>
+    </HeaderTools>
+  );
 
   return (
     <div className="flex flex-1 min-h-0">
+      {tools}
       <aside className="w-56 shrink-0 p-3 overflow-auto">
         <Palette placing={placing} setPlacing={setPlacing} showCore={showCore} />
       </aside>
 
       <div className="flex flex-col flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-2 border-b border-edge px-3 py-2">
-          <button type="button" className={tb} onClick={onBack}>‹ Floor {plan.floor}</button>
-          <div className="flex rounded-md border border-edge overflow-hidden" role="tablist" aria-label="Floor">
-            {RENTED.map((f) => (
-              <button key={f} type="button" role="tab" aria-selected={f === plan.floor} className={seg(f === plan.floor)}
-                onClick={() => onSwitch(f, UNITS[f].includes(plan.unit) ? plan.unit : UNITS[f][0])}>Floor {f}</button>
-            ))}
-          </div>
-          <div className="flex rounded-md border border-edge overflow-hidden" role="tablist" aria-label="Unit">
-            <button type="button" role="tab" aria-selected={false} className={seg(false)} onClick={() => onFloor(plan.floor)}>All units</button>
-            {UNITS[plan.floor].map((u) => (
-              <button key={u} type="button" role="tab" aria-selected={u === plan.unit} className={seg(u === plan.unit)}
-                onClick={() => (u === plan.unit ? null : glide(u))}>Unit {u}</button>
-            ))}
-          </div>
-          <span className="mx-1 h-5 w-px bg-edge" />
           <button type="button" className={tb} onClick={rotate} disabled={!sel && !placing}>Rotate 90°</button>
           <button type="button" className={tb} onClick={remove} disabled={!sel}>Delete</button>
           <button type="button" className={tb} onClick={() => dispatch({ type: 'undo' })}>Undo</button>
@@ -399,7 +400,6 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
             <Switch checked={showCore} onChange={setShowCore} label="Building core" icon={ICONS.core}
               title={`Building core (elevators, restrooms, stairwells): hidden in the office view${!showCore && hiddenCore ? ` · ${hiddenCore} hidden` : ''}`} />
           </span>
-          <button type="button" className={tb} onClick={() => setVb(VB0)}>Fit</button>
           <span className="flex-1" />
           <button type="button" className={tb} onClick={() => { if (confirm(`Reset floor ${plan.floor} unit ${plan.unit} to the official PDF layout? (Undo can restore your version.)`)) dispatch({ type: 'reset', plan: pid }); }}>Reset to PDF</button>
           <button type="button" className={`${tb} !border-accent text-accent-hi`} onClick={exportPlan}>Export PNG</button>

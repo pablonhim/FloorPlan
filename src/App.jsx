@@ -103,7 +103,6 @@ export default function App() {
               savedAt={savedAt}
               onBack={() => openFloor(view.floor)}
               onSwitch={openUnit}
-              onFloor={openFloor}
             />
           )
   );

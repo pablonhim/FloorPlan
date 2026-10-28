@@ -1,7 +1,6 @@
 // Fig 2 · Floor — the whole floor with all its units together (read-only overview).
 // Click a unit (or its tab) to open that unit's isolated, editable layout.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { CELL, TILE } from '../iso/units.js';
 import { planFrame, renderScene, edgeItems } from '../iso/render.js';
 import { meetingRooms, routeToKosign } from '../model/wayfinding.js';
@@ -16,6 +15,7 @@ import { useFrameUpdater } from '../lib/useFrameUpdater.js';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
 import Credit from './Credit.jsx';
 import SceneButton, { icon } from './SceneButton.jsx';
+import { HeaderTools, Divider, FloorUnitButtons } from './HeaderTools.jsx';
 import { entryDoors, useDoorSwing } from '../iso/doorSwing.js';
 
 const TW = TILE * CELL;
@@ -217,35 +217,23 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     catch (err) { setMsg(`export failed: ${err.message}`); }
   };
 
-  // the view tools, as one row of round buttons centred in the app header (portal into #header-tools):
-  // back to the building, the rented floors (the one shown ringed) each followed by its units as smaller
-  // buttons when shown, then fit and the meeting-room highlight; short vertical dividers between groups
-  const divider = <span className="mx-0.5 block h-6 w-px bg-[color-mix(in_srgb,var(--ink)_35%,transparent)]" aria-hidden="true" />;
-  const toolsTarget = typeof document !== 'undefined' ? document.getElementById('header-tools') : null;
+  // the view tools, as one row of round buttons centred in the app header: back to the building, the
+  // floors with this floor's units, then fit and the meeting-room highlight
   const tools = (
-    <div className="flex items-center gap-2" role="toolbar" aria-label="View tools">
+    <HeaderTools>
       <SceneButton below label="Building" tip="Back to the whole building" onClick={onBack}>{TOOL.back}</SceneButton>
-      {divider}
-      {RENTED.map((f) => (
-        <div key={f} className="flex items-center gap-1.5" role="group" aria-label={`Floor ${f}`}>
-          <SceneButton below label={`Floor ${f}`} active={f === floor} onClick={() => f !== floor && onFloor(f)}
-            tip={f === floor ? 'The floor shown' : `Show floor ${f}`}><span className="text-[11px] font-semibold tabular-nums">{f}F</span></SceneButton>
-          {f === floor && plan.units.map((u) => (
-            <SceneButton below small key={u.unit} label={`Unit ${u.unit}`} tip={`Open unit ${u.unit}'s layout · ${PLANS[u.id].subtitleEn || PLANS[u.id].subtitle}`}
-              onClick={() => onUnit(f, u.unit)}><span className="text-[11px] font-semibold">{u.unit}</span></SceneButton>
-          ))}
-        </div>
-      ))}
-      {divider}
+      <Divider />
+      <FloorUnitButtons floor={floor} onFloor={onFloor} onUnit={onUnit} />
+      <Divider />
       <SceneButton below label="Fit" tip="Fit the whole floor in the view" onClick={() => setVb(VB0)}>{TOOL.fit}</SceneButton>
       <SceneButton below label={showMeet ? 'Hide meeting rooms' : 'Highlight meeting rooms'} active={showMeet} onClick={() => setShowMeet((v) => !v)}
         tip={rooms.length ? `Light up the ${rooms.length} meeting rooms on this floor` : 'No meeting rooms on this floor'}>{TOOL.meet}</SceneButton>
-    </div>
+    </HeaderTools>
   );
 
   return (
     <div className="flex flex-1 min-h-0">
-      {toolsTarget && createPortal(tools, toolsTarget)}
+      {tools}
       <div className="flex flex-col flex-1 min-w-0">
         <div ref={stageRef} className="relative flex-1 min-h-0 stage-glow">
           <button type="button" className="frost-panel frost-edge absolute right-4 top-3 z-10 rounded-full px-3.5 py-2 text-[12px] font-medium text-accent-hi hover:text-accent" onClick={exportFloor}>Export PNG</button>
