@@ -59,6 +59,13 @@ export const ZONE_KINDS = {
   note: 'Note',
 };
 
+/**
+ * Furniture always in the building's neutral finish (`.it.cafe`), wherever it is placed: the cafe / lounge
+ * pieces (stools, tables, round tables, the barista counter); desks and the other office furniture are
+ * blue. Furniture standing in WeCafe or a massage room is neutral too (render.cafeIds).
+ */
+export const NEUTRAL_TYPES = new Set(['stool', 'table', 'roundTable', 'counter']);
+
 /** Palette order and grouping. */
 export const PALETTE = [
   { group: 'Seating', types: ['desk', 'drawer', 'stool', 'massageChair'] },

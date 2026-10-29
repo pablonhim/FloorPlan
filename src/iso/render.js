@@ -3,7 +3,7 @@ import { CELL, TILE, PILLAR_H, SLAB } from './units.js';
 import { esc, frame } from './kernel.js';
 import { footprint } from './grid.js';
 import { renderParts } from './parts.js';
-import { partsFor, SIZES, zoneTag, LAYER, isLive, tipFor } from '../model/catalog.js';
+import { partsFor, SIZES, zoneTag, LAYER, isLive, tipFor, NEUTRAL_TYPES } from '../model/catalog.js';
 import { depthSort } from './depth.js';
 import { shadowLayer, rectsPath } from './shadow.js';
 import { roomDoorIds } from './doorSwing.js';
@@ -36,10 +36,14 @@ export function cafeIds(items) {
     return { cafe: NEUTRAL_ROOMS.has(z.kind), x0: z.gx, y0: z.gy, x1: z.gx + f.w, y1: z.gy + f.d };
   });
   const ids = new Set();
-  if (!zones.some((z) => z.cafe)) return ids;
+  if (!zones.some((z) => z.cafe)) {   // no cafe or massage room: only the always-neutral pieces
+    for (const it of items) if (NEUTRAL_TYPES.has(it.type)) ids.add(it.id);
+    return ids;
+  }
   const dist = (z, x, y) => Math.hypot(Math.max(z.x0 - x, 0, x - z.x1), Math.max(z.y0 - y, 0, y - z.y1));
   for (const it of items) {
     if (LAYER[it.type] !== 'furniture') continue;
+    if (NEUTRAL_TYPES.has(it.type)) { ids.add(it.id); continue; }   // neutral wherever it stands
     const f = footprint(it), cx = it.gx + f.w / 2, cy = it.gy + f.d / 2;
     const inside = zones.find((z) => cx >= z.x0 && cx < z.x1 && cy >= z.y0 && cy < z.y1);
     const near = inside || zones.reduce((m, z) => (dist(z, cx, cy) < (m ? dist(m, cx, cy) : CAFE_REACH + 1e-9) ? z : m), null);

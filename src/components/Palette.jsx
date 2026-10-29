@@ -4,9 +4,10 @@ import { createPortal } from 'react-dom';
 import { frame } from '../iso/kernel.js';
 import { CELL } from '../iso/units.js';
 import { renderItem } from '../iso/render.js';
-import { PALETTE, SIZES } from '../model/catalog.js';
+import { PALETTE, SIZES, NEUTRAL_TYPES } from '../model/catalog.js';
 
-const PREVIEW = { desk: { name: '이름' }, counter: { on: true }, zone: { kind: 'meeting', label: 'Room', on: true }, wall: { w: 6 }, glass: { w: 6 }, partition: { w: 6 }, table: { w: 9, d: 3 } };
+// how an item is previewed: as it is placed (plain, not lit up as assigned / in use), only resized to fit
+const PREVIEW = { counter: { on: true }, zone: { kind: 'dept', label: 'Room' }, wall: { w: 6 }, glass: { w: 6 }, partition: { w: 6 }, table: { w: 9, d: 3 } };
 
 function Preview({ type }) {
   const html = useMemo(() => {
@@ -17,8 +18,9 @@ function Preview({ type }) {
     return { vb: K.viewBox, svg: renderItem(K, item) };
   }, [type]);
   return (
-    <svg viewBox={html.vb} className="w-14 h-10 shrink-0" aria-hidden="true">
-      <g className="it live" dangerouslySetInnerHTML={{ __html: html.svg }} />
+    // the same palette as the floor drawing (office-lit at night) and plain item styling, so it looks as placed
+    <svg viewBox={html.vb} className="office-lit w-14 h-10 shrink-0" aria-hidden="true">
+      <g className={`it${NEUTRAL_TYPES.has(type) ? ' cafe' : ''}`} dangerouslySetInnerHTML={{ __html: html.svg }} />
     </svg>
   );
 }

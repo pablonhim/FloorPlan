@@ -17,6 +17,7 @@ import { HoverTip, useHoverTip } from './HoverTip.jsx';
 import SceneButton, { icon } from './SceneButton.jsx';
 import { ViewTools, Divider, FloorUnitButtons } from './ViewTools.jsx';
 import ActionMenu from './ActionMenu.jsx';
+import MenuPanel from './MenuPanel.jsx';
 import { entryDoors, useDoorSwing } from '../iso/doorSwing.js';
 
 const TW = TILE * CELL;
@@ -111,6 +112,7 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
   const [vb, setVb] = useState(VB0);
   const setVbFrame = useFrameUpdater(setVb); // wheel / drag: at most one viewBox update per frame
   const [hoverUnit, setHoverUnit] = useState(null);
+  const [unitsOpen, setUnitsOpen] = useState(false);   // the units menu (bottom right), closed on arrival
   const [msg, setMsg] = useState('');
   const svgRef = useRef(null);
   const stageRef = useRef(null);
@@ -276,29 +278,30 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
         </div>
       </div>
 
-      {/* the units list floats over the drawing at the right: no column of its own, frosted cards */}
-      <aside className="pointer-events-none absolute inset-y-0 right-0 z-10 w-60 p-3 flex flex-col gap-1.5 overflow-auto [&>*]:pointer-events-auto">
-        <h3 className="text-[10px] uppercase tracking-[.18em] text-ink">Units on floor {floor}</h3>
-        {plan.units.map((u) => {
-          const p = PLANS[u.id], s = unitStats[u.unit];
-          return (
-            <button key={u.unit} type="button" onClick={() => onUnit(floor, u.unit)}
-              onPointerEnter={() => setHoverUnit(u.unit)} onPointerLeave={() => setHoverUnit(null)}
-              className={`frost-panel frost-edge text-left rounded-xl border px-3 py-2.5 transition-colors ${hoverUnit === u.unit ? '!border-accent !bg-[color-mix(in_srgb,var(--accent)_14%,var(--panel))]' : ''}`}>
-              <div className="flex items-baseline justify-between">
-                <span className="text-[14px] text-ink-hi">Unit {u.unit}</span>
-                <span className="text-[11px] text-accent-hi tabular-nums">{s.assigned}/{s.desks} seats</span>
-              </div>
-              <div className="text-[11px] text-ink mt-0.5">{p.subtitle}</div>
-              <div className="text-[11px] text-ink">{p.subtitleEn}</div>
-              <ol className="mt-1.5 space-y-0.5 text-[11px]">
-                {p.legend.map((l, i) => <li key={l} className="flex gap-2"><span className="w-3 text-accent tabular-nums">{i + (p.legendStart || 1)}</span><span className="text-ink-hi">{l}</span></li>)}
-              </ol>
-              <div className="mt-2 text-[11px] text-accent-hi">Open unit ›</div>
-            </button>
-          );
-        })}
-      </aside>
+      {/* the units list: a menu button at the bottom right whose frosted panel grows out of it (as on the
+          building page); closed when the floor opens */}
+      <MenuPanel open={unitsOpen} onOpen={setUnitsOpen} label={`Units on floor ${floor}`}>
+        <div className="no-scrollbar flex min-h-0 flex-col gap-1 overflow-y-auto p-2">
+          <h3 className="px-1 pt-1 text-[10px] uppercase tracking-[.18em] text-ink">Units on floor {floor}</h3>
+          {plan.units.map((u) => {
+            const p = PLANS[u.id], s = unitStats[u.unit];
+            return (
+              <button key={u.unit} type="button" onClick={() => onUnit(floor, u.unit)}
+                onPointerEnter={() => setHoverUnit(u.unit)} onPointerLeave={() => setHoverUnit(null)}
+                className={`text-left rounded-xl border px-2.5 py-2 transition-colors ${hoverUnit === u.unit ? 'border-accent bg-accent-dim' : 'border-transparent hover:bg-accent-dim'}`}>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-[14px] text-ink-hi">Unit {u.unit}</span>
+                  <span className="text-[11px] text-accent-hi tabular-nums">{s.assigned}/{s.desks} seats</span>
+                </div>
+                <div className="truncate text-[11px] text-ink mt-0.5">{p.subtitleEn || p.subtitle}</div>
+                <ol className="mt-1.5 space-y-0.5 text-[11px]">
+                  {p.legend.map((l, i) => <li key={l} className="flex min-w-0 gap-2"><span className="w-3 shrink-0 text-accent tabular-nums">{i + (p.legendStart || 1)}</span><span className="truncate text-ink-hi">{l}</span></li>)}
+                </ol>
+              </button>
+            );
+          })}
+        </div>
+      </MenuPanel>
     </div>
   );
 }

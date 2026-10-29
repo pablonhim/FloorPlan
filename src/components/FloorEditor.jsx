@@ -21,6 +21,7 @@ import { HoverTip, useHoverTip } from './HoverTip.jsx';
 import SceneButton, { icon } from './SceneButton.jsx';
 import { ViewTools, Divider, FloorUnitButtons } from './ViewTools.jsx';
 import ActionMenu from './ActionMenu.jsx';
+import MenuPanel from './MenuPanel.jsx';
 
 const ItemG = memo(function ItemG({ K, item, cls, cut, ghost }) {
   const html = useMemo(() => renderItem(K, item, cut), [K, item, cut]);
@@ -63,7 +64,9 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const [ghost, setGhost] = useState(null); // { item, ok, reason, mode }
   const [hover, setHover] = useState(null); // { cx, cy }
   const [hoverId, setHoverId] = useState(null); // item under the pointer
-  const [panelMin, setPanelMin] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);   // the right-hand panel (menu at the bottom right)
+  useEffect(() => { if (selected) setPanelOpen(true); }, [selected]);   // selecting an item opens it
+  useEffect(() => { setPanelOpen(false); }, [pid]);                      // another unit: closed again
   const [paletteMin, setPaletteMin] = useState(false);   // the objects panel collapsed to its icons   // the right-hand panel folded down to its header
   const cut = false;   // tall walls and objects at full height (the cutaway switch is gone)
   const [msg, setMsg] = useState('');
@@ -375,12 +378,10 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const headerActions = typeof document !== 'undefined' ? document.getElementById('header-actions') : null;
   const tools = (
     <ViewTools left={`calc(0.75rem + ${paletteMin ? '4.75rem' : '14rem'} + 0.75rem)`} after={<>
-      {/* editing actions: round frosted buttons floating beside the dock (R, Delete and ⌘Z still work); Rotate
-          shows only while there is something to turn (a movable item selected, or one being placed) and Delete
-          only while a removable item is selected; Undo is always there, first, so the others pop in after it */}
+      {/* editing actions: round frosted buttons floating beside the dock (R and Delete still work); Rotate shows
+          only while there is something to turn (a movable item selected, or one being placed) and Delete only
+          while a removable item is selected (Undo sits at the bottom right, by the menu button) */}
       <div className="flex items-center gap-2" role="toolbar" aria-label="Edit">
-        <SceneButton place="above" tall label="Undo" tip="Undo the last change · ⌘Z" onClick={() => dispatch({ type: 'undo' })}>
-          {icon(<><path d="M5.5 3 2.5 6l3 3" /><path d="M2.5 6H10a3.5 3.5 0 0 1 0 7H7" /></>)}</SceneButton>
         {((sel && !sel.locked) || placing) && (
           <span className="pop-in"><SceneButton place="above" tall label="Rotate 90°" tip="Turn the selected item (or the one being placed) · R" onClick={rotate}>
             {icon(<><path d="M13 8a5 5 0 1 1-1.5-3.6" /><path d="M13 2.5V5h-2.5" /></>)}</SceneButton></span>
@@ -469,33 +470,31 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
         </div>
       </div>
 
-      {/* the inspector floats over the drawing at the right as a frosted card (no column of its own); its header
-          minimises it to a pill at the bottom right, on the dock's line (same 40 px row) */}
-      <aside className={`frost-panel frost-edge absolute right-3 z-10 flex w-60 min-h-0 flex-col ${panelMin ? 'bottom-3 h-10 rounded-full' : 'top-3 bottom-3 rounded-2xl'}`}>
-        <div className={`flex items-center gap-2 pr-1.5 ${panelMin ? 'h-10 pl-4' : 'py-2 pl-3 border-b border-[color-mix(in_srgb,var(--ink)_18%,transparent)]'}`}>
+      {/* the inspector: a menu button at the bottom right whose frosted panel grows out of it to full height
+          (as on the building page's floor list); closed when the unit opens, opening by itself when an item is
+          selected (its fields are where it is edited) */}
+      {/* Undo, always there, just left of the menu button on the bottom line (⌘Z still works) */}
+      <div className="absolute bottom-3 right-[3.75rem] z-10">   {/* 0.75rem edge + 40px button + 0.5rem gap */}
+        <SceneButton place="above" tall label="Undo" tip="Undo the last change · ⌘Z" onClick={() => dispatch({ type: 'undo' })}>
+          {icon(<><path d="M5.5 3 2.5 6l3 3" /><path d="M2.5 6H10a3.5 3.5 0 0 1 0 7H7" /></>)}</SceneButton>
+      </div>
+      <MenuPanel open={panelOpen} onOpen={setPanelOpen} fill label={`Unit ${plan.unit} details`}>
+        <div className="flex items-center gap-2 border-b border-[color-mix(in_srgb,var(--ink)_18%,transparent)] px-3 py-2">
           <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink-hi">
             {sel ? 'Selected' : `Unit ${plan.unit}`}<span className="text-ink"> · {st.assigned}/{st.desks} seats</span>
           </span>
-          <button type="button" onClick={() => setPanelMin((m) => !m)} aria-expanded={!panelMin}
-            aria-label={panelMin ? 'Expand the panel' : 'Minimise the panel'} title={panelMin ? 'Expand' : 'Minimise'}
-            className={`grid ${panelMin ? 'size-7' : 'size-6'} shrink-0 place-items-center rounded-full text-ink hover:bg-accent-dim hover:text-accent`}>
-            {/* minimised it sits at the bottom: up opens it, down sends it there */}
-            {icon(<path d={panelMin ? 'M4 10l4-4 4 4' : 'M4 6l4 4 4-4'} />)}
-          </button>
         </div>
-        {!panelMin && (
-          <div className="flex min-h-0 flex-1 flex-col px-3 pt-3">
-            <Inspector
-              plan={plan}
-              item={sel}
-              items={items}
-              patch={(p) => sel && dispatch({ type: 'patch', plan: pid, id: sel.id, patch: p })}
-              resize={resize}
-              select={(id) => { setSelected(id); setMsg(''); }}
-            />
-          </div>
-        )}
-      </aside>
+        <div className="flex min-h-0 flex-1 flex-col px-3 pt-3">
+          <Inspector
+            plan={plan}
+            item={sel}
+            items={items}
+            patch={(p) => sel && dispatch({ type: 'patch', plan: pid, id: sel.id, patch: p })}
+            resize={resize}
+            select={(id) => { setSelected(id); setMsg(''); }}
+          />
+        </div>
+      </MenuPanel>
     </div>
   );
 }
