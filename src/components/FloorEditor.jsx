@@ -3,7 +3,7 @@
 // Pointer pipeline: client px → SVG user units (inverse screen CTM) → world (kernel.unproject on
 // the floor plane z = 0) → cell (floor) → origin (minus grab offset, clamped) → validate().
 // Nothing is stored unless it passes validate(), so placement is 100% grid-snapped.
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CELL, CUT_H } from '../iso/units.js';
 import { centerGrab, collides, footprint, normRot, rotateItem, snapOrigin, validate, worldToCell, onPlate } from '../iso/grid.js';
@@ -14,7 +14,7 @@ import { PLANS, UNITS, stats, floorPlan, coreItems, toFloor, CORE as CORE_AT } f
 import { exportPng } from '../lib/exportPng.js';
 import IsoDefs from './IsoDefs.jsx';
 import { entryDoors, roomDoorIds, useDoorSwing } from '../iso/doorSwing.js';
-import { useFrameUpdater } from '../lib/useFrameUpdater.js';
+import { focusBox, overlaps, useSvgCamera } from '../lib/svgCamera.js';
 import Palette from './Palette.jsx';
 import Inspector from './Inspector.jsx';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
@@ -40,7 +40,7 @@ function nextDeskLabel(items, pid) {
 
 const area = (it) => { const f = footprint(it); return f.w * f.d; };
 
-export default function FloorEditor({ pid, items: allItems, plans, dispatch, onBack, onSwitch, light, savedAt }) {
+export default function FloorEditor({ pid, items: allItems, plans, dispatch, onBack, onSwitch, light, savedAt, focus = null }) {
   // The office view: the unit's own building-core items (elevators, restrooms, stairwells) are hidden here
   // (the faded core round the unit shows them); they still block placement, so nothing can be stacked onto
   // the real core. (A building-core mode used to show them; the view is now always the office view.)
@@ -57,8 +57,9 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const doorsRef = useRef(null);
   const swingDoors = useMemo(() => entryDoors(allItems), [allItems]);
   useDoorSwing(doorsRef, K, swingDoors, pid);
-  const [vb, setVb] = useState(VB0);
-  const setVbFrame = useFrameUpdater(setVb); // wheel / drag: at most one viewBox update per frame
+  // the camera: moves are CSS transforms, the viewBox (cam.vb) is written once a move settles (svgCamera)
+  const cam = useSvgCamera(svgRef, VB0);
+  const vb = cam.vb;
   const [placing, setPlacing] = useState(null); // { type, rot, via }
   const [selected, setSelected] = useState(null);
   const [ghost, setGhost] = useState(null); // { item, ok, reason, mode }
@@ -80,15 +81,27 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   // switching floor or unit isolates the new unit: no selection, hover, drag or ghost carries over
   useEffect(() => {
     drag.current = null;
-    setSelected(null); setPlacing(null); setGhost(null); setHover(null); setHoverId(null); setVb(VB0); setMsg('');
+    setSelected(null); setPlacing(null); setGhost(null); setHover(null); setHoverId(null); setMsg('');
   }, [pid, VB0]);
+  // …and opens fitted, before its first paint (a glide over from a neighbour hands over on the same view)
+  useLayoutEffect(() => { cam.jump(VB0); }, [pid, VB0]); // eslint-disable-line react-hooks/exhaustive-deps
+  // a search result picked here (or on another page): the camera glides onto it and selects it, which opens
+  // its details; arriving in a new unit it starts from the fitted view once the page has settled in
+  const pidSeen = useRef(null);
+  useEffect(() => {
+    const fresh = pidSeen.current !== pid;
+    pidSeen.current = pid;
+    if (!focus) return;
+    if (focus.id && allItems.some((i) => i.id === focus.id && !CORE.has(i.type))) setSelected(focus.id);
+    cam.glideTo(focusBox(K, focus, VB0), { delay: fresh ? 250 : 0 });
+  }, [focus, pid]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!showCore) { setPlacing((p) => (p && CORE.has(p.type) ? null : p)); setSelected((s) => (s && !items.some((i) => i.id === s) ? null : s)); }
   }, [showCore, items]);
   useEffect(() => { if (!placing) setGhost((g) => (g?.mode === 'new' ? null : g)); }, [placing]);
 
   // ---------- coordinate pipeline ----------
-  const toSvg = useCallback((e) => new DOMPoint(e.clientX, e.clientY).matrixTransform(svgRef.current.getScreenCTM().inverse()), []);
+  const toSvg = useCallback((e) => cam.toSvg(e.clientX, e.clientY), [cam.toSvg]); // eslint-disable-line react-hooks/exhaustive-deps
   const toWorld = useCallback((e) => { const p = toSvg(e); return K.unproject(p.x, p.y, 0); }, [toSvg, K]);
 
   // validation always sees every item of the unit, hidden core included
@@ -130,6 +143,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const onPointerDown = (e) => {
     if (e.button === 2) { setPlacing(null); return; }
     if (e.button !== 0 || gliding.current) return;
+    cam.cancel();
     const world = toWorld(e);
     lastWorld.current = world;
     if (placing) { stamp(placeGhost(world)); return; }
@@ -138,7 +152,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     svgRef.current.setPointerCapture(e.pointerId);
     const nbUnit = !it && e.target.closest('[data-unit]')?.dataset.unit;
     if (nbUnit) {   // a faded neighbouring unit: drag pans, a click glides over to it
-      drag.current = { kind: 'pan', unit: nbUnit, vb0: vb, scale: svgRef.current.getScreenCTM().a, sx: e.clientX, sy: e.clientY, moved: false };
+      drag.current = { kind: 'pan', unit: nbUnit, vb0: cam.live.current, scale: cam.scale(), sx: e.clientX, sy: e.clientY, moved: false };
       return;
     }
     if (it && !it.locked) {
@@ -148,7 +162,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
       setMsg('');
     } else {
       // empty floor or a locked item: drag pans, a click selects it (or clears the selection)
-      drag.current = { kind: 'pan', hit: it?.id || null, vb0: vb, scale: svgRef.current.getScreenCTM().a, sx: e.clientX, sy: e.clientY, moved: false };
+      drag.current = { kind: 'pan', hit: it?.id || null, vb0: cam.live.current, scale: cam.scale(), sx: e.clientX, sy: e.clientY, moved: false };
     }
   };
 
@@ -164,7 +178,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     if (!d.moved && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 4) return;
     d.moved = true;
     if (d.kind === 'pan') {
-      setVbFrame((v) => ({ ...v, x: d.vb0.x - (e.clientX - d.sx) / d.scale, y: d.vb0.y - (e.clientY - d.sy) / d.scale }));
+      cam.move({ ...d.vb0, x: d.vb0.x - (e.clientX - d.sx) / d.scale, y: d.vb0.y - (e.clientY - d.sy) / d.scale }, null);
     } else {
       setGhost(ghostAt(world, { ...d.base, rot: d.rot }, d.grab, 'move'));
     }
@@ -175,6 +189,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     drag.current = null;
     if (!d) return;
     if (d.kind === 'pan') {
+      if (d.moved) cam.commit();   // the pan settles: write the viewBox once
       if (!d.moved && commit && d.unit) { glide(d.unit); return; }
       if (!d.moved && commit) {
         setSelected(d.hit);
@@ -201,8 +216,9 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     const el = svgRef.current;
     const onWheel = (e) => {
       e.preventDefault();
+      cam.cancel();
       const p = toSvg(e);
-      setVbFrame((v) => {
+      cam.move((v) => {
         const w = Math.max(K.W * 0.12, Math.min(K.W * 1.5, v.w * Math.exp(e.deltaY * 0.0015)));
         const k = w / v.w;
         return { x: p.x - (p.x - v.x) * k, y: p.y - (p.y - v.y) * k, w, h: v.h * k };
@@ -210,7 +226,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [toSvg, K, setVbFrame]);
+  }, [toSvg, K]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- commands ----------
   const guard = (it) => { if (it?.locked) { setMsg(`${describe(it)} is locked · unlock it in the inspector`); return true; } return false; };
@@ -330,23 +346,17 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   }, [plan, pid, K]);
   const coreG = core && <g key="core" data-noexport="" className="nb core" dangerouslySetInnerHTML={{ __html: core.html }} />;
   const [hoverUnit, setHoverUnit] = useState(null);
-  const gliding = useRef(0);
-  useEffect(() => () => cancelAnimationFrame(gliding.current), []);
+  const gliding = useRef(false);
   const glide = (unit) => {
     const nb = neighbours.find((n) => n.unit === unit);
     if (!nb || gliding.current) { if (!nb) onSwitch(plan.floor, unit); return; }
-    if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) { onSwitch(plan.floor, unit); return; }
     setHoverUnit(null); setSelected(null); setPlacing(null); setGhost(null);
-    const from = vb, to = nb.to, t0 = performance.now(), ms = 700;
-    const ease = (k) => (k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2);
-    const step = (now) => {
-      const k = Math.min(1, (now - t0) / ms), e = ease(k), mix = (a, b) => a + (b - a) * e;
-      setVb({ x: mix(from.x, to.x), y: mix(from.y, to.y), w: mix(from.w, to.w), h: mix(from.h, to.h) });
-      if (k < 1) gliding.current = requestAnimationFrame(step);
-      else { gliding.current = 0; onSwitch(plan.floor, unit); }   // the new unit opens on exactly this view
-    };
-    gliding.current = requestAnimationFrame(step);
+    gliding.current = true;
+    // no commit at the end: the new unit opens fitted, which is exactly this view (see the jump on pid)
+    cam.glideTo(nb.to, { ms: 700, commit: false, onDone: () => { gliding.current = false; onSwitch(plan.floor, unit); } });
   };
+  // only the neighbours near the view are drawn (zoomed in on a corner, the far units are skipped)
+  const nearby = (n) => overlaps(vb, n.to, 0.25);
   const nbG = (n) => (
     <g key={n.unit} data-unit={n.unit} data-noexport="" className={`nb${hoverUnit === n.unit ? ' hot' : ''}`} dangerouslySetInnerHTML={{ __html: n.html }} />
   );
@@ -403,7 +413,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
         onFloor={(f) => onSwitch(f, UNITS[f].includes(plan.unit) ? plan.unit : UNITS[f][0])}
         onUnit={(f, u) => glide(u)} />
       <Divider />
-      <SceneButton place="above" compact docked label="Fit" tip="Fit the whole unit in the view" onClick={() => setVb(VB0)}>{icon(<path d="M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3" />)}</SceneButton>
+      <SceneButton place="above" compact docked label="Fit" tip="Fit the whole unit in the view" onClick={() => cam.glideTo(VB0, { ms: 600 })}>{icon(<path d="M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3" />)}</SceneButton>
     </ViewTools>
   );
 
@@ -427,7 +437,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
       </aside>
 
       <div className="flex flex-col flex-1 min-w-0">
-        <div ref={stageRef} className="relative flex-1 min-h-0 stage-glow">
+        <div ref={stageRef} className="relative flex-1 min-h-0 overflow-hidden stage-glow">
           <svg
             ref={svgRef}
             className="office-lit w-full h-full block select-none touch-none"
@@ -448,7 +458,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
           >
             <IsoDefs light={light} />
             {core && !core.ahead && coreG}
-            {neighbours.filter((n) => !n.ahead).map(nbG)}
+            {neighbours.filter((n) => !n.ahead && nearby(n)).map(nbG)}
             <Html html={plate} />
             {floorNodes.map((it) => <ItemG key={it.id} K={K} item={it} cls={clsOf(it)} cut={cutH} />)}
             <Html html={shadows} className="shell-shadows" />
@@ -457,7 +467,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
             <g className="door-swing" ref={doorsRef} pointerEvents="none" data-noexport="" />
             <Html html={tags} className="zone-tags" />
             {core?.ahead && coreG}
-            {neighbours.filter((n) => n.ahead).map(nbG)}
+            {neighbours.filter((n) => n.ahead && nearby(n)).map(nbG)}
           </svg>
           <HoverTip tip={tip} />
           {tools}

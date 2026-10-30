@@ -141,11 +141,12 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 /* the ray of light from a monitor across its desk (light theme: a faint blue wash; at night brighter),
    breathing in brightness on its own pace per desk */
 .ray-stop { stop-color:var(--accent); }
-.monitor-ray { --ray-lo:.3; --ray-hi:.65; opacity:var(--ray-hi); pointer-events:none; animation:beam-breathe 3.6s ease-in-out infinite; }
+.monitor-ray { --ray-lo:.3; --ray-hi:.65; --n:12; opacity:var(--ray-hi); pointer-events:none; animation:beam-breathe 3.6s steps(var(--n)) infinite; }
 :root:not([data-theme="light"]) .ray-stop { stop-color:var(--accent-hi); }
 :root:not([data-theme="light"]) .monitor-ray { --ray-lo:.5; --ray-hi:1; mix-blend-mode:screen; }
-/* the beam breathes like a live screen: a slow swell, a small flicker, back down (forever) */
-@keyframes beam-breathe { 0%, 100% { opacity:var(--ray-lo); } 45% { opacity:var(--ray-hi); } 52% { opacity:calc(var(--ray-hi) * .8); } 60% { opacity:var(--ray-hi); } }
+/* the beam breathes like a live screen: a slow swell and back down (forever), in --n small steps each way
+   on the shared ambient tick (catalog AMBIENT_TICK), so all beams repaint together a few times a second */
+@keyframes beam-breathe { 0%, 100% { opacity:var(--ray-lo); } 50% { opacity:var(--ray-hi); } }
 @media (prefers-reduced-motion: reduce) { .monitor-ray { animation:none; } }
 /* the back of a lit monitor (desk turned away): its plain back, and the screen's light glowing round it */
 .monitor-halo { fill:none; stroke:var(--accent); stroke-width:1.2; opacity:.55; filter:url(#soft); vector-effect:non-scaling-stroke; }
@@ -245,17 +246,22 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 :root:not([data-theme="light"]) .rack-door { fill:#0f1114; stroke:#2c3037; }
 :root:not([data-theme="light"]) .rack-unit { fill:#07080a; stroke:#22262c; }
 :root:not([data-theme="light"]) .rack-vent { stroke:#0c0d10; }
-.rack-led { animation:rack-blink 1.2s steps(1) infinite; }
+.rack-led { animation:rack-blink 1.2s steps(1) infinite; }   /* durations: whole multiples of 4 ambient ticks */
 .rack-led.green { fill:#34d27b; } .rack-led.blue { fill:var(--accent-hi); } .rack-led.amber { fill:#ffb020; }
 :root:not([data-theme="light"]) .rack-led { filter:url(#soft); }
 .rack-scan-stop { stop-color:#ffd24a; }
 /* the running light glows in both themes (#soft passes through in the light theme, so a CSS drop-shadow) */
-.rack-scan { opacity:1; mix-blend-mode:screen; animation:rack-scan 2.6s linear infinite;
+/* the scan light hops down the door a rack unit at a time (18 ambient ticks a run), like a chase light */
+.rack-scan { opacity:1; mix-blend-mode:screen; animation:rack-scan 2.7s steps(18) infinite;
   filter:drop-shadow(0 0 1.2px #ffd24a) drop-shadow(0 0 3px rgb(255 196 60 / .75)); }
 :root:not([data-theme="light"]) .rack-scan { filter:drop-shadow(0 0 1.5px #ffe07a) drop-shadow(0 0 4px rgb(255 196 60 / .9)); }
 @keyframes rack-scan { to { transform:translateY(var(--run)); } }
-@keyframes rack-blink { 0%, 100% { opacity:1; } 45% { opacity:.15; } 60% { opacity:1; } 80% { opacity:.35; } }
+@keyframes rack-blink { 0%, 100% { opacity:1; } 50% { opacity:.15; } 75% { opacity:.35; } }
 @media (prefers-reduced-motion: reduce) { .rack-led, .rack-scan { animation:none; } .rack-scan { display:none; } }
+/* while the camera moves (svgCamera: the drawing is only transformed), the ambient loops hold still, so
+   the compositor can move what is already painted without the drawing being repainted under it */
+.cam-moving .monitor-ray, .cam-moving .rack-led, .cam-moving .rack-scan, .cam-moving .meet-hi, .cam-moving .meet-glow,
+.cam-moving .route-glint, .cam-moving .route-pulse { animation-play-state:paused; }
 /* massage chair: the same neutral building finish as the WeCafe furniture (white / grey, grey linework) */
 .face.mchair.furn { fill:var(--struct-shade); stroke:var(--struct-line); }
 .face.mchair.furn.side { fill:var(--struct-lit); }
@@ -340,10 +346,11 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 /* fireflies round the underground ramp mouths: dark mode only */
 .fireflies { display:none; pointer-events:none; }
 :root:not([data-theme="light"]) .fireflies { display:inline; }
-.firefly { animation:ff-drift var(--dur) ease-in-out var(--delay) infinite alternate, ff-blink var(--blink) ease-in-out var(--delay) infinite; }
+/* on the site's ambient tick (TowerView TICK): --nd / --nb steps per keyframe stretch */
+.firefly { animation:ff-drift var(--dur) steps(var(--nd)) var(--delay) infinite alternate, ff-blink var(--blink) steps(var(--nb)) var(--delay) infinite; }
 .ff-core { fill:var(--night-light-hi); }
 @keyframes ff-drift { 0% { transform:translate(0, 0); } 50% { transform:translate(var(--dx), var(--dy)); } 100% { transform:translate(var(--ex), var(--ey)); } }
-@keyframes ff-blink { 0%, 100% { opacity:.15; } 40% { opacity:1; } 60% { opacity:.85; } }
+@keyframes ff-blink { 0%, 100% { opacity:.15; } 40% { opacity:1; } 60% { opacity:.85; } }   /* stretches of 2, 1, 2 fifths */
 @media (prefers-reduced-motion: reduce) { .firefly { animation:none; opacity:.7; } }
 :root:not([data-theme="light"]) .twr.dusk .park-spill { animation:halo-on 1.2s ease-out 1.4s both; }
 @media (prefers-reduced-motion: reduce) { .twr.dusk .park-halo, .twr.dusk .park-spill { animation:none !important; } }
@@ -378,7 +385,7 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 /* reflecting pool in front of the garden wall */
 .pool-water { fill:color-mix(in srgb, var(--accent) 22%, #cfdbe6); }
 :root:not([data-theme="light"]) .pool-water { fill:color-mix(in srgb, var(--accent) 30%, #0c1520); }
-.pool-ripple { fill:none; stroke:#ffffff; stroke-width:.9; stroke-linecap:round; stroke-dasharray:6 14; opacity:.55; vector-effect:non-scaling-stroke; animation:pool-drift 5s linear infinite; }
+.pool-ripple { fill:none; stroke:#ffffff; stroke-width:.9; stroke-linecap:round; stroke-dasharray:6 14; opacity:.55; vector-effect:non-scaling-stroke; animation:pool-drift 4.96s steps(62) infinite; }   /* 62 site ticks */
 :root:not([data-theme="light"]) .pool-ripple { stroke:var(--accent-hi); opacity:.35; }
 @keyframes pool-drift { to { stroke-dashoffset:-40; } }
 @media (prefers-reduced-motion: reduce) { .pool-ripple { animation:none; } }
@@ -390,7 +397,7 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 .face.atm-body { fill:#5d646d; stroke:var(--struct-line); stroke-width:.4; vector-effect:non-scaling-stroke; }
 .face.atm-body.top { fill:#78808a; } .face.atm-body.front { fill:#4a5058; }
 .atm-hood { fill:#2c3036; } .atm-bezel { fill:#1d2025; } .atm-keys { fill:#9aa1a9; } .atm-slot { fill:#0f1114; }
-.atm-screen { fill:var(--accent); animation:atm-breathe 2.6s ease-in-out infinite; }
+.atm-screen { fill:var(--accent); animation:atm-breathe 2.56s steps(16) infinite; }   /* 16 site ticks each way */
 @keyframes atm-breathe { 0%, 100% { opacity:.45; } 50% { opacity:1; } }
 .atm-sign { fill:var(--accent); font-family:var(--font); font-weight:700; }
 @media (prefers-reduced-motion: reduce) { .atm-screen { animation:none; opacity:.85; } }

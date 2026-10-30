@@ -3,7 +3,7 @@
 // in src/model/layouts.json.
 
 import { ROTATIONS, TILE } from '../iso/units.js';
-import { SIZES } from './catalog.js';
+import { SIZES, describe } from './catalog.js';
 import { validate, rotateItem, cellRect } from '../iso/grid.js';
 import LAYOUTS from './layouts.json';
 
@@ -12,6 +12,7 @@ export const TOTAL_FLOORS = 10;   // floors 1–10 above G: 11 storeys in all
 export const RENTED = [2, 4];
 export const UNITS = { 2: ['A', 'B', 'C', 'D'], 4: ['C', 'D'] }; // floor 4: units C and D are in the PDF
 export const STORAGE_KEY = 'floorplan.v2';
+export const LOG_KEY = 'floorplan.log';
 export const SOURCE = '2026_KOSIGN_Official_Layout_0929 (updated 2026-09-29)';
 
 export const planId = (floor, unit) => `${floor}${unit}`;
@@ -305,15 +306,68 @@ export function save(plans) {
   }
 }
 
+// ---------- change log ----------
+
+const LOG_MAX = 300;
+/** Repeated edits of one item (nudging it along, retyping a field) within this long make one entry (ms). */
+const COALESCE = 30_000;
+
+export function loadLog() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+    return Array.isArray(raw) ? raw.filter((e) => e && typeof e.t === 'number' && typeof e.text === 'string').slice(-LOG_MAX) : [];
+  } catch { return []; }
+}
+
+export function saveLog(log) {
+  try { localStorage.setItem(LOG_KEY, JSON.stringify(log)); return true; } catch { return false; }
+}
+
+/** The log with entry e ({ plan, action, id?, text }) added, stamped now. */
+function logged(log = [], e) {
+  const t = Date.now(), last = log[log.length - 1];
+  if (last && e.id && last.id === e.id && last.plan === e.plan && last.action === e.action && t - last.t < COALESCE) {
+    return [...log.slice(0, -1), { ...last, ...e, t }];
+  }
+  return [...log.slice(1 - LOG_MAX), { ...e, t }];
+}
+
+/** What a reducer action did, in words, or null when it changes nothing worth logging. */
+function entryFor(a, before, after) {
+  const cur = before?.find((i) => i.id === a.id), next = after?.find((i) => i.id === a.id);
+  const what = (it) => (it ? describe(it) : 'item');
+  switch (a.type) {
+    case 'add': { const it = after[after.length - 1]; return { id: it.id, text: `Added ${what(it)}` }; }
+    case 'move': return { id: a.id, text: `Moved ${what(cur)} to ${next.gx}, ${next.gy}${next.rot !== cur.rot ? ` · ${next.rot}°` : ''}` };
+    case 'resize': return { id: a.id, text: `Resized ${what(next)}` };
+    case 'rotate': return { id: a.id, text: `Rotated ${what(cur)} to ${next.rot}°` };
+    case 'patch': {
+      if (cur?.type === 'desk' && 'name' in a.patch && (a.patch.name || '') !== (cur.name || '')) {
+        const label = cur.label || 'desk';
+        return { id: a.id, text: a.patch.name ? `Assigned ${label} to ${a.patch.name}${cur.name ? ` (was ${cur.name})` : ''}` : `Unassigned ${label} (was ${cur.name})` };
+      }
+      const keys = Object.keys(a.patch).filter((k) => !['id', 'type', 'gx', 'gy', 'rot', 'w', 'd'].includes(k));
+      return keys.length ? { id: a.id, text: `Edited ${what(next)} · ${keys.join(', ')}` } : null;
+    }
+    case 'remove': return { id: a.id, text: `Removed ${what(cur)}` };
+    case 'reset': return { text: 'Reset to the official PDF layout' };
+    default: return null;
+  }
+}
+
 // ---------- reducer (with undo) ----------
 
 const HISTORY = 60;
 
-export const initState = () => ({ plans: load(), past: [] });
+export const initState = () => ({ plans: load(), past: [], log: loadLog() });
 
-function commit(state, id, items) {
+function commit(state, id, items, a) {
   if (items === state.plans[id]) return state;
-  return { plans: { ...state.plans, [id]: items }, past: [...state.past.slice(1 - HISTORY), state.plans] };
+  const e = a && entryFor(a, state.plans[id], items);
+  return {
+    plans: { ...state.plans, [id]: items }, past: [...state.past.slice(1 - HISTORY), state.plans],
+    log: e ? logged(state.log, { plan: id, action: a.type, ...e }) : state.log,
+  };
 }
 
 /**
@@ -323,11 +377,11 @@ function commit(state, id, items) {
 export function reducer(state, a) {
   const items = state.plans[a.plan];
   const plan = PLANS[a.plan];
-  const replace = (next) => (validate(items, next, plan) ? state : commit(state, a.plan, items.map((i) => (i.id === next.id ? next : i))));
+  const replace = (next) => (validate(items, next, plan) ? state : commit(state, a.plan, items.map((i) => (i.id === next.id ? next : i)), a));
   switch (a.type) {
     case 'add': {
       const it = { ...a.item, id: a.item.id || newId(a.item.type) };
-      return validate(items, it, plan) ? state : commit(state, a.plan, [...items, it]);
+      return validate(items, it, plan) ? state : commit(state, a.plan, [...items, it], a);
     }
     case 'move': {
       const cur = items.find((i) => i.id === a.id);
@@ -350,14 +404,19 @@ export function reducer(state, a) {
         if (i.id !== a.id) return i;
         const { id, type, gx, gy, rot, w, d, ...rest } = a.patch; // eslint-disable-line no-unused-vars
         return { ...i, ...rest };
-      }));
+      }), a);
     case 'remove':
-      return commit(state, a.plan, items.filter((i) => i.id !== a.id));
+      return commit(state, a.plan, items.filter((i) => i.id !== a.id), a);
     case 'reset':
-      return commit(state, a.plan, seedPlan(a.plan));
+      return commit(state, a.plan, seedPlan(a.plan), a);
     case 'undo':
       if (!state.past.length) return state;
-      return { plans: state.past[state.past.length - 1], past: state.past.slice(0, -1) };
+      return {
+        plans: state.past[state.past.length - 1], past: state.past.slice(0, -1),
+        log: logged(state.log, { plan: Object.keys(state.plans).find((k) => state.plans[k] !== state.past[state.past.length - 1][k]), action: 'undo', text: 'Undid the last change' }),
+      };
+    case 'clearLog':
+      return { ...state, log: [] };
     default:
       return state;
   }

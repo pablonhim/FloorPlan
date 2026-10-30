@@ -15,6 +15,7 @@ import SceneButton, { icon } from './SceneButton.jsx';
 import { ViewTools, Divider } from './ViewTools.jsx';
 import { vehicle, VEHICLE_DEFS } from '../iso/vehicles.js';
 import { leg, cubicLeg, pose, person, planPath, duration } from '../iso/scenes.js';
+import { showVia } from '../lib/svgCamera.js';
 
 /*  World units: 1 m = M units. The building stands on a site plate with a 6.4 m margin.
     plate      0..PW × 0..PD, height PZ
@@ -1043,7 +1044,7 @@ function reflectingPool() {
     for (let x = rim + 2, k = 0; x + 4 <= w - rim - 2; x += 4, k++) p += `Q${x + 2} ${yc + (k % 2 ? 0.7 : -0.7)} ${x + 4} ${yc}`;
     return p;
   };
-  const ripples = [0.3, 0.55, 0.78].map((f, i) => `<path class="pool-ripple" style="animation-delay:${-i * 1.7}s" d="${wave(rim + (d - 2 * rim) * f)}"/>`).join('');
+  const ripples = [0.3, 0.55, 0.78].map((f, i) => `<path class="pool-ripple" style="animation-delay:-${(i * 21 * TICK).toFixed(2)}s" d="${wave(rim + (d - 2 * rim) * f)}"/>`).join('');
   return s + `<g transform="${TOP(x0, y0, PZ + h - 0.25)}"><rect class="pool-water" x="${rim}" y="${rim}" width="${w - 2 * rim}" height="${d - 2 * rim}" rx=".8"/>${ripples}</g>`;
 }
 
@@ -1101,6 +1102,13 @@ function atmKiosk() {
  * speck drifting a little about its spot and twinkling, out of step with the others. Pure CSS animation
  * on plain dots (no glow, no filter), so they cost next to nothing.
  */
+/**
+ * The site's ambient loops (pool ripples, fireflies, the ATM screen) step on one shared tick (s): their
+ * durations and delays are whole ticks, so they change on the same frames — 12.5 updates a second while
+ * idle instead of every frame (see iso.css).
+ */
+const TICK = 0.08;
+
 function fireflies() {
   let seed = 11, s = '';
   const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
@@ -1110,7 +1118,11 @@ function fireflies() {
       const x = R.x0 + 3 + rnd() * (R.x1 - R.x0 - 6), y = R.y1 - 4 - rnd() * 26, z = rampZ(R)(x, y) + 1.5 + rnd() * 5;
       const [px, py] = K.P(x, y, z);
       const v = (k) => `--${k}:${((rnd() - 0.5) * 6).toFixed(1)}px`;
-      s += `<circle class="firefly ff-core" style="${v('dx')};${v('dy')};${v('ex')};${v('ey')};--dur:${(5 + rnd() * 5).toFixed(1)}s;--blink:${(1.6 + rnd() * 2.4).toFixed(1)}s;--delay:${(-rnd() * 8).toFixed(1)}s" cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r=".28"/>`;
+      // drift and blink on the site's ambient tick (TICK): durations and delay in whole ticks, n steps a
+      // keyframe stretch, so every firefly (and the pool, the ATM) moves on the same frames
+      const drift = 2 * TICK * Math.round((5 + rnd() * 5) / (2 * TICK)), blink = 5 * TICK * Math.round((1.6 + rnd() * 2.4) / (5 * TICK));
+      s += `<circle class="firefly ff-core" style="${v('dx')};${v('dy')};${v('ex')};${v('ey')};--dur:${drift.toFixed(2)}s;--nd:${Math.round(drift / (2 * TICK))};` +
+        `--blink:${blink.toFixed(2)}s;--nb:${Math.round(blink / (5 * TICK))};--delay:-${(TICK * Math.floor(rnd() * 100)).toFixed(2)}s" cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r=".28"/>`;
     }
   }
   return `<g class="fireflies">${s}</g>`;
@@ -1227,6 +1239,9 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
   // last one is done it eases back out to the whole site (exponential smoothing on the viewBox)
   const cam = useRef(null);
   const camSettled = useRef(false);
+  // the viewBox last written on the svg (null: the full view) and the svg's size while the camera moves:
+  // the move itself is a CSS transform; the viewBox is written once it settles (see svgCamera)
+  const camDrawn = useRef(null), camSize = useRef([1, 1]);
   const gatesHeld = useRef(false);   // the Gate button holds the site gates open
   const [map, setMap] = useState(null);   // route shown on the mini-map ({ d, len }), while something moves
   const mapFor = useRef(null);
@@ -1371,13 +1386,21 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
     });
     if (svgEl) {
       for (const cls of ['xray-bld', 'xray-pwc']) if (svgEl.classList.contains(cls) !== (xray === cls)) svgEl.classList.toggle(cls, xray === cls);
-      if (d > 0.05) {                                // moving: ease toward the target and write it
+      if (d > 0.05) {                                // moving: ease toward the target
         c.x += (t.x - c.x) * k; c.y += (t.y - c.y) * k; c.w += (t.w - c.w) * k; c.h += (t.h - c.h) * k;
-        svgEl.setAttribute('viewBox', `${c.x.toFixed(2)} ${c.y.toFixed(2)} ${c.w.toFixed(2)} ${c.h.toFixed(2)}`);
+        if (d < 0.6) {                               // there: snap onto it and write the viewBox, once
+          Object.assign(c, t);
+          svgEl.setAttribute('viewBox', `${c.x.toFixed(2)} ${c.y.toFixed(2)} ${c.w.toFixed(2)} ${c.h.toFixed(2)}`);
+          camDrawn.current = t === VIEW_ALL ? null : { ...c };
+          showVia(svgEl, null, null, null);
+        } else {                                     // on the way: only the compositor moves the drawing
+          if (!svgEl.style.transform) { const r = svgEl.getBoundingClientRect(); camSize.current = [r.width, r.height]; }
+          showVia(svgEl, camSize.current, camDrawn.current || VIEW_ALL, c);
+        }
       }
     }
     const done = !lead && d <= 0.05;
-    if (done && t === VIEW_ALL) { svgEl?.setAttribute('viewBox', K.viewBox); cam.current = null; }
+    if (done && t === VIEW_ALL) { svgEl?.setAttribute('viewBox', K.viewBox); showVia(svgEl, null, null, null); camDrawn.current = null; cam.current = null; }
     if (done) last.current = 0;
     loop.current = done ? 0 : requestAnimationFrame(tick);
   };

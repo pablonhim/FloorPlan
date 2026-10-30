@@ -1,6 +1,6 @@
 // Fig 2 · Floor — the whole floor with all its units together (read-only overview).
 // Click a unit (or its tab) to open that unit's isolated, editable layout.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CELL, TILE } from '../iso/units.js';
 import { planFrame, renderScene, edgeItems } from '../iso/render.js';
@@ -12,7 +12,7 @@ import { renderParts } from '../iso/parts.js';
 import { person } from '../iso/scenes.js';
 import { exportPng } from '../lib/exportPng.js';
 import IsoDefs from './IsoDefs.jsx';
-import { useFrameUpdater } from '../lib/useFrameUpdater.js';
+import { focusBox, useSvgCamera } from '../lib/svgCamera.js';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
 import SceneButton, { icon } from './SceneButton.jsx';
 import { ViewTools, Divider, FloorUnitButtons } from './ViewTools.jsx';
@@ -98,7 +98,7 @@ const TOOL = {
   meet: icon(<><rect x="4" y="5.5" width="8" height="5" rx="1" /><path d="M5.5 3.5h1M9.5 3.5h1M5.5 12.5h1M9.5 12.5h1" /></>), // table + chairs
 };
 
-export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, light, guide = false }) {
+export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, light, guide = false, focus = null }) {
   const plan = useMemo(() => floorPlan(floor), [floor]);
   // the units this floor does not rent (floor 4: A and B), as faded shells: walls and pillars only
   const shells = useMemo(() => shellUnits(floor), [floor]);
@@ -109,17 +109,26 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     return `<g transform="translate(${dx.toFixed(2)} ${dy.toFixed(2)})">${renderScene(K, u.plan, u.items)}</g>`;
   }).join(''), [shells, K]);
   const VB0 = useMemo(() => ({ x: 0, y: 0, w: K.W, h: K.H }), [K]);
-  const [vb, setVb] = useState(VB0);
-  const setVbFrame = useFrameUpdater(setVb); // wheel / drag: at most one viewBox update per frame
   const [hoverUnit, setHoverUnit] = useState(null);
   const [unitsOpen, setUnitsOpen] = useState(false);   // the units menu (bottom right), closed on arrival
   const [msg, setMsg] = useState('');
   const svgRef = useRef(null);
+  // the camera: moves are CSS transforms, the viewBox (cam.vb) is written once a move settles (svgCamera)
+  const cam = useSvgCamera(svgRef, VB0);
+  const vb = cam.vb;
   const stageRef = useRef(null);
   const [tip, tipMove, tipHide] = useHoverTip(stageRef);
   const drag = useRef(null);
 
-  useEffect(() => { setVb(VB0); setHoverUnit(null); setMsg(''); }, [VB0]);
+  useLayoutEffect(() => { cam.jump(VB0); }, [VB0]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setHoverUnit(null); setMsg(''); }, [VB0]);
+  // a search result on this floor (a corridor storage room): the camera glides onto it, which then glows
+  const floorSeen = useRef(null);
+  useEffect(() => {
+    const fresh = floorSeen.current !== floor;
+    floorSeen.current = floor;
+    if (focus) cam.glideTo(focusBox(K, focus, VB0, { h: 60 }), { delay: fresh ? 250 : 0 });
+  }, [focus, floor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const unitStats = useMemo(() => Object.fromEntries(plan.units.map((u) => [u.unit, stats(plans[u.id])])), [plan, plans]);
   const scene = useMemo(
@@ -174,16 +183,18 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     return () => cancelAnimationFrame(id);
   }, [arrival, K, kosign]);
   const features = useMemo(() => (showMeet ? meetingOverlay(K, rooms) : '') +
+    (focus ? meetingOverlay(K, [focus]) : '') +   // the search result, lit as the meeting rooms are
     // arriving by lift, the visitor (drawn per frame) stands at the route's start instead of a walking dot
-    (kosign ? routeOverlay(K, kosign) + (arrival ? '' : guideWalker(K, kosign)) : ''), [K, showMeet, rooms, kosign, arrival]);
+    (kosign ? routeOverlay(K, kosign) + (arrival ? '' : guideWalker(K, kosign)) : ''), [K, showMeet, rooms, kosign, arrival, focus]);
 
-  const toSvg = useCallback((e) => new DOMPoint(e.clientX, e.clientY).matrixTransform(svgRef.current.getScreenCTM().inverse()), []);
+  const toSvg = useCallback((e) => cam.toSvg(e.clientX, e.clientY), [cam.toSvg]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const el = svgRef.current;
     const onWheel = (e) => {
       e.preventDefault();
+      cam.cancel();
       const p = toSvg(e);
-      setVbFrame((v) => {
+      cam.move((v) => {
         const w = Math.max(K.W * 0.15, Math.min(K.W * 1.5, v.w * Math.exp(e.deltaY * 0.0015)));
         const k = w / v.w;
         return { x: p.x - (p.x - v.x) * k, y: p.y - (p.y - v.y) * k, w, h: v.h * k };
@@ -191,13 +202,14 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [toSvg, K, setVbFrame]);
+  }, [toSvg, K]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // drag pans; a click (no movement) on a unit opens it
   const onPointerDown = (e) => {
     if (e.button !== 0) return;
+    cam.cancel();
     svgRef.current.setPointerCapture(e.pointerId);
-    drag.current = { unit: e.target.closest('[data-unit]')?.dataset.unit || null, vb0: vb, scale: svgRef.current.getScreenCTM().a, sx: e.clientX, sy: e.clientY, moved: false };
+    drag.current = { unit: e.target.closest('[data-unit]')?.dataset.unit || null, vb0: cam.live.current, scale: cam.scale(), sx: e.clientX, sy: e.clientY, moved: false };
   };
   const onPointerMove = (e) => {
     tipMove(e, Boolean(drag.current?.moved));
@@ -205,11 +217,12 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     if (!d) { setHoverUnit(e.target.closest('[data-unit]')?.dataset.unit || null); return; }
     if (!d.moved && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 4) return;
     d.moved = true;
-    setVbFrame((v) => ({ ...v, x: d.vb0.x - (e.clientX - d.sx) / d.scale, y: d.vb0.y - (e.clientY - d.sy) / d.scale }));
+    cam.move({ ...d.vb0, x: d.vb0.x - (e.clientX - d.sx) / d.scale, y: d.vb0.y - (e.clientY - d.sy) / d.scale }, null);
   };
   const onPointerUp = () => {
     const d = drag.current;
     drag.current = null;
+    if (d?.moved) cam.commit();   // the pan settles: write the viewBox once
     if (d && !d.moved && d.unit) onUnit(floor, d.unit);
   };
 
@@ -238,7 +251,7 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
       <Divider />
       <FloorUnitButtons floor={floor} onFloor={onFloor} onUnit={onUnit} />
       <Divider />
-      <SceneButton place="above" compact docked label="Fit" tip="Fit the whole floor in the view" onClick={() => setVb(VB0)}>{TOOL.fit}</SceneButton>
+      <SceneButton place="above" compact docked label="Fit" tip="Fit the whole floor in the view" onClick={() => cam.glideTo(VB0, { ms: 600 })}>{TOOL.fit}</SceneButton>
       <SceneButton place="above" compact docked label={showMeet ? 'Hide meeting rooms' : 'Highlight meeting rooms'} active={showMeet} onClick={() => setShowMeet((v) => !v)}
         tip={rooms.length ? `Light up the ${rooms.length} meeting rooms on this floor` : 'No meeting rooms on this floor'}>{TOOL.meet}</SceneButton>
     </ViewTools>
@@ -247,7 +260,7 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
   return (
     <div className="relative flex flex-1 min-h-0">
       <div className="flex flex-col flex-1 min-w-0">
-        <div ref={stageRef} className="relative flex-1 min-h-0 stage-glow">
+        <div ref={stageRef} className="relative flex-1 min-h-0 overflow-hidden stage-glow">
           <svg
             ref={svgRef}
             className="floor-ov office-lit w-full h-full block select-none touch-none"
@@ -257,7 +270,7 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
-            onPointerCancel={() => { drag.current = null; }}
+            onPointerCancel={() => { if (drag.current?.moved) cam.commit(); drag.current = null; }}
             onPointerLeave={() => { setHoverUnit(null); tipHide(); }}
           >
             <IsoDefs light={light} />

@@ -38,6 +38,13 @@ export const SIZES = {
  * Building core services. They belong to the shared core outside the rented units, so the office
  * view hides them; they show only in building-core (schematic) mode.
  */
+/**
+ * The ambient loops in the plans (monitor rays, server-rack LEDs and scan light) step on one shared tick
+ * (s): their durations and delays are whole ticks, so they all change on the same frames and the drawing
+ * is repainted ~7 times a second while idle instead of every frame (see iso.css).
+ */
+export const AMBIENT_TICK = 0.15;
+
 export const CORE = new Set(['elevator', 'restroom', 'stair', 'wc', 'cabinet', 'storeroom']);
 
 /** Collision layer per type (see grid.collides). */
@@ -161,9 +168,12 @@ function desk(item, W, D) {
   const ray = (rot) => {
     const pw = W - 2 - EXT, pd = top - 1, u = pw / 2;
     const pts = [[u - 10, 6], [u + 10, 6], [u + 17, pd], [u - 17, pd]].map(([a, b]) => rotPoint(a, b, pw, pd, rot));
-    // each desk's beam breathes on its own (CSS beam-breathe), phase and pace seeded from its id
+    // each desk's beam breathes on its own (CSS beam-breathe), phase and pace seeded from its id — on the
+    // shared ambient tick (see AMBIENT_TICK): a pace of 2·n ticks, n steps up and n down, and a phase of whole
+    // ticks, so every beam on the floor changes on the same frames (a few repaints a second, not 60)
     const h = [...String(item.id || '')].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
-    const style = `animation-duration:${(3.2 + (h % 17) / 10).toFixed(1)}s;animation-delay:-${((h >>> 5) % 40) / 10}s`;
+    const n = 11 + (h % 5);
+    const style = `--n:${n};animation-duration:${(2 * n * AMBIENT_TICK).toFixed(2)}s;animation-delay:-${(((h >>> 5) % 30) * AMBIENT_TICK).toFixed(2)}s`;
     return `<path class="monitor-ray" style="${style}" fill="url(#ray-${rot})" d="M${pts.map((p) => p.map((n) => n.toFixed(2)).join(' ')).join('L')}Z"/>`;
   };
   return [
@@ -221,13 +231,13 @@ function serverRack(item) {
       `<linearGradient id="rack-scan-grad" x1="0" y1="0" x2="0" y2="1"><stop class="rack-scan-stop" offset="0" stop-opacity="0"/>` +
       `<stop class="rack-scan-stop" offset=".5" stop-opacity="1"/><stop class="rack-scan-stop" offset="1" stop-opacity="0"/></linearGradient></defs>` +
       `<g clip-path="url(#${cid})"><rect class="rack-scan" x="1.2" y="-10" width="${w - 2.4}" height="10" fill="url(#rack-scan-grad)" ` +
-      `style="--run:${h + 10}px;animation-delay:${(-rnd() * 2.6).toFixed(2)}s"/></g>`;
+      `style="--run:${h + 10}px;animation-delay:-${(Math.floor(rnd() * 18) * AMBIENT_TICK).toFixed(2)}s"/></g>`;
     for (let y = 3; y + 3.4 <= h - 2; y += 4.6) {
       s += `<rect class="rack-unit" x="2.6" y="${y}" width="${w - 5.2}" height="3.4" rx=".3"/>`;
       for (const [k, x] of [[0, w - 7.4], [1, w - 5.4]]) {
         const tone = rnd() < 0.18 ? 'amber' : k ? 'blue' : 'green';
         s += `<rect class="rack-led ${tone}" x="${x}" y="${y + 1.2}" width="1.1" height="1" ` +
-          `style="animation-duration:${(0.6 + rnd() * 1.8).toFixed(2)}s;animation-delay:${(-rnd() * 2).toFixed(2)}s"/>`;
+          `style="animation-duration:${((1 + Math.floor(rnd() * 4)) * 4 * AMBIENT_TICK).toFixed(2)}s;animation-delay:-${(Math.floor(rnd() * 16) * AMBIENT_TICK).toFixed(2)}s"/>`;
       }
     }
     return s;
