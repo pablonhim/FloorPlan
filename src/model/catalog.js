@@ -187,9 +187,10 @@ function desk(item, W, D) {
     {
       x: 1 + EXT, y: 1, z: 36, w: W - 2 - EXT, d: top - 1, h: 2, cls: live ? 'deskTop furn live' : 'deskTop furn',
       top: (w, d, rot = 0) => {
+        // the employee's name floats above the desk in a callout (render.renderDeskCallouts); an unassigned
+        // desk keeps its small note on the worktop
         if (!name) return ray(rot) + `<text class="label desk-name" x="${w / 2}" y="${d / 2 + 2}" font-size="5" text-anchor="middle">${esc(item.note || '—')}</text>`;
-        const fs = fitText(name, w - 6, 8.5);
-        return ray(rot) + `<text class="${live ? 'scr' : 'label'} desk-name" x="${w / 2}" y="${d / 2 + fs * 0.35}" font-size="${fs.toFixed(1)}" text-anchor="middle">${esc(name)}</text>`;
+        return ray(rot);
       },
     },
     {

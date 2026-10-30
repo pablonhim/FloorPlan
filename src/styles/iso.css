@@ -78,8 +78,13 @@
 .nb.hot { opacity:.6; }
 .nb .it { cursor:pointer; }
 .nb.core { pointer-events:none; }   /* the building core round a unit: shown, not a target */
+.it.core-faded { opacity:.28; pointer-events:none; }   /* …its walls and fixtures, sorted in with the unit's own items */
+/* a neighbouring unit's pieces near this one, sorted in with its items: faded like the rest of that unit, lifted together on hover */
+.it.nbi { opacity:.28; cursor:pointer; transition:opacity .2s ease; }
+svg[data-hot="A"] .nbi[data-unit="A"], svg[data-hot="B"] .nbi[data-unit="B"], svg[data-hot="C"] .nbi[data-unit="C"], svg[data-hot="D"] .nbi[data-unit="D"] { opacity:.6; }
 /* units a floor does not rent (floor 4: A and B): their shell only, faded, not a target */
 .shell-units { opacity:.3; }
+.it.faded { opacity:.3; pointer-events:none; }   /* their walls and pillars, depth-sorted in with the floor */
 /* floor tile grid: exactly 10% stroke alpha, drawn once per edge (see renderPlate) */
 .slab-grid { fill:none; stroke:var(--line); stroke-opacity:.1; stroke-width:1; vector-effect:non-scaling-stroke; }
 /* every grid-like line on a floor (tiles, room hatching, restroom tiles, tower paving): same colour, 10% */
@@ -363,15 +368,15 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 /* driving routes: a little darker than the paving, with a fine asphalt noise (pattern in the scene) */
 .yard-road { fill:url(#asphalt-grain); }
 .grain-base { fill:var(--asphalt); }
+.asphalt-noise { opacity:.2; }   /* the grain on the driving routes: there, but soft */
 /* the front plaza's pedestrian pavers */
 .yard-plaza { fill:url(#paver-tiles); }
 .paver-base { fill:var(--paving); }
 .paver-joint { fill:none; stroke:color-mix(in srgb, var(--ink) 24%, var(--paving)); stroke-width:.14; }
-.asphalt-noise { opacity:.55; }
 /* a faint concrete grain over the building's walls and roof (never in the way of the pointer) */
 .bld-grain { fill:url(#bld-noise); opacity:.28; pointer-events:none; }
 :root:not([data-theme="light"]) .bld-grain { opacity:.45; }
-:root:not([data-theme="light"]) .asphalt-noise { opacity:.8; }
+:root:not([data-theme="light"]) .asphalt-noise { opacity:.3; }
 /* raised VIP deck: asphalt (paving for the bay apron) on top, concrete retaining faces */
 .face.vip-deck { fill:var(--struct-shade); stroke:var(--struct-line); stroke-width:.4; vector-effect:non-scaling-stroke; }
 .face.vip-deck.top { fill:url(#asphalt-grain); stroke:none; }
@@ -662,3 +667,40 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
   .twr .beacon, .twr .beacon-halo { animation:none; }
   .twr .pn, .glass, .halo, .twr .fl .band { transition:none; }
 }
+
+
+/* the building view: drag to look round (TowerView) */
+.panning, .panning * { cursor:grabbing !important; }
+
+
+/* the building ghosted under an open floor or unit (iso/ghost.js): only its outer line — each storey's
+   outline and faint outer walls down to the ground — fading in as the camera glides down into the floor */
+.ghost-bld { pointer-events:none; animation:ghost-in .9s ease-out .25s both; }
+@keyframes ghost-in { from { opacity:0; } }
+@media (prefers-reduced-motion: reduce) { .ghost-bld { animation:none; } }
+.ghost-wall { fill:var(--struct-lit); fill-opacity:.14; stroke:none; }
+.ghost-wall.front { fill:var(--struct-shade); fill-opacity:.18; }
+.ghost-floor { fill:none; stroke:var(--struct-line); stroke-width:.7; stroke-opacity:.4; vector-effect:non-scaling-stroke; }
+
+/* desk name callouts (render.renderDeskCallouts): an upright white pill with a blueprint-blue edge floating
+   above each occupied desk, a hairline leader down to the worktop; hidden with the labels; on the floor
+   overview only once zoomed in (.near) */
+.desk-callouts { pointer-events:none; }
+.callout-pill { fill:#ffffff; stroke:color-mix(in srgb, var(--accent) 70%, #ffffff); stroke-width:.8; vector-effect:non-scaling-stroke; }
+.callout-name { fill:#1f2933; font-family:var(--font); font-weight:600; }
+.callout-lead { stroke:color-mix(in srgb, var(--accent) 75%, #ffffff); stroke-width:.8; vector-effect:non-scaling-stroke; }
+.callout-dot { fill:var(--accent); }
+:root:not([data-theme="light"]) .callout-pill { fill:#1f2329; stroke:color-mix(in srgb, var(--accent-hi) 70%, transparent); }
+:root:not([data-theme="light"]) .callout-name { fill:#eef1f5; }
+:root:not([data-theme="light"]) .callout-lead { stroke:color-mix(in srgb, var(--accent-hi) 75%, transparent); }
+[data-labels="off"] .desk-callouts { display:none; }
+.floor-ov:not(.near) .desk-callouts { display:none; }
+
+/* the entrance ramps beside the steps: plain surfaces, no outlines */
+.face.plain { stroke:none; }
+/* the public restroom's door swings open (folds toward its hinge) while someone walks in */
+.face.pwc-door { transform-box:fill-box; transform-origin:left center; transition:transform .35s ease-out; }
+.face.pwc-door.open { transform:scaleX(.12); }
+@media (prefers-reduced-motion: reduce) { .face.pwc-door { transition:none; } }
+.pwc-doorway { fill:#3b4048; opacity:0; transition:opacity .25s ease-out; }
+.pwc-doorway.open { opacity:1; }

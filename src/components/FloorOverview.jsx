@@ -1,9 +1,8 @@
 // Fig 2 · Floor — the whole floor with all its units together (read-only overview).
 // Click a unit (or its tab) to open that unit's isolated, editable layout.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { CELL, TILE } from '../iso/units.js';
-import { planFrame, renderScene, edgeItems } from '../iso/render.js';
+import { planFrame, renderScene, renderPlate, edgeItems } from '../iso/render.js';
 import { meetingRooms, routeToKosign } from '../model/wayfinding.js';
 import { esc } from '../iso/kernel.js';
 import { floorPlan, toFloor, coreItems, stats, RENTED, PLANS, CORE, shellUnits } from '../model/floors.js';
@@ -13,10 +12,13 @@ import { person } from '../iso/scenes.js';
 import { exportPng } from '../lib/exportPng.js';
 import IsoDefs from './IsoDefs.jsx';
 import { focusBox, useSvgCamera } from '../lib/svgCamera.js';
+import { keep } from '../lib/keep.js';
+import { ghostBuilding, frameOf } from '../iso/ghost.js';
+import { reportDepth, usePlanZoom } from '../lib/planZoom.js';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
 import SceneButton, { icon } from './SceneButton.jsx';
-import { ViewTools, Divider, FloorUnitButtons } from './ViewTools.jsx';
-import ActionMenu from './ActionMenu.jsx';
+import { ViewTools, Divider, FloorUnitButtons, StatusLine, sentence } from './ViewTools.jsx';
+import DockMenu from './DockMenu.jsx';
 import MenuPanel from './MenuPanel.jsx';
 import { entryDoors, useDoorSwing } from '../iso/doorSwing.js';
 
@@ -94,33 +96,80 @@ function unitOverlay(K, u, s) {
 // icons for the view tools (16 × 16, stroked in the current colour)
 const TOOL = {
   back: icon(<path d="M10 3 5 8l5 5" />),   // chevron left: back to the building
-  fit: icon(<path d="M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3" />),                                                     // frame corners
   meet: icon(<><rect x="4" y="5.5" width="8" height="5" rx="1" /><path d="M5.5 3.5h1M9.5 3.5h1M5.5 12.5h1M9.5 12.5h1" /></>), // table + chairs
 };
 
-export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, light, guide = false, focus = null }) {
-  const plan = useMemo(() => floorPlan(floor), [floor]);
-  // the units this floor does not rent (floor 4: A and B), as faded shells: walls and pillars only
-  const shells = useMemo(() => shellUnits(floor), [floor]);
-  // framed to take them in too
-  const K = useMemo(() => planFrame({ ...plan, rows: Math.max(plan.rows, ...shells.map((u) => u.oy + u.plan.rows)) }), [plan, shells]);
-  const shellSvg = useMemo(() => shells.map((u) => {
-    const [dx, dy] = K.D(u.ox * CELL, u.oy * CELL, 0);
-    return `<g transform="translate(${dx.toFixed(2)} ${dy.toFixed(2)})">${renderScene(K, u.plan, u.items)}</g>`;
-  }).join(''), [shells, K]);
+/** Zoom range: view width as a share of the fitted width (closest, farthest). */
+const ZOOM = { min: 0.15, max: 1.5 };
+
+/**
+ * The parts of a floor's drawing that never change (its plan, the shells of the units it does not rent,
+ * the frame, the ghosted building under it), built once per floor and kept (lib/keep).
+ */
+function floorStatic(floor) {
+  return keep(`floor:${floor}`, [], () => {
+    const plan = floorPlan(floor);
+    // the units this floor does not rent (floor 4: A and B), as faded shells: walls and pillars only
+    const shells = shellUnits(floor);
+    // framed to take them in too
+    const K = planFrame({ ...plan, rows: Math.max(plan.rows, ...shells.map((u) => u.oy + u.plan.rows)) });
+    // their floor plates lie flat under the whole floor; their walls, glass and pillars (and outer walls) are
+    // depth-sorted in with everything else (see floorScene): drawn as one layer over the floor they washed
+    // over the stair cores standing in front of them
+    const shellSvg = shells.map((u) => {
+      const [dx, dy] = K.D(u.ox * CELL, u.oy * CELL, 0);
+      return `<g transform="translate(${dx.toFixed(2)} ${dy.toFixed(2)})">${renderPlate(K, u.plan)}</g>`;
+    }).join('');
+    // (a boundary wall both shells carry — A's east wall is B's west wall — is drawn once, as in floorPlan)
+    const all = shells.flatMap((u) => toFloor([...u.items, ...edgeItems(u.plan)], u.ox, u.oy)
+      .map((it) => ({ ...it, id: it.id.startsWith('edge-') ? `edge-${u.unit}-${it.id}` : `shell-${u.unit}-${it.id}`, faded: true })));
+    const shellItems = [...new Map(all.map((it) => [it.id.startsWith('edge-') ? `${it.type}:${it.gx}:${it.gy}:${it.rot}:${it.w}` : it.id, it])).values()];
+    // the building ghosted under this floor: only its outer line, storey by storey down to the ground (floor 4
+    // with units A and B's shells in its footprint; see ghostBuilding)
+    const grid = plan.mask.map((r) => [...r]);
+    for (const u of shells) u.plan.mask.forEach((row, ty) => [...row].forEach((c, tx) => {
+      if (c !== '1') return;
+      const gy = u.oy / TILE + ty, gx = u.ox / TILE + tx;
+      while (grid.length <= gy) grid.push([]);
+      grid[gy][gx] = '1';
+    }));
+    const mask = grid.map((r) => Array.from({ length: Math.max(...grid.map((g) => g.length)) }, (_, i) => r[i] || '0').join(''));
+    return { plan, shells, K, shellSvg, shellItems, ghost: ghostBuilding(K, mask, floor) };
+  });
+}
+
+/** The floor's scene (every unit, the building core, the shells), rebuilt only when a unit's plan changes. */
+function floorScene(floor, plans) {
+  const { plan, K, shellItems } = floorStatic(floor);
+  return keep(`floor-scene:${floor}`, plan.units.map((u) => plans[u.id]), () => {
+    const floorItems = [...plan.units.flatMap((u) => toFloor(plans[u.id], u.ox, u.oy)), ...coreItems()];
+    // full-floor view: every unit plus the building core (corridor, elevators, WCs) for circulation
+    return { floorItems, scene: renderScene(K, plan, [...floorItems, ...shellItems]) };
+  });
+}
+
+/** Build the rented floors' drawings ahead of time (App calls this while the app is idle). */
+export const prewarmFloors = (plans) => RENTED.map((f) => () => floorScene(f, plans));
+
+export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, light, guide = false, focus = null, intro = false, active = true }) {
+  const { plan, K, shellSvg, ghost } = floorStatic(floor);
+  const { floorItems, scene } = floorScene(floor, plans);
   const VB0 = useMemo(() => ({ x: 0, y: 0, w: K.W, h: K.H }), [K]);
   const [hoverUnit, setHoverUnit] = useState(null);
   const [unitsOpen, setUnitsOpen] = useState(false);   // the units menu (bottom right), closed on arrival
   const [msg, setMsg] = useState('');
   const svgRef = useRef(null);
   // the camera: moves are CSS transforms, the viewBox (cam.vb) is written once a move settles (svgCamera)
-  const cam = useSvgCamera(svgRef, VB0);
+  // the zoom rail's depth, and the desk name callouts shown only once zoomed in past the fitted view a little
+  const depth = reportDepth(K, ZOOM.min, ZOOM.max);
+  const cam = useSvgCamera(svgRef, VB0, (v) => { depth(v); svgRef.current?.classList.toggle('near', v.w < K.W * 0.62); });
+  // wheel / zoom rail: this floor's own zoom range
+  const zoomBy = usePlanZoom(cam, K, { ...ZOOM, active });
   const vb = cam.vb;
   const stageRef = useRef(null);
   const [tip, tipMove, tipHide] = useHoverTip(stageRef);
   const drag = useRef(null);
 
-  useLayoutEffect(() => { cam.jump(VB0); }, [VB0]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setHoverUnit(null); setMsg(''); }, [VB0]);
   // a search result on this floor (a corridor storage room): the camera glides onto it, which then glows
   const floorSeen = useRef(null);
@@ -131,15 +180,29 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
   }, [focus, floor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const unitStats = useMemo(() => Object.fromEntries(plan.units.map((u) => [u.unit, stats(plans[u.id])])), [plan, plans]);
-  const scene = useMemo(
-    // full-floor view: every unit plus the building core (corridor, elevators, WCs) for circulation
-    () => renderScene(K, plan, [...plan.units.flatMap((u) => toFloor(plans[u.id], u.ox, u.oy)), ...coreItems()]),
-    [K, plan, plans],
-  );
   const overlay = useMemo(() => plan.units.map((u) => unitOverlay(K, u, unitStats[u.unit])).join(''), [K, plan, unitStats]);
   // feature overlays: the meeting-room highlight (and, arriving from "Go to KOSIGN", the route to KOSIGN)
   const [showMeet, setShowMeet] = useState(false);
-  const floorItems = useMemo(() => [...plan.units.flatMap((u) => toFloor(plans[u.id], u.ox, u.oy)), ...coreItems()], [plan, plans]);
+  // opened from the building: the camera starts on the whole ghosted building and glides down into this
+  // floor while the ghost fades in (CSS .ghost-bld); otherwise (another floor, back from a unit, a search,
+  // the KOSIGN route) it opens fitted
+  useLayoutEffect(() => {
+    if (intro && !guide && !focus) {
+      cam.jump(frameOf(ghost.bounds, VB0.h / VB0.w));
+      cam.glideTo(VB0, { ms: 1300, delay: 220 });
+    } else cam.jump(VB0);
+  }, [VB0]); // eslint-disable-line react-hooks/exhaustive-deps
+  // kept alive (App): opened again from the building, it glides down into the floor again; back from one of
+  // its units it stays as it was left
+  const wasActive = useRef(active);
+  useLayoutEffect(() => {
+    const again = active && !wasActive.current;
+    wasActive.current = active;
+    if (again && intro && !guide && !focus) {
+      cam.jump(frameOf(ghost.bounds, VB0.h / VB0.w));
+      cam.glideTo(VB0, { ms: 1100, delay: 120 });
+    }
+  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
   const rooms = useMemo(() => meetingRooms(floorItems), [floorItems]);
   // arriving from "Go to KOSIGN": the route from the east lifts to KOSIGN's entrance, walked by a guide
   const kosign = useMemo(() => (guide ? routeToKosign(plan, floorItems, edgeItems(plan)) : null), [guide, plan, floorItems]);
@@ -193,12 +256,7 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     const onWheel = (e) => {
       e.preventDefault();
       cam.cancel();
-      const p = toSvg(e);
-      cam.move((v) => {
-        const w = Math.max(K.W * 0.15, Math.min(K.W * 1.5, v.w * Math.exp(e.deltaY * 0.0015)));
-        const k = w / v.w;
-        return { x: p.x - (p.x - v.x) * k, y: p.y - (p.y - v.y) * k, w, h: v.h * k };
-      });
+      zoomBy(e.deltaY, toSvg(e));
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
@@ -235,25 +293,16 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
 
   // the view tools, as one row of round buttons at the bottom left of the drawing:
   // back to the building, the floors with this floor's units, then fit and the meeting-room highlight
-  const headerActions = typeof document !== 'undefined' ? document.getElementById('header-actions') : null;
   const tools = (
-    <ViewTools after={
-      // the status line (and any message or route note above it) right after the dock, on its line
-      <div className="pointer-events-none ml-1 flex flex-col justify-center whitespace-nowrap text-[12px] leading-tight tabular-nums" aria-live="polite">
-        {msg ? <div className="text-accent-hi">{msg}</div> : null}
-        {kosign && <div className="text-accent-hi">{kosign.path ? `route · east lifts → ${kosign.room.label} entrance` : 'KOSIGN entrance not reachable on this floor'}</div>}
-        <div className="text-ink-hi">
-          F{floor} · {plan.units.length} units · {total.assigned}/{total.desks} desks assigned{hoverUnit ? ` · unit ${hoverUnit} · click to open` : ''}
-        </div>
-      </div>
-    }>
+    <ViewTools>
       <SceneButton place="above-start" compact docked label="Building" tip="Back to the whole building" onClick={onBack}>{TOOL.back}</SceneButton>
       <Divider />
       <FloorUnitButtons floor={floor} onFloor={onFloor} onUnit={onUnit} />
       <Divider />
-      <SceneButton place="above" compact docked label="Fit" tip="Fit the whole floor in the view" onClick={() => cam.glideTo(VB0, { ms: 600 })}>{TOOL.fit}</SceneButton>
-      <SceneButton place="above" compact docked label={showMeet ? 'Hide meeting rooms' : 'Highlight meeting rooms'} active={showMeet} onClick={() => setShowMeet((v) => !v)}
+      <SceneButton place="above" compact docked label={showMeet ? 'Hide rooms' : 'Meeting rooms'} active={showMeet} onClick={() => setShowMeet((v) => !v)}
         tip={rooms.length ? `Light up the ${rooms.length} meeting rooms on this floor` : 'No meeting rooms on this floor'}>{TOOL.meet}</SceneButton>
+      <Divider />
+      <DockMenu items={[{ label: 'Export PNG', icon: 'export', onClick: exportFloor }]} />
     </ViewTools>
   );
 
@@ -274,8 +323,9 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
             onPointerLeave={() => { setHoverUnit(null); tipHide(); }}
           >
             <IsoDefs light={light} />
-            <g dangerouslySetInnerHTML={{ __html: scene }} />
+            <g pointerEvents="none" data-noexport="" dangerouslySetInnerHTML={{ __html: ghost.below }} />
             {shellSvg && <g className="shell-units" pointerEvents="none" dangerouslySetInnerHTML={{ __html: shellSvg }} />}
+            <g dangerouslySetInnerHTML={{ __html: scene }} />
             <g className="door-swing" ref={doorsRef} pointerEvents="none" />
             <g className="arrival-lift" ref={liftRef} pointerEvents="none" />
             <g className="features" pointerEvents="none" dangerouslySetInnerHTML={{ __html: features }} />
@@ -284,10 +334,15 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
           </svg>
           <HoverTip tip={tip} />
           {tools}
+          {/* the status line (and any message or route note above it), bottom centre */}
+          <StatusLine>
+            {msg ? <div className="text-accent-hi">{sentence(msg)}</div> : null}
+            {kosign && <div className="text-accent-hi">{kosign.path ? `Follow the line to ${kosign.room.label}` : 'No route to KOSIGN on this floor'}</div>}
+            <div className="text-ink-hi">
+              {hoverUnit ? `Unit ${hoverUnit} · Click to open` : `Floor ${floor} · ${total.assigned} of ${total.desks} seats taken`}
+            </div>
+          </StatusLine>
           {/* Export sits in the app header beside the Labels / Dark mode switches, as tall as they are */}
-          {headerActions && createPortal(
-            <ActionMenu items={[{ label: 'Export', onClick: exportFloor, accent: true }]} />,
-            headerActions)}
         </div>
       </div>
 

@@ -51,7 +51,7 @@ export function focusBox(K, r, vb0, { h = 40, minW = vb0.w * 0.3 } = {}) {
 export const overlaps = (a, b, pad = 0) => a.x < b.x + b.w * (1 + pad) && b.x - b.w * pad < a.x + a.w && a.y < b.y + b.h * (1 + pad) && b.y - b.h * pad < a.y + a.h;
 
 /**
- * The camera of one plan view (svg filling its parent).
+ * The camera of one plan view (svg filling its parent); onView(view) hears of every view it shows.
  * - vb: the committed viewBox (React state: render it as the svg's viewBox)
  * - live: ref to the view shown right now (vb, or where a move has got to)
  * - move(next | fn, settle = 140): show `next` at once (transform); commit it once quiet (see watch)
@@ -59,8 +59,10 @@ export const overlaps = (a, b, pad = 0) => a.x < b.x + b.w * (1 + pad) && b.x - 
  * - toSvg(clientX, clientY): the svg user point under a screen point, wherever the camera is
  * - scale(): screen px per svg unit of the view shown
  */
-export function useSvgCamera(svgRef, VB0) {
+export function useSvgCamera(svgRef, VB0, onView) {
   const [vb, setVb] = useState(VB0);
+  const seen = useRef(onView);   // onView(view): told every view shown (e.g. the zoom rail's depth)
+  seen.current = onView;
   const live = useRef(VB0), drawn = useRef(VB0), size = useRef([1, 1]);
   const raf = useRef(0), quiet = useRef({ id: 0, at: 0, frames: 0, settle: 140 });
 
@@ -87,17 +89,25 @@ export function useSvgCamera(svgRef, VB0) {
     if (!svgRef.current?.style.transform) measure();
     live.current = typeof next === 'function' ? next(live.current) : next;
     apply();
+    seen.current?.(live.current);
     const q = quiet.current;
     stopQuiet();
     if (settle != null) { Object.assign(q, { at: performance.now(), frames: 0, settle }); q.id = requestAnimationFrame(watch); }
   }, [commit]); // eslint-disable-line react-hooks/exhaustive-deps
   const cancel = useCallback(() => { cancelAnimationFrame(raf.current); raf.current = 0; }, []);
-  const jump = useCallback((next) => { cancel(); stopQuiet(); live.current = next; setVb(next); }, [cancel]);
+  const jump = useCallback((next) => { cancel(); stopQuiet(); live.current = next; setVb(next); seen.current?.(next); }, [cancel]);
   const glideTo = useCallback((to, { ms = 900, delay = 0, onDone, commit: keep = true } = {}) => {
     cancel();
     if (reduced()) { if (keep) jump(to); onDone?.(); return; }
-    const from = live.current, t0 = performance.now() + delay;
+    const from = live.current;
+    // zooming out: the wider destination is drawn first and enlarged toward it — the whole of it is there
+    // all the way (shrinking the narrower drawing instead showed blank margins until the glide ended)
+    if (keep && to.w > from.w * 1.02) { stopQuiet(); setVb(to); }
+    // the clock starts on the first frame the browser shows (a view that has just opened may still be laying
+    // out its drawing: a start time taken now would have the glide skip ahead once it can draw)
+    let t0 = null;
     const step = (now) => {
+      if (t0 === null) t0 = now + delay;
       const k = Math.max(0, Math.min(1, (now - t0) / ms)), e = ease(k), mix = (a, b) => a + (b - a) * e;
       move({ x: mix(from.x, to.x), y: mix(from.y, to.y), w: mix(from.w, to.w), h: mix(from.h, to.h) }, null);
       if (k < 1) raf.current = requestAnimationFrame(step);

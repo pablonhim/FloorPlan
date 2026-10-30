@@ -12,7 +12,7 @@ export default function MenuPanel({ open, onOpen, label, fill = false, width = '
   const [jelly, setJelly] = useState(false);
   const toggle = () => { if (open) setJelly(true); onOpen(!open); };
   return (
-    <div className={`pointer-events-none absolute inset-y-3 right-3 z-10 flex ${width} flex-col items-end justify-end gap-2`}>
+    <div className={`pointer-events-none absolute top-[3.75rem] bottom-3 right-3 z-10 flex ${width} flex-col items-end justify-end gap-2`}>
       {/* scales from the button's centre: 20px in from its right edge and 28px below the panel (8px gap + half
           the 40px button) */}
       <aside inert={!open} aria-hidden={!open} aria-label={label}

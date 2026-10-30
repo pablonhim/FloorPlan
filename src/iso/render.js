@@ -71,6 +71,28 @@ export function tipAttrs(item) {
 }
 
 /** Zone name tag on the floor plane, for the overlay layer above the furniture. */
+/**
+ * Name callouts for the occupied desks: an upright pill with the employee's name floating above each desk,
+ * a thin leader from the pill's bottom centre down to the desk's worktop, and a dot where it lands. Drawn in
+ * screen space (text stays upright and level), back to front so nearer pills overlap farther ones; meant for
+ * a layer over the whole scene.
+ */
+const CALLOUT = { z: 38, rise: 34, fs: 10, padX: 6, h: 15 };
+const textW = (s, fs) => [...s].reduce((w, c) => w + (/[\u1100-\uffff]/.test(c) ? 1.02 : 0.6) * fs, 0);
+export function renderDeskCallouts(K, items) {
+  const { z, rise, fs, padX, h } = CALLOUT;
+  return items.filter((it) => it.type === 'desk' && (it.name || '').trim())
+    .map((it) => { const f = footprint(it); return { it, cx: (it.gx + f.w / 2) * CELL, cy: (it.gy + f.d / 2) * CELL }; })
+    .sort((a, b) => a.cx + a.cy - (b.cx + b.cy))
+    .map(({ it, cx, cy }) => {
+      const name = it.name.trim(), [ax, ay] = K.P(cx, cy, z), top = ay - rise, w = textW(name, fs) + 2 * padX;
+      return `<g class="desk-callout" data-for="${esc(it.id)}"><line class="callout-lead" x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${ax.toFixed(1)}" y2="${top.toFixed(1)}"/>` +
+        `<circle class="callout-dot" cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="1.3"/>` +
+        `<rect class="callout-pill" x="${(ax - w / 2).toFixed(1)}" y="${(top - h).toFixed(1)}" width="${w.toFixed(1)}" height="${h}" rx="${h / 2}"/>` +
+        `<text class="callout-name" x="${ax.toFixed(1)}" y="${(top - h / 2 + fs * 0.36).toFixed(1)}" font-size="${fs}" text-anchor="middle">${esc(name)}</text></g>`;
+    }).join('');
+}
+
 export function renderZoneTag(K, item) {
   const n = itemNode(item);
   return `<g transform="${K.TOP(n.x0, n.y0, 0)}">${zoneTag(item, n.x1 - n.x0, n.y1 - n.y0)}</g>`;
@@ -144,14 +166,17 @@ export function renderScene(K, plan, items, { bare = false } = {}) {
   const edges = bare ? [] : edgeItems(plan);
   const area = (it) => { const f = footprint(it); return f.w * f.d; };
   const cafe = cafeIds(items), swung = roomDoorIds(items);
-  const g = (it, extra = '') => `<g class="it${isLive(it) ? ' live' : ''}${cafe.has(it.id) ? ' cafe' : ''}${swung.has(it.id) ? ' swung' : ''}${extra}"${extra ? '' : tipAttrs(it)}>${renderItem(K, it)}</g>`;
+  // items flagged `faded` (another unit's shell drawn round this one) are sorted in with the rest but drawn
+  // faded, cast no shadow and are no targets (.it.faded)
+  const g = (it, extra = '') => `<g class="it${it.faded ? ' faded' : ''}${isLive(it) ? ' live' : ''}${cafe.has(it.id) ? ' cafe' : ''}${swung.has(it.id) ? ' swung' : ''}${extra}"${extra ? '' : tipAttrs(it)}>${renderItem(K, it)}</g>`;
   const floor = items.filter((it) => LAYER[it.type] === 'floor')
     .sort((a, b) => (a.type === b.type ? area(b) - area(a) : a.type === 'zone' ? -1 : 1));
   let s = (bare ? '' : renderPlate(K, plan)) + floor.map((it) => g(it)).join('');
-  if (!bare) s += renderShadows(K, plan, items, edges);
+  if (!bare) s += renderShadows(K, plan, items.filter((it) => !it.faded), edges);
   s += depthSort([...items.filter((it) => LAYER[it.type] !== 'floor'), ...edges].map((it) => ({ ...itemNode(it), it })))
     .map((n) => g(n.it, n.it.id.startsWith('edge-') ? ' edge' : '')).join('');
   s += floor.filter((it) => it.type === 'zone').map((it) => `<g class="tag${isLive(it) ? ' live' : ''}">${renderZoneTag(K, it)}</g>`).join('');
+  if (!bare) s += `<g class="desk-callouts">${renderDeskCallouts(K, items.filter((it) => !it.faded))}</g>`;
   return s;
 }
 

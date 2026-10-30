@@ -16,6 +16,9 @@ import { ViewTools, Divider } from './ViewTools.jsx';
 import { vehicle, VEHICLE_DEFS } from '../iso/vehicles.js';
 import { leg, cubicLeg, pose, person, planPath, duration } from '../iso/scenes.js';
 import { showVia } from '../lib/svgCamera.js';
+import { exportPng } from '../lib/exportPng.js';
+import DockMenu from './DockMenu.jsx';
+import { factorOf, fracOf, onZoomCommand, setZoom } from '../lib/zoomStore.js';
 
 /*  World units: 1 m = M units. The building stands on a site plate with a 6.4 m margin.
     plate      0..PW × 0..PD, height PZ
@@ -316,6 +319,7 @@ function publicWC() {
     `<text class="pwc-sign" x="${b.d / 2}" y="3.1" font-size="1.9" text-anchor="middle" letter-spacing=".3">공용 화장실 · PUBLIC RESTROOM</text>` +
     `<text class="pwc-glyph" x="${b.d / 2}" y="${b.h - 12.4}" font-size="2.6" text-anchor="middle">♀ ♂</text>` +
     `<rect class="face recess" x="${dx - 0.6}" y="${b.h - 11.6}" width="${dw + 1.2}" height="11.6"/>` +
+    `<rect class="pwc-doorway" x="${dx}" y="${b.h - 11}" width="${dw}" height="11"/>` +     // the dark opening, seen while the door is open
     `<rect class="face pwc-door" x="${dx}" y="${b.h - 11}" width="${dw}" height="11"/>` +
     `<line class="entry-handle" x1="${dx + dw - 1.4}" y1="${b.h - 6.5}" x2="${dx + dw - 1.4}" y2="${b.h - 4.5}"/></g>`;
   s += `</g>`;
@@ -397,10 +401,10 @@ const ENTRY_RISE = 2.5;
 const LANDING = { x0: CX - 18, x1: CX + 18, y0: YB, y1: YB + 14 };
 const STEP = { n: 3, run: 1.5 };                          // three 0.3 m treads, ending just past the canopy (18)
 const ACCESS = [                                          // dir: which way the ramp runs down
-  // as wide as the landing: from the façade out to its front edge, by the canopy's front pillars
-  // long as the flower beds in front: out to the building's front corners (a gentler grade than 1:12)
-  { x0: wx(3.6), x1: LANDING.x0, y0: YB + 1, y1: LANDING.y1, dir: -1 },
-  { x0: LANDING.x1, x1: wx(28.9), y0: YB + 1, y1: LANDING.y1, dir: 1 },
+  // a plain straight slope either side of the steps: from the façade out to the flower beds' back walls
+  // (no strip of plaza between them), long as the beds: out to the building's front corners (gentler than 1:12)
+  { x0: wx(3.6), x1: LANDING.x0, y0: YB + 1, y1: DROP[0], dir: -1 },
+  { x0: LANDING.x1, x1: wx(28.9), y0: YB + 1, y1: DROP[0], dir: 1 },
 ];
 /** Height of the ramp deck at x (0 at its low end, ENTRY_RISE where it meets the landing). */
 const rampRise = (a, x) => ENTRY_RISE * (a.dir < 0 ? (x - a.x0) : (a.x1 - x)) / (a.x1 - a.x0);
@@ -418,10 +422,16 @@ const entryZ = (x, y) => {
 function accessRamp(a) {
   const { path } = K, top = PZ + ENTRY_RISE;
   const hi = a.dir < 0 ? a.x1 : a.x0, lo = a.dir < 0 ? a.x0 : a.x1;
-  let s = `<path class="face top struct entry-deck" d="${path([[lo, a.y0, PZ], [hi, a.y0, top], [hi, a.y1, top], [lo, a.y1, PZ]])}Z"/>`;
-  s += `<path class="face front struct" d="${path([[lo, a.y1, PZ], [hi, a.y1, top], [hi, a.y1, PZ]])}Z"/>`;
-  s += `<path class="face front struct" d="${path([[lo, a.y1, PZ], [hi, a.y1, top], [hi, a.y1, top + 0.6], [lo, a.y1, PZ + 0.6]])}Z"/>`; // curb
-  if (a.dir > 0) s += `<path class="face side struct" d="${path([[a.x1, a.y0, PZ], [a.x1, a.y1, PZ], [a.x1, a.y1, PZ + 0.6], [a.x1, a.y0, PZ + 0.6]])}Z"/>`;
+  // (no outlines: plain surfaces read cleaner beside the steps)
+  let s = `<path class="face top struct entry-deck plain" d="${path([[lo, a.y0, PZ], [hi, a.y0, top], [hi, a.y1, top], [lo, a.y1, PZ]])}Z"/>`;
+  s += `<path class="face front struct plain" d="${path([[lo, a.y1, PZ], [hi, a.y1, top], [hi, a.y1, PZ]])}Z"/>`;
+  s += `<path class="face front struct plain" d="${path([[lo, a.y1, PZ], [hi, a.y1, top], [hi, a.y1, top + 0.6], [lo, a.y1, PZ + 0.6]])}Z"/>`; // curb
+  if (a.dir > 0) {
+    s += `<path class="face side struct plain" d="${path([[a.x1, a.y0, PZ], [a.x1, a.y1, PZ], [a.x1, a.y1, PZ + 0.6], [a.x1, a.y0, PZ + 0.6]])}Z"/>`;
+  } else {
+    // the high end beside the steps: the landing covers it down to its front edge, the step flank below
+    s += `<path class="face side struct plain" d="${path([[hi, LANDING.y1, PZ], [hi, a.y1, PZ], [hi, a.y1, top], [hi, LANDING.y1, top]])}Z"/>`;
+  }
   return s;
 }
 /**
@@ -597,6 +607,7 @@ const FACES = facades().map((f) => {
   return { ...f, front, len, us, slots, node };
 });
 const ORDERED = depthSort(FACES.map((f) => f.node)).map((n) => FACES.find((f) => f.node === n));
+
 const SLOTS_PER_FLOOR = FACES.reduce((s, f) => s + f.slots.length, 0);
 
 // deterministic pane order + "lived-in" variants, so lighting a floor fills in the same way every time
@@ -638,7 +649,6 @@ export function buildSvg({ occ, cursor, away, vipArrived, vipGone }) {
   svg += vipDeck();      // the raised VIP route with its graded ramp, bays and markings
   svg += vipWallBack();  // VIP perimeter wall along the back (north) of the route
   svg += vipCars(vipArrived, vipGone); // VIP zone on the west (back-left) side, also behind the building
-  svg += publicWC();     // external public restroom on the west paved platform
   svg += ramp(RAMPS[1]); // west exit ramp: behind the building and inside its shadow
   svg += `<g class="anim-back"></g>`; // moving actors behind the building (filled per frame)
 
@@ -648,6 +658,9 @@ export function buildSvg({ occ, cursor, away, vipArrived, vipGone }) {
     // clipped to the plate's own rounded outline, so the shadow follows its corners exactly
     { z: PZ, clipId: 'twr-clip', clip: roundedRectPath(K, PLATE, PLATE_R, PZ), slices: 10, darkness: 0.22, spread: [0.7, 13], cls: 'twr-ground-shadow' }); // soft, light; only a slight blur at the base so it does not bleed onto the lit (right) side
   svg += `</g>`;
+  // the external public restroom on the west paved platform: after the building's ground shadow, which
+  // lies on the paving round it (drawn before, it painted over most of the restroom's roof)
+  svg += publicWC();
 
   svg += `<g class="bld">`; // the building itself: façades, roof and roof furniture (x-rayed on demand)
   // ---- façades, back to front: wall, per-floor bands with windows, pilasters on the pillar grid ----
@@ -743,6 +756,8 @@ const IN_C = (RAMPS[0].x0 + RAMPS[0].x1) / 2, OUT_C = (RAMPS[1].x0 + RAMPS[1].x1
 const DROP_Z = PZ + BZ - 2;                                        // ramp drop (see ramp())
 const rampZ = (r) => (x, y) => (y >= r.y1 ? PZ : PZ - DROP_Z * ((r.y1 - y) / (r.y1 - r.y0)));
 const CAR_SPEED = 64, RAMP_SPEED = 32, WALK_SPEED = 30;
+/** Scenes play this many times faster than their paths' own timing (cars, walkers, waits, the lift alike). */
+const PACE = 1.9;
 
 /** A bay car reverses out, follows the loop west and out at the south-west, comes back in at the
  *  south-east entry (it drives round the block, off the plate), then turns into the P↓IN ramp. */
@@ -775,14 +790,19 @@ export function leaveB1Path() {
 }
 
 /** A visitor steps out at the drop-off, walks west along the paving, crosses the P↑OUT ramp's mouth
- *  and goes up the path beside it to the public restroom's door. */
+ *  and goes up the path beside it to the public restroom's door, which swings open; they walk in through
+ *  it (the restroom turns see-through) and the door shuts behind them. */
 export function restroomPath() {
   const b = PUBLIC_WC, door = b.y + b.d / 2, xw = b.x + b.w + 2;
-  const inside = [b.x + b.w * 0.55, door];
+  const step = [b.x + b.w + 1.2, door], inside = [b.x + b.w * 0.55, door];
   return [
+    // on the restroom's open (east) side the whole way: drawn in front of it (front), never behind
     leg([CX - 22, DROP[0] - 2], [['L', RAMPS[1].x1 + 8, DROP[0] - 2], ['L', RAMPS[1].x1 + 2, YARD.road[0] + 2],
-      ['L', RAMPS[1].x0 - 1, YARD.road[0] + 2], ['L', xw, YARD.road[0] - 2], ['L', xw, door + 2], ['L', b.x + b.w + 0.5, door]], { speed: WALK_SPEED }),
-    // through the door: the restroom turns see-through and the visitor is seen inside
+      ['L', RAMPS[1].x0 - 1, YARD.road[0] + 2], ['L', xw, YARD.road[0] - 2], ['L', xw, door + 2], ['L', ...step]], { speed: WALK_SPEED, front: true }),
+    // at the door: it swings open (door)
+    { wait: 0.5, len: 0, front: true, door: true, at: { x: step[0], y: step[1], z: PZ, ux: -1, uy: 0 } },
+    // in through the doorway: the restroom turns see-through, the visitor seen inside it (layer pwc)
+    leg(step, [['L', ...inside]], { speed: WALK_SPEED, door: true, xray: 'xray-pwc', layer: 'pwc' }),
     { wait: 2.5, len: 0, hold: true, xray: 'xray-pwc', at: { x: inside[0], y: inside[1], z: PZ, ux: -1, uy: 0 } },
   ];
 }
@@ -876,6 +896,7 @@ const behindBuilding = ([x, y]) => SILHOUETTE.every((a, i) => {
 // ---- route camera: views as viewBox rectangles with the full view's aspect, kept inside it ----
 const VIEW_ALL = (() => { const [x, y, w, h] = K.viewBox.split(' ').map(Number); return { x, y, w, h }; })();
 const INTRO = 0.8;   // s the actor waits at its start while the camera zooms in on the route
+const ZMIN = 0.3;    // the closest view (wheel, zoom rail, routes): this share of the whole site's width
 const clampView = (cx, cy, f) => {
   const w = VIEW_ALL.w * f, h = VIEW_ALL.h * f;
   return { w, h, x: Math.min(VIEW_ALL.x + VIEW_ALL.w - w, Math.max(VIEW_ALL.x, cx - w / 2)), y: Math.min(VIEW_ALL.y + VIEW_ALL.h - h, Math.max(VIEW_ALL.y, cy - h / 2)) };
@@ -1184,16 +1205,18 @@ function FloorTip({ floor, plans, x, y, box }) {
   return (
     <div ref={card} className="frost floor-tip absolute z-20 w-80 max-h-[calc(100%-1rem)] overflow-hidden pointer-events-none rounded-xl p-3"
       style={{ left, top: Math.max(8, Math.min(y - 20, box.height - h - 8)) }} role="tooltip">
+      {/* the invitation first, a little louder, then whose floor it is */}
+      <div className="mb-0.5 text-[11px] font-semibold tracking-wide text-ink-hi">Click to hop in →</div>
       <div className="flex items-baseline justify-between">
-        <span className="text-[13px] font-semibold text-ink-hi">Floor {floor}</span>
+        <span className="text-[14px] font-semibold text-ink-hi">KOSIGN Floor {floor}</span>
         <span className="text-[11px] text-ink tabular-nums">{info.length} units · {total.s}/{total.d} seats</span>
       </div>
       <ul className="mt-2 flex flex-col gap-2">
         {info.map((u) => (
           <li key={u.unit} className="border-t border-edge pt-2">
             <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[12px] text-ink-hi"><span className="font-semibold text-accent">Unit {u.unit}</span> · {u.title}</span>
-              <span className="shrink-0 text-[11px] text-accent tabular-nums">{u.seats.desks ? `${u.seats.assigned}/${u.seats.desks}` : 'no desks'}</span>
+              <span className="text-[12px] text-ink-hi"><span className="font-semibold">Unit {u.unit}</span> · {u.title}</span>
+              <span className="shrink-0 text-[11px] text-ink tabular-nums">{u.seats.desks ? `${u.seats.assigned}/${u.seats.desks}` : 'no desks'}</span>
             </div>
             <div className="text-[10.5px] text-ink">{u.en}</div>
             {u.teams.length > 0 && <div className="mt-1 text-[11px] text-ink-hi"><span className="text-ink">Teams </span>{u.teams.join(', ')}</div>}
@@ -1201,14 +1224,15 @@ function FloorTip({ floor, plans, x, y, box }) {
           </li>
         ))}
       </ul>
-      <div className="mt-2 text-[10.5px] text-ink">Click to open the floor</div>
     </div>
   );
 }
 
 let duskPlayed = false; // the nightfall plays once per page load on mount, then only on theme switches
 
-export default function TowerView({ occupancy, plans, onOpen, onGuide, light, svgRef }) {
+export default function TowerView({ occupancy, plans, onOpen, onGuide, light, svgRef, active = true }) {
+  const activeNow = useRef(active);
+  activeNow.current = active;
   const [tip, setTip] = useState(null); // { floor, x, y } while a rented floor is hovered
   const [cursor, setCursor] = useState(RENTED[0]);
   const [msg, setMsg] = useState('');
@@ -1241,7 +1265,7 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
   const camSettled = useRef(false);
   // the viewBox last written on the svg (null: the full view) and the svg's size while the camera moves:
   // the move itself is a CSS transform; the viewBox is written once it settles (see svgCamera)
-  const camDrawn = useRef(null), camSize = useRef([1, 1]);
+  const camDrawn = useRef(null), camSize = useRef([1, 1]), camAimed = useRef(null);
   const gatesHeld = useRef(false);   // the Gate button holds the site gates open
   const [map, setMap] = useState(null);   // route shown on the mini-map ({ d, len }), while something moves
   const mapFor = useRef(null);
@@ -1274,9 +1298,9 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
     const el = holder.current;
     const layer = {};
     for (const k of ['back', 'front', 'mid1', 'mid2', 'pwc', 'ramp-in', 'ramp-out', 'over']) layer[k] = el?.querySelector(`.anim-${k}`);
-    let xray = '', lead = null;
+    let xray = '', lead = null, doorOpen = false;
     actors.current = actors.current.filter((a) => {
-      const p = pose(a.path, (now - a.t0) / 1000);
+      const p = pose(a.path, ((now - a.t0) / 1000) * PACE);
       if (!p) { a.onArrive?.(); drop(a); return false; }
       const z = p.z ?? PZ;
       const hold = !!p.leg.hold;
@@ -1291,8 +1315,9 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
       const east = !isBack && !p.leg.front && p.x > wx(EXTENT.w) && (p.y < YARD.road[0] || p.x > ENTRY[0] - 2);
       const onRamp = a.kind === 'car' && RAMPS.find((R) => p.x >= R.x0 - 1 && p.x <= R.x1 + 1 && p.y >= R.y0 - 2 && p.y <= R.y1);
       // inside the frosted building (the KOSIGN visitor, the lift): over it, clear and unblurred
-      const where = a.kind === 'lift' || p.leg.inside ? 'over' : onRamp ? `ramp-${onRamp.dir}` : hold && p.leg.xray === 'xray-pwc' ? 'pwc' : isBack ? 'back' : !east ? 'front'
-        : p.x < VIP_E.in[1] ? 'mid1' : p.x < VIP_WALL.x ? 'mid2' : 'front';
+      const where = p.leg.layer || (a.kind === 'lift' || p.leg.inside ? 'over' : onRamp ? `ramp-${onRamp.dir}` : hold && p.leg.xray === 'xray-pwc' ? 'pwc' : isBack ? 'back' : !east ? 'front'
+        : p.x < VIP_E.in[1] ? 'mid1' : p.x < VIP_WALL.x ? 'mid2' : 'front');
+      if (p.leg.door) doorOpen = true;   // someone is going in through the public restroom's door
       place(a, layer[where], p.leg.clip && !(hold && p.leg.unclip) ? p.leg.clip : null);
       if (a.kind === 'lift') {
         // the lift car, lit: it appears only once the camera has finished zooming in, its two doors
@@ -1340,9 +1365,11 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
         a.inner.removeAttribute('transform');
         a.inner.innerHTML = person(K, { x: p.x, y: p.y, z, ux: p.ux, uy: p.uy, dist: p.dist, m: M });
       }
-      if (pose(a.path, (now - a.t0) / 1000 + 1 / 30) === null) a.onArrive?.();
+      if (pose(a.path, ((now - a.t0) / 1000) * PACE + 1 / 30) === null) a.onArrive?.();
       return true;
     });
+    // the public restroom's door stands open while someone goes in through it
+    el?.querySelectorAll('.pwc-door, .pwc-doorway').forEach((d) => { if (d.classList.contains('open') !== doorOpen) d.classList.toggle('open', doorOpen); });
     // mini-map: the lead actor's arrow and how much of its route is done (two attribute writes a frame)
     if (lead) {
       const { a, p } = lead;
@@ -1384,6 +1411,18 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
       const want = g.classList.contains('in') ? gateIn : gateOut;
       if (g.classList.contains('open') !== want) g.classList.toggle('open', want);
     });
+    // zooming out (a scene ending, Fit, Reset): the wider view is drawn first and the camera enlarges it
+    // toward that view, so the whole of it is there all the way (shrinking the zoomed-in drawing instead
+    // showed blank margins until the move ended)
+    if (t !== camAimed.current) {
+      camAimed.current = t;
+      if (svgEl && t.w > c.w * 1.02 && d > 0.6) {
+        svgEl.setAttribute('viewBox', `${t.x.toFixed(2)} ${t.y.toFixed(2)} ${t.w.toFixed(2)} ${t.h.toFixed(2)}`);
+        camDrawn.current = t === VIEW_ALL ? null : { ...t };
+        if (!svgEl.style.transform) { const r = svgEl.getBoundingClientRect(); camSize.current = [r.width, r.height]; }
+        showVia(svgEl, camSize.current, camDrawn.current || VIEW_ALL, c);
+      }
+    }
     if (svgEl) {
       for (const cls of ['xray-bld', 'xray-pwc']) if (svgEl.classList.contains(cls) !== (xray === cls)) svgEl.classList.toggle(cls, xray === cls);
       if (d > 0.05) {                                // moving: ease toward the target
@@ -1399,6 +1438,7 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
         }
       }
     }
+    setZoom({ frac: fracOf(c.w / VIEW_ALL.w, ZMIN, 1) });   // the zoom rail follows the camera
     const done = !lead && d <= 0.05;
     if (done && t === VIEW_ALL) { svgEl?.setAttribute('viewBox', K.viewBox); showVia(svgEl, null, null, null); camDrawn.current = null; cam.current = null; }
     if (done) last.current = 0;
@@ -1419,21 +1459,21 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
 
   const parkIn = () => {
     const k = [...PARKED.keys()].reverse().find((j) => !away.has(PARKED[j]));
-    if (k === undefined) { setMsg('every bay car is already down in B1 · reset to bring them back'); return; }
+    if (k === undefined) { setMsg('All the cars are already parked in B1'); return; }
     const [model, paint] = BAY_FLEET[k % BAY_FLEET.length];
     setAway((s) => new Set(s).add(PARKED[k]));
     start({ kind: 'car', model, paint, path: parkInPath(PARKED[k]) });
-    setMsg(`bay P${PARKED[k] + 1} · round the block and down the P↓IN ramp into B1`);
+    setMsg(`Car P${PARKED[k] + 1} is heading down to B1`);
   };
   const leaveB1 = () => {
     const [model, paint] = EXIT_FLEET[nextExit.current++ % EXIT_FLEET.length];
     start({ kind: 'car', model, paint, path: leaveB1Path() });
-    setMsg('a car is coming up the P↑OUT ramp and leaving by the south-west exit');
+    setMsg('A car is driving out of B1');
   };
   const toVip = () => {
     const taken = (b) => (VIP_PARKED.includes(b) || vipArrived.has(b)) && !vipGone.has(b);
     const bay = [...VIP_FREE, ...VIP_PARKED].find((b) => !taken(b) && !vipPending.current.has(b));
-    if (bay === undefined) { setMsg('the VIP bays are full · reset to clear them'); return; }
+    if (bay === undefined) { setMsg('The VIP bays are full'); return; }
     vipPending.current.add(bay);
     const [model, paint] = VIP_GUESTS[VIP_FREE.indexOf(bay) % VIP_GUESTS.length];
     let done = false;
@@ -1446,17 +1486,17 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
         setVipArrived((m) => new Map(m).set(bay, [model, paint]));
         setVipGone((s) => { const n = new Set(s); n.delete(bay); return n; });
       } });
-    setMsg(`a guest is driving up the VIP lane to VIP ${bay + 1}`);
+    setMsg(`A guest is heading to VIP ${bay + 1}`);
   };
   const leaveVip = () => {
     // the most recent arrival leaves first, otherwise the last of the original VIP cars
     const parkedNow = [...VIP_PARKED.filter((b) => !vipGone.has(b)), ...[...vipArrived.keys()].filter((b) => !vipGone.has(b))];
     const bay = parkedNow.at(-1);
-    if (bay === undefined) { setMsg('no VIP car is parked · reset to bring them back'); return; }
+    if (bay === undefined) { setMsg('No VIP cars are parked'); return; }
     const [model, paint] = vipArrived.get(bay) || VIP_FLEET[VIP_PARKED.indexOf(bay) % VIP_FLEET.length];
     setVipGone((s) => new Set(s).add(bay));
     start({ kind: 'car', model, paint, path: vipLeavePath(bay, VIP_REVERSED.has(bay) && !vipArrived.has(bay)) });
-    setMsg(`VIP ${bay + 1} is leaving · out through the VIP exit barrier`);
+    setMsg(`VIP ${bay + 1} is heading out`);
   };
   const goKosign = (floor) => {
     setCursor(floor);   // the target floor is highlighted while the visitor heads there
@@ -1473,8 +1513,8 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
       onArrive: () => { if (done) return; done = true; onGuide?.(floor); } });
     start({ kind: 'person', path: walk, view });
     clearTimeout(exitTimer.current);
-    exitTimer.current = setTimeout(() => start({ kind: 'person', path: exit, view }), (INTRO + duration(walk) + LIFT_RISE) * 1000);
-    setMsg(`to KOSIGN on floor ${floor} · in through the lobby to the east lifts`);
+    exitTimer.current = setTimeout(() => start({ kind: 'person', path: exit, view }), ((INTRO + duration(walk) + LIFT_RISE) * 1000) / PACE);
+    setMsg(`On the way to KOSIGN, floor ${floor}`);
   };
   // ATM button: zoom the camera to the ATM room, or back out to the whole site
   const focusView = useRef(null);
@@ -1495,7 +1535,7 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
   };
   const toRestroom = () => {
     start({ kind: 'person', path: restroomPath() });
-    setMsg('a visitor is walking from the drop-off to the public restroom');
+    setMsg('A visitor is walking to the restroom');
   };
   const resetScene = () => {
     clearTimeout(exitTimer.current);
@@ -1518,10 +1558,123 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
     setGatesOpen(false);
     vipPending.current.clear();
     if (cam.current) loop.current = requestAnimationFrame(tick);   // ease the camera back out
-    setMsg('cars back in their bays');
+    setMsg('All cars are back in their bays');
   };
 
-  useEffect(() => { holder.current?.focus(); }, []);
+  useEffect(() => { if (active) holder.current?.focus({ preventScroll: true }); }, [active]);   // ↑ ↓ Enter work at once, also on coming back
+
+
+  // wheel / zoom rail: the camera's own target (focusView), zoomed about the pointer between the whole site
+  // and ZMIN of it. While a scene runs, it drives the camera.
+  const zoomBy = (deltaY, at) => {
+    if (actors.current.length) return;
+    const c = focusView.current || VIEW_ALL, f0 = c.w / VIEW_ALL.w, raw = f0 * Math.exp(deltaY * 0.0015);
+    if (deltaY < 0 && f0 <= ZMIN * 1.001) return;     // as close as it goes
+    // as far out as it goes: the whole site, centred again (also after a drag moved it aside)
+    if (deltaY > 0 && f0 >= 0.999) { if (focusView.current) { focusView.current = null; if (!loop.current) loop.current = requestAnimationFrame(tick); } return; }
+    const f = Math.max(ZMIN, Math.min(1, raw)), k = f / f0, p = at || { x: c.x + c.w / 2, y: c.y + c.h / 2 };
+    // about the pointer, wherever the view has been dragged to (no pulling it back inside the site view)
+    focusView.current = f >= 0.999 && c === VIEW_ALL ? null : { x: p.x - (p.x - c.x) * k, y: p.y - (p.y - c.y) * k, w: c.w * k, h: c.h * k };
+    setAtmZoom(false);
+    if (!loop.current) loop.current = requestAnimationFrame(tick);
+  };
+  const zoomRef = useRef(zoomBy);
+  zoomRef.current = zoomBy;
+  useEffect(() => {
+    const el = holder.current;
+    if (!el) return undefined;
+    const onWheel = (e) => {
+      e.preventDefault();
+      // the svg point under the pointer, in the view shown now (the svg fills the holder)
+      const r = el.getBoundingClientRect(), c = cam.current || VIEW_ALL, k = Math.min(r.width / c.w, r.height / c.h);
+      zoomRef.current(e.deltaY, { x: c.x + (e.clientX - r.left - (r.width - c.w * k) / 2) / k, y: c.y + (e.clientY - r.top - (r.height - c.h * k) / 2) / k });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    // drag pans the view, at any zoom and as freely as in the floor and unit views: straight on the compositor
+    // while dragging (svgCamera's showVia), the viewBox written once on release; a press without movement
+    // is still a click (it picks a floor)
+    let drag = null;
+    const svgOf = () => el.querySelector('svg.twr');
+    // show view v at once (no easing): the camera's target and position both jump there, moved on the
+    // compositor; commitNow() writes it as the viewBox (pan release, zoom-rail drag release)
+    const showNow = (v) => {
+      cancelAnimationFrame(loop.current); loop.current = 0;
+      focusView.current = v;
+      cam.current = { ...v };
+      const svgEl = svgOf();
+      if (!svgEl.style.transform) { const rr = svgEl.getBoundingClientRect(); camSize.current = [rr.width, rr.height]; }
+      showVia(svgEl, camSize.current, camDrawn.current || VIEW_ALL, v);
+      setZoom({ frac: fracOf(v.w / VIEW_ALL.w, ZMIN, 1) });
+      };
+    const commitNow = () => {
+      const svgEl = svgOf(), v = cam.current;
+      if (!v || !svgEl.style.transform) return;
+      svgEl.setAttribute('viewBox', `${v.x.toFixed(2)} ${v.y.toFixed(2)} ${v.w.toFixed(2)} ${v.h.toFixed(2)}`);
+      camDrawn.current = { ...v };
+      showVia(svgEl, null, null, null);
+    };
+    const onDown = (e) => {
+      if (e.button !== 0 || actors.current.length || e.target.closest('button, figure, a, input')) return;
+      // the drawing's labels are not text to select: a press on one starts a drag, never a selection (and a
+      // selection left from elsewhere is dropped, so the drag cannot pick it up and stick)
+      if (e.target.closest('svg.twr')) { e.preventDefault(); window.getSelection()?.removeAllRanges(); el.focus({ preventScroll: true }); }
+      const r = el.getBoundingClientRect(), c = { ...(cam.current || focusView.current || VIEW_ALL) };
+      drag = { sx: e.clientX, sy: e.clientY, c, k: Math.min(r.width / c.w, r.height / c.h), id: e.pointerId, moved: false };
+    };
+    const onMove = (e) => {
+      if (!drag) return;
+      if (!drag.moved) {
+        if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
+        drag.moved = true;
+        el.setPointerCapture?.(drag.id);
+        el.classList.add('panning');
+      }
+      const { c, k } = drag;
+      showNow({ x: c.x - (e.clientX - drag.sx) / k, y: c.y - (e.clientY - drag.sy) / k, w: c.w, h: c.h });
+    };
+    const onUp = () => {
+      if (!drag) return;
+      const { moved } = drag;
+      drag = null;
+      el.classList.remove('panning');
+      if (!moved) return;
+      commitNow();
+      // the click that ends a drag is not a floor pick
+      const swallow = (ev) => ev.stopPropagation();
+      el.addEventListener('click', swallow, true);
+      setTimeout(() => el.removeEventListener('click', swallow, true), 0);
+    };
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+    zoomCmd.current = (cmd) => {
+      if (cmd.step) { zoomRef.current(-cmd.step * 260); return; }
+      if (cmd.settle) { commitNow(); return; }
+      if (cmd.fit) {            // the whole site, centred
+        if (actors.current.length) return;
+        focusView.current = null;
+        setAtmZoom(false);
+        if (!loop.current) loop.current = requestAnimationFrame(tick);
+        return;
+      }
+
+      if (cmd.now) {            // dragging the rail's thumb: the zoom follows it at once, about the view's centre
+        if (actors.current.length) return;
+        const c = cam.current || focusView.current || VIEW_ALL, f = factorOf(cmd.frac, ZMIN, 1), w = VIEW_ALL.w * f, h = VIEW_ALL.h * f;
+        showNow({ x: c.x + c.w / 2 - w / 2, y: c.y + c.h / 2 - h / 2, w, h });
+        return;
+      }
+      const c = focusView.current || VIEW_ALL, f = factorOf(cmd.frac, ZMIN, 1);
+      zoomRef.current(Math.log(f / (c.w / VIEW_ALL.w)) / 0.0015 || 0.0001);
+    };
+    setZoom({ frac: cam.current ? fracOf(cam.current.w / VIEW_ALL.w, ZMIN, 1) : 0 });
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('pointerdown', onDown); el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp); el.removeEventListener('pointercancel', onUp);
+    };
+  }, []);
 
   // entering dark mode: the windows start dark, then the lights flicker on one by one and the floors bloom
   const mounting = useRef(true);
@@ -1555,11 +1708,31 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
     else return;
     e.preventDefault();
   };
+  // the zoom rail drives this view only while it is on screen (kept alive by App otherwise)
+  const zoomCmd = useRef(null);
+  useEffect(() => {
+    if (!active) return undefined;
+    setZoom({ frac: cam.current ? fracOf(cam.current.w / VIEW_ALL.w, ZMIN, 1) : 0 });
+    return onZoomCommand((cmd) => zoomCmd.current?.(cmd));
+  }, [active]);
+  // Esc, anywhere on the page: stop every scene and go back to the default view (as Reset). Left to the
+  // search box, menus and panels while one of them has the key (they close themselves on Esc)
+  const resetRef = useRef(null);
+  resetRef.current = resetScene;
+  useEffect(() => {
+    const onEsc = (e) => {
+      if (!activeNow.current || e.key !== 'Escape' || e.defaultPrevented || e.target.closest?.('input, textarea, select, [role="menu"], [role="dialog"]')) return;
+      if (!actors.current.length && !focusView.current && !cam.current) return;   // nothing to stop
+      resetRef.current();
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, []);
 
   const o = occupancy[cursor];
   const read = msg || (RENTED.includes(cursor)
-    ? `floor ${cursor} · units ${UNITS[cursor].join(' & ')} · ${o.assigned}/${o.desks} seats · enter to edit`
-    : cursor === 0 ? 'floor G · lobby' : `floor ${cursor} · vacant`);
+    ? `Floor ${cursor} · ${o.assigned} of ${o.desks} seats taken`
+    : cursor === 0 ? 'Ground floor · Lobby' : `Floor ${cursor} · Vacant`);
 
   return (
     <div ref={holder} tabIndex={0} onKeyDown={onKey} className="relative flex-1 min-h-0 overflow-hidden outline-none stage-glow">
@@ -1588,29 +1761,31 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
           vipNext === 'drive'
             ? ['Park at VIP', () => { toVip(); setVipNext('leave'); }, 'A guest car drives in by the VIP lane, through the barrier, and parks in a free VIP bay', false, ICON.vip]
             : ['Leave VIP', () => { leaveVip(); setVipNext('drive'); }, 'A parked VIP car drives out through the VIP exit barrier and off the site', true, ICON.leave],
-          ['Walk to restroom', toRestroom, 'A visitor walks from the drop-off to the public restroom', false, ICON.walk],
+          ['Restroom', toRestroom, 'A visitor walks from the drop-off to the public restroom', false, ICON.walk],
           atmZoom
-            ? ['Exit ATM view', () => focusAtm(false), 'Back out to the whole site', true, ICON.atm]
+            ? ['Exit ATM', () => focusAtm(false), 'Back out to the whole site', true, ICON.atm]
             : ['ATM', () => focusAtm(true), 'Zoom in to the ATM room on the front lawn', false, ICON.atm],
           gatesOpen
             ? ['Close gates', () => holdGates(false), 'Slide the site entrance and exit gates shut', true, ICON.gate]
-            : ['Gate', () => holdGates(true), 'Slide the site entrance and exit gates open (and keep them open)', false, ICON.gate],
+            : ['Open gates', () => holdGates(true), 'Slide the site entrance and exit gates open (and keep them open)', false, ICON.gate],
         ].map(([label, fn, tip, leave, glyph], i) => (
           <SceneButton key={label} place={i ? 'above' : 'above-start'} compact docked label={label} tip={tip} onClick={fn} red={leave}>{glyph}</SceneButton>
         ))}
         {/* a divider sets the KOSIGN floor buttons apart from the site scenes */}
         <Divider />
         {RENTED.map((f) => (
-          <SceneButton key={f} place="above" compact docked label={`Go to KOSIGN · floor ${f}`} tip={`Walk in, take the east lift to floor ${f} and follow the route to KOSIGN`} onClick={() => goKosign(f)}>
+          <SceneButton key={f} place="above" compact docked label={`KOSIGN ${f}F`} tip={`Walk in, take the east lift to floor ${f} and follow the route to KOSIGN`} onClick={() => goKosign(f)}>
             <span className="text-[11px] font-semibold tabular-nums">{f}F</span>
           </SceneButton>
         ))}
         <Divider />
         <SceneButton place="above" compact docked label="Reset" tip="Every car back in its bay, every scene stopped" onClick={resetScene}>{ICON.reset}</SceneButton>
+        <Divider />
+        <DockMenu items={[{ label: 'Export PNG', icon: 'export', onClick: () => exportPng(svgRef.current, { filename: 'tela-office-building.png' }).catch(() => {}) }]} />
       </ViewTools>
       <svg
         ref={svgRef}
-        className="twr w-full h-full block"
+        className="twr w-full h-full block select-none touch-none"
         viewBox={K.viewBox}
         role="img"
         aria-label="Isometric view of the TELA Office Building, 11 storeys including the ground floor. Floors 2 and 4 are rented and glow; click one, or use arrow keys and Enter, to open its floor plan."
@@ -1628,10 +1803,8 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
         <g dangerouslySetInnerHTML={{ __html: svg }} />
       </svg>
       {tip && plans && <FloorTip {...tip} plans={plans} box={holder.current.getBoundingClientRect()} />}
-      {/* bottom line: both texts share the floor-menu button's row (bottom-3, 40px tall) so they line up with its centre */}
-      {/* bottom row (same 40px line as the floor-menu button): credit at the left, hint centred */}
-      <div className="pointer-events-none absolute left-1/2 bottom-3 flex h-10 -translate-x-1/2 items-center whitespace-nowrap text-[12px] text-ink">click a lit floor · ↑↓ + enter</div>
-      <div className="pointer-events-none absolute right-16 bottom-3 flex h-10 items-center text-[12px] text-ink-hi tabular-nums" aria-live="polite">{read}</div>
+      {/* bottom centre, on the docks' 40px line: the floor picked, or what a scene is doing */}
+      <div className="pointer-events-none absolute bottom-3 left-1/2 flex h-10 -translate-x-1/2 items-center whitespace-nowrap text-[12px] text-ink-hi tabular-nums" aria-live="polite">{read}</div>
     </div>
   );
 }

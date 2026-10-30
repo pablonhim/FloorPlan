@@ -4,28 +4,43 @@
 // the floor plane z = 0) → cell (floor) → origin (minus grab offset, clamped) → validate().
 // Nothing is stored unless it passes validate(), so placement is 100% grid-snapped.
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { CELL, CUT_H } from '../iso/units.js';
-import { centerGrab, collides, footprint, normRot, rotateItem, snapOrigin, validate, worldToCell, onPlate } from '../iso/grid.js';
+import { cellRect, centerGrab, collides, footprint, normRot, rotateItem, snapOrigin, validate, worldToCell, onPlate } from '../iso/grid.js';
 import { depthSort } from '../iso/depth.js';
-import { planFrame, itemNode, renderCell, renderFoot, renderItem, renderPlate, renderZoneTag, renderShadows, renderScene, edgeItems, cafeIds } from '../iso/render.js';
+import { planFrame, itemNode, renderCell, renderFoot, renderItem, renderPlate, renderZoneTag, renderShadows, renderScene, renderDeskCallouts, edgeItems, cafeIds } from '../iso/render.js';
 import { isLive, describe, defaults, LAYER, CORE, tipFor } from '../model/catalog.js';
-import { PLANS, UNITS, stats, floorPlan, coreItems, toFloor, CORE as CORE_AT } from '../model/floors.js';
+import { PLANS, UNITS, stats, floorPlan, coreItems, toFloor } from '../model/floors.js';
 import { exportPng } from '../lib/exportPng.js';
 import IsoDefs from './IsoDefs.jsx';
 import { entryDoors, roomDoorIds, useDoorSwing } from '../iso/doorSwing.js';
 import { focusBox, overlaps, useSvgCamera } from '../lib/svgCamera.js';
+import { reportDepth, usePlanZoom } from '../lib/planZoom.js';
+import { keep } from '../lib/keep.js';
+import { ghostBuilding } from '../iso/ghost.js';
 import Palette from './Palette.jsx';
 import Inspector from './Inspector.jsx';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
 import SceneButton, { icon } from './SceneButton.jsx';
-import { ViewTools, Divider, FloorUnitButtons } from './ViewTools.jsx';
-import ActionMenu from './ActionMenu.jsx';
+import { ViewTools, Divider, FloorUnitButtons, StatusLine, sentence } from './ViewTools.jsx';
+import DockMenu from './DockMenu.jsx';
 import MenuPanel from './MenuPanel.jsx';
 
-const ItemG = memo(function ItemG({ K, item, cls, cut, ghost }) {
-  const html = useMemo(() => renderItem(K, item, cut), [K, item, cut]);
+/** Each item's drawing, made once and kept (by item: an edited item is a new object; a unit's items are
+ *  only ever drawn in that unit's frame). Filled ahead of time while the app is idle (prewarmUnits). */
+const ITEM_HTML = new WeakMap();
+const htmlOf = (K, item, cut) => {
+  if (cut !== Infinity || item.id === 'ghost') return renderItem(K, item, cut);
+  let h = ITEM_HTML.get(item);
+  if (h === undefined) { h = renderItem(K, item, cut); ITEM_HTML.set(item, h); }
+  return h;
+};
+
+const ItemG = memo(function ItemG({ K, item, cls, cut, ghost, faded, unit }) {
+  const html = useMemo(() => htmlOf(K, item, cut), [K, item, cut]);
   const tip = !ghost && tipFor(item);   // the hover card's text (HoverTip)
+  // a faded piece round the unit (building core, or a neighbouring unit's: `unit`, which a click glides
+  // over to): shown, never edited, not exported
+  if (faded) return <g className={cls} data-unit={unit} data-noexport="" dangerouslySetInnerHTML={{ __html: html }} />;
   return ghost || item.id.startsWith('edge-')
     ? <g className={cls} data-noexport={ghost ? '' : undefined} dangerouslySetInnerHTML={{ __html: html }} />
     : <g data-id={item.id} className={cls} data-tip={tip?.title} data-tip-sub={tip?.sub || undefined} dangerouslySetInnerHTML={{ __html: html }} />;
@@ -40,16 +55,88 @@ function nextDeskLabel(items, pid) {
 
 const area = (it) => { const f = footprint(it); return f.w * f.d; };
 
-export default function FloorEditor({ pid, items: allItems, plans, dispatch, onBack, onSwitch, light, savedAt, focus = null }) {
+/** A unit's frame, kept per unit (lib/keep). */
+const unitFrame = (pid) => keep(`unit-frame:${pid}`, [], () => planFrame(PLANS[pid]));
+const unitPlate = (pid) => keep(`unit-plate:${pid}`, [], () => renderPlate(unitFrame(pid), PLANS[pid]));
+/** The building ghosted under the unit: only its outer line, storey by storey down to the ground. */
+const unitGhost = (pid) => keep(`unit-ghost:${pid}`, [], () => ghostBuilding(unitFrame(pid), PLANS[pid].mask, PLANS[pid].floor));
+
+// the floor's other units, faded, where they really are around this one (as on the floor overview);
+// hover lifts one, a click glides the camera over to it and opens it (see glide). Their floor (plate,
+// zones, door swings) lies under this unit. Their walls, pillars and furniture within NEAR cells of this
+// unit are depth-sorted in with its own items (see solidNodes): drawn as one block over or under it,
+// the faded walls along a shared boundary painted over desks in front of them (e.g. unit D's beside the
+// CSO seat in 4C). Pieces farther off cannot cross this unit on screen and are drawn as one block
+// behind or in front of it, by their own depth.
+function unitNeighbours(pid, plans) {
+  const plan = PLANS[pid], K = unitFrame(pid), fp = floorPlan(plan.floor);
+  return keep(`unit-nb:${pid}`, fp.units.filter((u) => u.id !== pid).map((u) => plans?.[u.id]), () => {
+    const NEAR = 10;
+    const me = fp.units.find((u) => u.id === pid);
+    if (!me) return [];
+    const mid = (plan.cols + plan.rows) / 2;
+    return fp.units.filter((u) => u.id !== pid).map((u) => {
+      const p = PLANS[u.id], Ku = planFrame(p), dx = u.ox - me.ox, dy = u.oy - me.oy;
+      const [ox, oy] = K.D(dx * CELL, dy * CELL, 0);
+      const own = (plans?.[u.id] || []).filter((it) => !CORE.has(it.type));
+      // in this unit's cells, ids kept apart from its own (outer walls keep their edge- prefix)
+      const its = toFloor([...own, ...edgeItems(p)], dx, dy)
+        .map((it) => ({ ...it, id: it.id.startsWith('edge-') ? `edge-nb${u.unit}-${it.id}` : `nb${u.unit}-${it.id}` }));
+      const flat = its.filter((it) => LAYER[it.type] === 'floor'), solid = its.filter((it) => LAYER[it.type] !== 'floor');
+      const near = [], behind = [], ahead = [];
+      for (const it of solid) {
+        const r = cellRect(it);
+        if (r.x1 > -NEAR && r.x0 < plan.cols + NEAR && r.y1 > -NEAR && r.y0 < plan.rows + NEAR) near.push(it);
+        else ((r.x0 + r.x1 + r.y0 + r.y1) / 2 > mid ? ahead : behind).push(it);
+      }
+      const block = (list) => (list.length ? renderScene(K, plan, list, { bare: true }) : '');
+      return {
+        unit: u.unit, near,
+        flat: `<g transform="translate(${ox.toFixed(2)} ${oy.toFixed(2)})">${renderPlate(K, p)}</g>${renderScene(K, plan, flat, { bare: true })}`,
+        behind: block(behind), ahead: block(ahead),
+        // that unit's own fitted view, in this unit's svg coordinates: where the glide ends
+        to: { x: K.OX - Ku.OX + ox, y: K.OY - Ku.OY + oy, w: Ku.W, h: Ku.H },
+      };
+    });
+  });
+}
+// the building core round it too (corridor, lifts, WCs, storage rooms, stairs), faded, not clickable. Its
+// flat parts (zones, door swings) lie under the unit; its walls, lifts and fixtures are depth-sorted in
+// with the unit's own items (see solidNodes): the WC pocket sits inside the unit's outline, behind some of
+// its walls and in front of others, so drawing the core as one block over or under the unit was wrong
+function unitCore(pid) {
+  const plan = PLANS[pid], K = unitFrame(pid);
+  return keep(`unit-core:${pid}`, [], () => {
+    const me = floorPlan(plan.floor).units.find((u) => u.id === pid);
+    if (!me) return null;
+    const its = toFloor(coreItems(), -me.ox, -me.oy);
+    const flat = its.filter((it) => LAYER[it.type] === 'floor');
+    return {
+      flat: renderScene(K, plan, flat, { bare: true }),
+      solid: its.filter((it) => LAYER[it.type] !== 'floor'),
+    };
+  });
+}
+
+/** Build every unit's surroundings and item drawings ahead of time (App runs these while the app is idle). */
+export const prewarmUnits = (plans) => Object.keys(PLANS).flatMap((pid) => [
+  () => { unitNeighbours(pid, plans); unitCore(pid); unitGhost(pid); unitPlate(pid); },
+  () => { const K = unitFrame(pid); for (const it of plans[pid] || []) htmlOf(K, it, Infinity); },
+]);
+
+/** Zoom range: view width as a share of the fitted width (closest, farthest). */
+const ZOOM = { min: 0.12, max: 1.5 };
+
+export default function FloorEditor({ pid, items: allItems, plans, dispatch, onBack, onSwitch, light, savedAt, focus = null, active = true }) {
   // The office view: the unit's own building-core items (elevators, restrooms, stairwells) are hidden here
   // (the faded core round the unit shows them); they still block placement, so nothing can be stacked onto
   // the real core. (A building-core mode used to show them; the view is now always the office view.)
   const showCore = false;
   const items = useMemo(() => allItems.filter((it) => !CORE.has(it.type)), [allItems]);
   const plan = PLANS[pid];
-  const K = useMemo(() => planFrame(plan), [plan]);
+  const K = unitFrame(pid);
   const VB0 = useMemo(() => ({ x: 0, y: 0, w: K.W, h: K.H }), [K]);
-  const edges = useMemo(() => edgeItems(plan), [plan]);
+  const edges = keep(`unit-edges:${pid}`, [], () => edgeItems(plan));
   const svgRef = useRef(null);
   const stageRef = useRef(null);
   const [tip, tipMove, tipHide] = useHoverTip(stageRef);
@@ -58,7 +145,9 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const swingDoors = useMemo(() => entryDoors(allItems), [allItems]);
   useDoorSwing(doorsRef, K, swingDoors, pid);
   // the camera: moves are CSS transforms, the viewBox (cam.vb) is written once a move settles (svgCamera)
-  const cam = useSvgCamera(svgRef, VB0);
+  const cam = useSvgCamera(svgRef, VB0, reportDepth(K, ZOOM.min, ZOOM.max));
+  // wheel / zoom rail: this unit's own zoom range
+  const zoomBy = usePlanZoom(cam, K, { ...ZOOM, active });
   const vb = cam.vb;
   const [placing, setPlacing] = useState(null); // { type, rot, via }
   const [selected, setSelected] = useState(null);
@@ -217,12 +306,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     const onWheel = (e) => {
       e.preventDefault();
       cam.cancel();
-      const p = toSvg(e);
-      cam.move((v) => {
-        const w = Math.max(K.W * 0.12, Math.min(K.W * 1.5, v.w * Math.exp(e.deltaY * 0.0015)));
-        const k = w / v.w;
-        return { x: p.x - (p.x - v.x) * k, y: p.y - (p.y - v.y) * k, w, h: v.h * k };
-      });
+      zoomBy(e.deltaY, toSvg(e));
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
@@ -276,6 +360,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   };
 
   useEffect(() => {
+    if (!active) return undefined;   // kept alive but not on screen (App): the keys are another view's
     const onKey = (e) => {
       if (e.target.closest?.('input, textarea, select')) return;
       const k = e.key;
@@ -296,14 +381,18 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [rotate, remove, nudge, placing, dispatch]);
+  }, [rotate, remove, nudge, placing, dispatch, active]);
 
   // ---------- scene ----------
-  const plate = useMemo(() => renderPlate(K, plan), [K, plan]);
+  const plate = unitPlate(pid);
   const cafe = useMemo(() => cafeIds(allItems), [allItems]);
   const swung = useMemo(() => roomDoorIds(allItems), [allItems]);
   const lifted = ghost?.mode === 'move' ? drag.current?.base?.id : null;
   const clsOf = (it) => `it${isLive(it) ? ' live' : ''}${cafe.has(it.id) ? ' cafe' : ''}${swung.has(it.id) ? ' swung' : ''}${it.id === selected ? ' sel' : ''}${it.id === lifted ? ' lifted' : ''}${it.locked ? ' locked' : ''}`;
+
+  const neighbours = unitNeighbours(pid, plans);
+  const core = unitCore(pid);
+  const bldGhost = unitGhost(pid);
 
   // floor layer (zones, then door swings) lies under everything; the rest is depth-sorted
   const floorNodes = useMemo(() => items.filter((it) => LAYER[it.type] === 'floor')
@@ -311,40 +400,19 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const solidNodes = useMemo(() => {
     const list = [...items.filter((it) => LAYER[it.type] !== 'floor'), ...edges]
       .map((it) => ({ ...itemNode(it), it, cls: it.id.startsWith('edge-') ? 'it edge' : clsOf(it) }));
+    for (const it of core?.solid || []) list.push({ ...itemNode(it), it, faded: true, cls: 'it core-faded' });
+    for (const n of neighbours) for (const it of n.near) list.push({ ...itemNode(it), it, faded: true, unit: n.unit, cls: 'it nbi' });
     if (ghost) list.push({ ...itemNode(ghost.item), it: ghost.item, ghost: true, cls: `it ghost${isLive(ghost.item) ? ' live' : ''}${ghost.ok ? '' : ' bad'}` });
     return depthSort(list);
-  }, [items, edges, ghost, selected, lifted]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [items, edges, ghost, selected, lifted, core, neighbours]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const shadows = useMemo(() => renderShadows(K, plan, items, edges), [K, plan, items, edges]);
 
+  // the employees' names, floating above their desks (renderDeskCallouts), over everything
+  const callouts = useMemo(() => renderDeskCallouts(K, items), [K, items]);
   const tags = useMemo(() => floorNodes.filter((it) => it.type === 'zone')
     .map((it) => `<g class="tag${isLive(it) ? ' live' : ''}">${renderZoneTag(K, it)}</g>`).join(''), [floorNodes, K]);
 
-  // the floor's other units, faded, where they really are around this one (as on the floor overview);
-  // hover lifts one, a click glides the camera over to it and opens it (see glide)
-  const neighbours = useMemo(() => {
-    const fp = floorPlan(plan.floor), me = fp.units.find((u) => u.id === pid);
-    if (!me) return [];
-    return fp.units.filter((u) => u.id !== pid).map((u) => {
-      const p = PLANS[u.id], Ku = planFrame(p);
-      const [ox, oy] = K.D((u.ox - me.ox) * CELL, (u.oy - me.oy) * CELL, 0);
-      const its = (plans?.[u.id] || []).filter((it) => showCore || !CORE.has(it.type));
-      return {
-        unit: u.unit, ahead: u.ox - me.ox + u.oy - me.oy > 0,   // in front of this unit: drawn over it
-        html: `<g transform="translate(${ox.toFixed(2)} ${oy.toFixed(2)})">${renderScene(K, p, its)}</g>`,
-        // that unit's own fitted view, in this unit's svg coordinates: where the glide ends
-        to: { x: K.OX - Ku.OX + ox, y: K.OY - Ku.OY + oy, w: Ku.W, h: Ku.H },
-      };
-    });
-  }, [plan.floor, pid, K, plans, showCore]);
-  // the building core round it too (corridor, lifts, WCs, storage rooms, stairs), faded, not clickable;
-  // drawn over this unit when it lies in front of it (the north units), under it otherwise
-  const core = useMemo(() => {
-    const me = floorPlan(plan.floor).units.find((u) => u.id === pid);
-    if (!me) return null;
-    return { ahead: CORE_AT.corridor.y0 > me.oy, html: renderScene(K, plan, toFloor(coreItems(), -me.ox, -me.oy), { bare: true }) };
-  }, [plan, pid, K]);
-  const coreG = core && <g key="core" data-noexport="" className="nb core" dangerouslySetInnerHTML={{ __html: core.html }} />;
   const [hoverUnit, setHoverUnit] = useState(null);
   const gliding = useRef(false);
   const glide = (unit) => {
@@ -357,8 +425,9 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   };
   // only the neighbours near the view are drawn (zoomed in on a corner, the far units are skipped)
   const nearby = (n) => overlaps(vb, n.to, 0.25);
-  const nbG = (n) => (
-    <g key={n.unit} data-unit={n.unit} data-noexport="" className={`nb${hoverUnit === n.unit ? ' hot' : ''}`} dangerouslySetInnerHTML={{ __html: n.html }} />
+  // one part of a neighbouring unit drawn as a block: its floor ('flat'), or its far pieces ('behind', 'ahead')
+  const nbG = (part) => (n) => n[part] && (
+    <g key={`${part}-${n.unit}`} data-unit={n.unit} data-noexport="" className={`nb${hoverUnit === n.unit ? ' hot' : ''}`} dangerouslySetInnerHTML={{ __html: n[part] }} />
   );
 
   const hovered = !ghost && !placing && hoverId && hoverId !== selected ? items.find((i) => i.id === hoverId) : null;
@@ -372,20 +441,16 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     catch (err) { setMsg(`export failed: ${err.message}`); }
   };
 
-  const status = [
-    `F${plan.floor} unit ${plan.unit}`,
-    hoverUnit ? `unit ${hoverUnit} · click to open` : null,
-    `${st.assigned}/${st.desks} desks assigned`,
-    hover ? `cell ${hover.cx},${hover.cy} (${(hover.cx * 0.2).toFixed(1)}, ${(hover.cy * 0.2).toFixed(1)} m)` : null,
-    placing ? `placing ${placing.type} ${placing.rot}°` : null,
-    savedAt ? `saved ${savedAt}` : 'not saved',
-  ].filter(Boolean).join(' · ');
+  const status = hoverUnit ? `Unit ${hoverUnit} · Click to open` : [
+    `Floor ${plan.floor}, Unit ${plan.unit}`,
+    `${st.assigned} of ${st.desks} seats taken`,
+    savedAt ? `Saved ${savedAt}` : 'Not saved',
+  ].join(' · ');
 
 
   // navigation as one row of round buttons at the bottom left of the drawing (as on the floor
   // view): back to the floor, the floors with this floor's units (this one ringed; another glides over
   // to it), and fit
-  const headerActions = typeof document !== 'undefined' ? document.getElementById('header-actions') : null;
   const tools = (
     <ViewTools left={`calc(0.75rem + ${paletteMin ? '4.75rem' : '14rem'} + 0.75rem)`} after={<>
       {/* editing actions: round frosted buttons floating beside the dock (R and Delete still work); Rotate shows
@@ -393,18 +458,13 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
           while a removable item is selected (Undo sits at the bottom right, by the menu button) */}
       <div className="flex items-center gap-2" role="toolbar" aria-label="Edit">
         {((sel && !sel.locked) || placing) && (
-          <span className="pop-in"><SceneButton place="above" tall label="Rotate 90°" tip="Turn the selected item (or the one being placed) · R" onClick={rotate}>
+          <span className="pop-in"><SceneButton place="above" tall label="Rotate" tip="Turn the selected item (or the one being placed) · R" onClick={rotate}>
             {icon(<><path d="M13 8a5 5 0 1 1-1.5-3.6" /><path d="M13 2.5V5h-2.5" /></>)}</SceneButton></span>
         )}
         {sel && !sel.locked && (
           <span className="pop-in"><SceneButton place="above" tall label="Delete" tip="Remove the selected item · Delete" onClick={remove}>
             {icon(<><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" /><path d="M7 7v4M9 7v4" /></>)}</SceneButton></span>
         )}
-      </div>
-      {/* the status line (and any message above it) right after the edit buttons, on the dock's line */}
-      <div className="pointer-events-none ml-1 flex flex-col justify-center whitespace-nowrap text-[12px] leading-tight tabular-nums" aria-live="polite">
-        {msg ? <div className="text-accent-hi">{msg}</div> : null}
-        <div className="text-ink-hi">{status}</div>
       </div>
     </>}>
       <SceneButton place="above-start" compact docked label={`Floor ${plan.floor}`} tip={`Back to every unit of floor ${plan.floor}`} onClick={onBack}>{icon(<path d="M10 3 5 8l5 5" />)}</SceneButton>
@@ -413,7 +473,10 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
         onFloor={(f) => onSwitch(f, UNITS[f].includes(plan.unit) ? plan.unit : UNITS[f][0])}
         onUnit={(f, u) => glide(u)} />
       <Divider />
-      <SceneButton place="above" compact docked label="Fit" tip="Fit the whole unit in the view" onClick={() => cam.glideTo(VB0, { ms: 600 })}>{icon(<path d="M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3" />)}</SceneButton>
+      <DockMenu items={[
+        { label: 'Export PNG', icon: 'export', onClick: exportPlan },
+        { label: 'Reset to PDF', icon: 'reset', danger: true, onClick: () => { if (confirm(`Reset floor ${plan.floor} unit ${plan.unit} to the official PDF layout? (Undo can restore your version.)`)) dispatch({ type: 'reset', plan: pid }); } },
+      ]} />
     </ViewTools>
   );
 
@@ -422,7 +485,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
       {/* the palette: a frosted card floating over the drawing at the left (no column of its own), full height;
           the bottom dock starts just right of it; its list scrolls inside and fades out at the bottom edge.
           Its header collapses it to a slim column of icons (names in a frosted card on hover) */}
-      <aside className={`frost-panel frost-edge absolute left-3 top-3 bottom-3 z-10 flex flex-col rounded-2xl ${paletteMin ? 'w-[4.75rem]' : 'w-56'}`}>
+      <aside className={`frost-panel frost-edge absolute left-3 top-[3.75rem] bottom-3 z-10 flex flex-col rounded-2xl ${paletteMin ? 'w-[4.75rem]' : 'w-56'}`}>
         <div className={`flex items-center gap-2 py-2 pr-1.5 ${paletteMin ? 'justify-center pl-1.5' : 'pl-3'} border-b border-[color-mix(in_srgb,var(--ink)_18%,transparent)]`}>
           {!paletteMin && <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink-hi">Objects</span>}
           <button type="button" onClick={() => setPaletteMin((m) => !m)} aria-expanded={!paletteMin}
@@ -441,6 +504,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
           <svg
             ref={svgRef}
             className="office-lit w-full h-full block select-none touch-none"
+            data-hot={hoverUnit || undefined}
             style={{ cursor: placing ? 'copy' : undefined }}
             viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
             role="img"
@@ -457,26 +521,27 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
             onDrop={onDrop}
           >
             <IsoDefs light={light} />
-            {core && !core.ahead && coreG}
-            {neighbours.filter((n) => !n.ahead && nearby(n)).map(nbG)}
+            <g pointerEvents="none" data-noexport="" dangerouslySetInnerHTML={{ __html: bldGhost.below }} />
+            {neighbours.filter(nearby).map(nbG('flat'))}
+            {core && <g data-noexport="" className="nb core" dangerouslySetInnerHTML={{ __html: core.flat }} />}
+            {neighbours.filter(nearby).map(nbG('behind'))}
             <Html html={plate} />
             {floorNodes.map((it) => <ItemG key={it.id} K={K} item={it} cls={clsOf(it)} cut={cutH} />)}
             <Html html={shadows} className="shell-shadows" />
             <Html html={feet} data-noexport="" />
-            {solidNodes.map((n) => <ItemG key={n.ghost ? 'ghost' : n.it.id} K={K} item={n.it} cls={n.cls} cut={cutH} ghost={n.ghost} />)}
+            {solidNodes.map((n) => <ItemG key={n.ghost ? 'ghost' : n.faded ? `f:${n.it.id}` : n.it.id} K={K} item={n.it} cls={n.cls} cut={cutH} ghost={n.ghost} faded={n.faded} unit={n.unit} />)}
             <g className="door-swing" ref={doorsRef} pointerEvents="none" data-noexport="" />
             <Html html={tags} className="zone-tags" />
-            {core?.ahead && coreG}
-            {neighbours.filter((n) => n.ahead && nearby(n)).map(nbG)}
+            <Html html={callouts} className="desk-callouts" />
+            {neighbours.filter(nearby).map(nbG('ahead'))}
           </svg>
           <HoverTip tip={tip} />
           {tools}
-          {/* Export and Reset to PDF: one Actions menu in the app header beside the Labels / Dark mode switches */}
-          {headerActions && createPortal(
-            <ActionMenu items={[
-              { label: 'Export', onClick: exportPlan, accent: true },
-              { label: 'Reset to PDF', onClick: () => { if (confirm(`Reset floor ${plan.floor} unit ${plan.unit} to the official PDF layout? (Undo can restore your version.)`)) dispatch({ type: 'reset', plan: pid }); } },
-            ]} />, headerActions)}
+          {/* the status line (and any message above it), bottom centre */}
+          <StatusLine>
+            {msg ? <div className="text-accent-hi">{sentence(msg)}</div> : null}
+            <div className="text-ink-hi">{status}</div>
+          </StatusLine>
         </div>
       </div>
 

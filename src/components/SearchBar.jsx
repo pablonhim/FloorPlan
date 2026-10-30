@@ -65,15 +65,15 @@ export default function SearchBar({ plans, onPick }) {
   const show = open && q.trim();
 
   return (
-    <div ref={box} className="relative w-[min(22rem,40vw)]">
-      <div className={`frost-panel frost-edge flex h-8 items-center gap-2 rounded-full pl-3 pr-2 ${open ? 'ring-1 ring-accent' : ''}`}>
+    <div ref={box} className="pointer-events-auto relative w-[min(16rem,34vw)]">
+      <div className={`frost-panel frost-edge flex h-10 items-center gap-2 rounded-full pl-3.5 pr-2.5 ${open ? 'ring-1 ring-accent' : ''}`}>
         <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true" className="shrink-0 text-ink">
           <circle cx="7" cy="7" r="4.5" /><path d="m10.5 10.5 3 3" />
         </svg>
         <input ref={input} value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={onKeyDown}
           type="search" role="combobox" aria-expanded={Boolean(show)} aria-controls={`${id}-list`} aria-autocomplete="list"
           aria-activedescendant={show && results[act] ? `${id}-${act}` : undefined} aria-label="Search employees, units, rooms and storage"
-          placeholder="Search people, units, rooms…" spellCheck={false}
+          placeholder="Search people, rooms…" spellCheck={false}
           className="min-w-0 flex-1 bg-transparent text-[12px] text-ink-hi outline-none placeholder:text-ink/70 [&::-webkit-search-cancel-button]:hidden" />
         {q ? (
           <button type="button" onClick={() => { setQ(''); input.current?.focus(); }} aria-label="Clear search"

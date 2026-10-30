@@ -27,16 +27,23 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 ::selection { background: var(--accent-dim); }
 .stage-glow { background: radial-gradient(ellipse 50% 45% at 50% 52%, var(--accent-dim), transparent 72%); }
 :root[data-theme="light"] .stage-glow { background: none; }
+.backdrop-bld { background: var(--panel); }
+/* the building page's backdrop in the light theme: a soft light-gray gradient (lighter where the site
+   stands), behind the header too (it has no background of its own) */
+:root[data-theme="light"] .backdrop-bld {
+  background: radial-gradient(ellipse 55% 50% at 50% 46%, #f9fafb 0%, rgb(249 250 251 / 0) 70%), linear-gradient(180deg, #f3f4f6 0%, #e5e7eb 100%);
+}
 
 /* theme switch: the old look fades slowly into the new one (started by setTheme in lib/theme.js) */
 ::view-transition-old(root),
 ::view-transition-new(root) { animation-duration: 0.6s; animation-timing-function: ease-in-out; }
 
-/* frosted-glass card (tower floor tooltip): translucent panel, strong blur, readable text */
+/* frosted-glass card (tower floor tooltip): a heavy frost, so lines and text behind it melt into a soft
+   blur and only its own text reads */
 .frost {
-  background: color-mix(in srgb, var(--panel) 62%, transparent);
-  -webkit-backdrop-filter: blur(18px) saturate(1.6);
-  backdrop-filter: blur(18px) saturate(1.6);
+  background: color-mix(in srgb, var(--panel) 74%, transparent);
+  -webkit-backdrop-filter: blur(30px) saturate(1.5);
+  backdrop-filter: blur(30px) saturate(1.5);
   border: 1px solid color-mix(in srgb, var(--panel) 70%, transparent);
   box-shadow: 0 10px 32px rgb(0 0 0 / .14), inset 0 1px 0 color-mix(in srgb, #fff 55%, transparent);
 }
@@ -99,3 +106,17 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 /* scroll without showing a scroll bar (the unit editor's floating panels: their bottom fade shows there is more) */
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* the dock's More menu opens with a small springy pop (as the edit buttons), staying a column */
+.dock-menu { animation: dock-menu-in .18s cubic-bezier(.34, 1.56, .64, 1); transform-origin: bottom center; }
+@keyframes dock-menu-in { from { opacity: 0; scale: .85; } }
+@media (prefers-reduced-motion: reduce) { .dock-menu { animation: none; } }
+
+/* the viewer count's eye blinks like a real one: open, a quick close-and-open every few seconds, now and
+   then twice in a row (a 7 s loop: a blink at ~3 s, a double blink at the end) */
+.eye-blink { transform-box: fill-box; transform-origin: center; animation: eye-blink 7s ease-in-out infinite; }
+@keyframes eye-blink {
+  0%, 40%, 44.5%, 88%, 91%, 93%, 96%, 100% { transform: scaleY(1); }
+  42%, 89.5%, 94.5% { transform: scaleY(.08); }
+}
+@media (prefers-reduced-motion: reduce) { .eye-blink { animation: none; } }

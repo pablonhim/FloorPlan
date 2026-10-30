@@ -18,6 +18,17 @@ export function ViewTools({ children, after = null, left = '1rem' }) {
   );
 }
 
+/** A view's status line (and any message above it), centred at the bottom on the docks' 40px line. */
+export function StatusLine({ children }) {
+  return (
+    <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 flex h-10 -translate-x-1/2 flex-col items-center justify-center whitespace-nowrap text-center text-[12px] leading-tight tabular-nums"
+      aria-live="polite">{children}</div>
+  );
+}
+
+/** A status message in sentence case. */
+export const sentence = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
 /** A short vertical divider between groups of header buttons. */
 export const Divider = () => <span className="mx-0.5 block h-5 w-px bg-[color-mix(in_srgb,var(--ink)_35%,transparent)]" aria-hidden="true" />;
 

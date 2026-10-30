@@ -1,6 +1,5 @@
-import { Suspense, lazy, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useTheme } from './lib/theme.js';
-import { exportPng } from './lib/exportPng.js';
 import { initState, reducer, save, saveLog, floorStats, planId, RENTED, TOTAL_FLOORS, UNITS, PLANS } from './model/floors.js';
 import { focusOf } from './model/search.js';
 import TowerView from './components/TowerView.jsx';
@@ -9,8 +8,10 @@ import MenuIcon from './components/MenuIcon.jsx';
 import Credit from './components/Credit.jsx';
 import SearchBar from './components/SearchBar.jsx';
 import HistoryPanel from './components/HistoryPanel.jsx';
-import { icon } from './components/SceneButton.jsx';
+import ZoomRail from './components/ZoomRail.jsx';
+import { DockMenuContext } from './components/DockMenu.jsx';
 import { useCameraNav } from './lib/useCameraNav.js';
+import { whenIdle } from './lib/keep.js';
 
 // the floor and unit pages load as their own chunks (the building page is the first view); both are
 // fetched as soon as the browser is idle after the first paint, so opening a floor never waits on them
@@ -19,15 +20,53 @@ const loadEditor = () => import('./components/FloorEditor.jsx');
 const FloorOverview = lazy(loadOverview);
 const FloorEditor = lazy(loadEditor);
 
+/**
+ * The views stay alive once visited: one per building, per floor and per floor's unit editor (a unit view
+ * moves between the units of its floor itself). A view not on screen is hidden with content-visibility, which
+ * keeps its finished layout without painting it, so going back to it is near-instant instead of rebuilding
+ * thousands of elements; it is inert, and told it is not active (it then leaves keys and the zoom rail alone).
+ */
+const keyOf = (v) => (v.kind === 'unit' ? `unit-${v.floor}` : v.kind === 'floor' ? `floor-${v.floor}` : 'building');
+
+/** One kept-alive view: shown and fading in when it becomes the active one, hidden but kept otherwise. */
+function Layer({ active, plain, children }) {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!active || !el) return;
+    el.classList.remove('view-enter');
+    void el.offsetWidth;   // restart the settle-in animation
+    el.classList.add('view-enter');
+  }, [active]);
+  return (
+    // (not `inert`: toggling it restyles every element of the view; hidden content is not hit or painted anyway)
+    <div ref={ref} aria-hidden={!active}
+      className={`absolute inset-0 flex min-h-0 min-w-0 ${plain ? '' : 'bg-panel'} ${active ? 'z-[1]' : ''}`}
+      style={active ? undefined : { contentVisibility: 'hidden' }}>
+      {children}
+    </div>
+  );
+}
+
 export default function App() {
   const { theme, setTheme, light, labels, setLabels } = useTheme();
   const [state, dispatch] = useReducer(reducer, null, initState);
   // view changes go through a camera-style zoom (see useCameraNav)
-  const { view, go: setView, stageRef, layers, bindLayer } = useCameraNav({ kind: 'building' });
+  const { view, go: setView } = useCameraNav({ kind: 'building' });
+  // every view visited so far, by key, with the props it last had (the active one gets the current view)
+  const alive = useRef(new Map());
+  alive.current.set(keyOf(view), view);
   const [savedAt, setSavedAt] = useState(null);
+  // once the app is idle after its first paint: fetch the floor and unit pages and build their drawings
+  // (both floors' scenes, every unit's surroundings and furniture) a little at a time, so opening a floor or
+  // a unit later finds them ready instead of building thousands of elements on the click
+  const plansNow = useRef(state.plans);
+  plansNow.current = state.plans;
   useEffect(() => {
     const idle = window.requestIdleCallback || ((f) => setTimeout(f, 1200));
-    idle(() => { loadOverview(); loadEditor(); });
+    idle(() => Promise.all([loadOverview(), loadEditor()]).then(([ov, ed]) => {
+      whenIdle([...ov.prewarmFloors(plansNow.current), ...ed.prewarmUnits(plansNow.current)]);
+    }).catch(() => {}));
   }, []);
   const [floorsOpen, setFloorsOpen] = useState(false); // floor panel on the building view, collapsed by default
   const [jelly, setJelly] = useState(false);           // menu button wobbles as the panel lands back in it
@@ -36,11 +75,12 @@ export default function App() {
 
   // autosave every committed change to LocalStorage
   useEffect(() => {
-    if (save(state.plans)) setSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    if (save(state.plans)) setSavedAt(new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
     else setSavedAt(null);
   }, [state.plans]);
   useEffect(() => { saveLog(state.log); }, [state.log]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const dockMenu = useMemo(() => ({ openHistory: () => setHistoryOpen(true), labels, setLabels }), [labels, setLabels]);
   // a search result (or an edit in the history): open its page; `focus` (a fresh object every time, so
   // picking the same thing again glides again) is the spot the camera moves onto
   const goTo = (v) => setView(v.focus ? { ...v, focus: { ...v.focus } } : v);
@@ -56,21 +96,22 @@ export default function App() {
     [state.plans],
   );
   // Building → Floor (all units) → Unit
-  const openFloor = (floor) => setView({ kind: 'floor', floor });
+  // intro: opened from the building, the floor view glides down into the floor from the whole (ghosted) building
+  const openFloor = (floor, intro = false) => setView({ kind: 'floor', floor, intro });
   const openUnit = (floor, unit = UNITS[floor][0]) => setView({ kind: 'unit', floor, unit });
 
   const floors = Array.from({ length: TOTAL_FLOORS + 1 }, (_, i) => TOTAL_FLOORS - i);   // 10 … 1, then G (0)
 
-  const renderView = (view) => (
+  const renderView = (view, active) => (
   view.kind === 'building' ? (
             <div className="relative flex flex-1 min-h-0">
               {/* the floor panel floats over the scene, so the building keeps its place whether it is open or not */}
               <div className="flex flex-1 min-w-0">
-                <TowerView occupancy={occupancy} plans={state.plans} light={light} svgRef={towerRef}
-                  onOpen={(f) => openFloor(f)} onGuide={(f) => setView({ kind: 'floor', floor: f, guide: true })} />
+                <TowerView active={active} occupancy={occupancy} plans={state.plans} light={light} svgRef={towerRef}
+                  onOpen={(f) => openFloor(f, true)} onGuide={(f) => setView({ kind: 'floor', floor: f, guide: true })} />
               </div>
               {/* floor list: a menu button at the bottom right that opens a floating frosted panel above it */}
-              <div className="pointer-events-none absolute inset-y-3 right-3 z-10 flex w-64 flex-col items-end justify-end gap-2">
+              <div className="pointer-events-none absolute top-[3.75rem] bottom-3 right-3 z-10 flex w-64 flex-col items-end justify-end gap-2">
               {/* always mounted so it can grow out of / shrink back into the menu button (no fade): it scales
                   from the button's centre, 20px in from its right edge and 28px below it (8px gap + half the
                   40px button); inert while closed */}
@@ -83,7 +124,7 @@ export default function App() {
                     const o = occupancy[f];
                     return (
                       <li key={f}>
-                        <button type="button" disabled={!rented} onClick={() => openFloor(f)}
+                        <button type="button" disabled={!rented} onClick={() => openFloor(f, true)}
                           className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] ${rented ? 'border border-accent/60 bg-accent-dim text-ink-hi hover:border-accent' : 'border border-transparent text-ink cursor-default'}`}>
                           <span className={`size-1.5 rounded-full ${rented ? 'bg-accent' : 'bg-detail'}`} />
                           <span className="tabular-nums w-8">{f === 0 ? 'G' : `F${String(f).padStart(2, '0')}`}</span>
@@ -98,14 +139,6 @@ export default function App() {
                   Floors 2 and 4 are rented (Units C and D each), laid out from the official layout PDF of 2026-09-29.
                   Lit windows show how many desks have someone assigned.
                 </p>
-                <button type="button"
-                  onClick={() => exportPng(towerRef.current, { filename: 'tela-office-building.png' }).catch(() => {})}
-                  className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg border border-edge bg-panel px-3 py-1.5 text-[12px] text-ink-hi hover:border-accent hover:text-accent">
-                  <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M8 2.5v8M4.5 7L8 10.5 11.5 7M3 13.5h10" />
-                  </svg>
-                  Export tower PNG
-                </button>
               </aside>
               <button type="button" onClick={toggleFloors} onAnimationEnd={() => setJelly(false)}
                 aria-expanded={floorsOpen} aria-controls="floor-panel" aria-label={floorsOpen ? 'Close floor list' : 'Open floor list'}
@@ -116,10 +149,11 @@ export default function App() {
               </div>
             </div>
           ) : view.kind === 'floor' ? (
-            <FloorOverview floor={view.floor} plans={state.plans} light={light} guide={!!view.guide} focus={view.focus || null}
+            <FloorOverview active={active} floor={view.floor} plans={state.plans} light={light} guide={!!view.guide} focus={view.focus || null} intro={!!view.intro}
               onBack={() => setView({ kind: 'building' })} onFloor={openFloor} onUnit={openUnit} />
           ) : (
             <FloorEditor
+              active={active}
               pid={planId(view.floor, view.unit)}
               items={state.plans[planId(view.floor, view.unit)]}
               plans={state.plans}
@@ -134,8 +168,13 @@ export default function App() {
   );
 
   return (
-    <div className={`h-full flex flex-col bg-panel ${view.kind === 'building' ? 'overflow-hidden' : ''}`}>
-      <header className="flex items-center gap-3 px-4 py-2.5">
+    // History and the Labels switch live in each view's dock menu (DockMenu)
+    <DockMenuContext.Provider value={dockMenu}>
+    {/* the building page sits on its own backdrop (a light-gray gradient in the light theme), header included */}
+    <div className={`relative h-full flex flex-col ${view.kind === 'building' ? 'backdrop-bld overflow-hidden' : 'bg-panel'}`}>
+      {/* the header floats over the drawing (no background, no strip of its own): the drawing runs up to the
+          top edge, so zooming never crops it at a line; only its controls take the pointer */}
+      <header className="pointer-events-none absolute inset-x-0 top-0 z-30 flex h-14 items-center gap-3 px-4">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-3">
             <span className="text-[18px] font-semibold leading-none text-ink-hi tracking-wide">Floor Plan</span>
@@ -149,32 +188,28 @@ export default function App() {
           <Credit />
         </div>
         <span className="flex-1" />
-        <SearchBar plans={state.plans} onPick={(r) => goTo(r.view)} />
-        <span className="flex-1" />
-        <div className="flex items-center gap-4">
-          <button type="button" onClick={() => setHistoryOpen((o) => !o)} aria-expanded={historyOpen} aria-controls="history-panel"
-            title="History: recent edits and app releases"
-            className={`frost-panel frost-edge flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium leading-none ${historyOpen ? 'text-accent ring-1 ring-accent' : 'text-ink-hi hover:text-accent'}`}>
-            {icon(<><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3.2l2 1.3" /></>)}
-            History
-          </button>
-          {/* a view's own header actions, beside the switches (the floor view's Export, through a portal) */}
-          <div id="header-actions" className="flex items-center gap-2 empty:hidden" />
-          <Switch showLabel checked={labels} onChange={setLabels} label="Labels" icon={ICONS.labels}
-            title="Labels: show or hide all text in the drawing (room, team and employee names, signs, ground markings)" />
-          <Switch showLabel checked={theme === 'dark'} onChange={(on) => setTheme(on ? 'dark' : 'light')} label="Dark mode" icon={ICONS.theme} />
+        {/* the search box sits at the screen's centre, whatever the header's sides hold */}
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+          <SearchBar plans={state.plans} onPick={(r) => goTo(r.view)} />
+        </div>
+        <div className="pointer-events-auto flex items-center gap-4">
+          <Switch checked={theme === 'dark'} onChange={(on) => setTheme(on ? 'dark' : 'light')} label="Dark mode" icon={ICONS.theme} />
         </div>
       </header>
 
-      <main className="flex flex-1 min-h-0 bg-panel">
-        <div ref={stageRef} className={`relative flex flex-1 min-h-0 min-w-0 ${layers.length > 1 ? 'overflow-hidden' : ''}`}>
-        {/* the current view; it remounts on every switch and settles in (see useCameraNav) */}
-        {layers.map((L) => (
-          <div key={L.key} ref={bindLayer(L.key)} style={L.style}
-            className="view-enter flex flex-1 min-h-0 min-w-0 bg-panel">
-            <Suspense fallback={<div className="flex-1 bg-panel" />}>{renderView(L.view)}</Suspense>
-          </div>
-        ))}
+      <main className={`flex flex-1 min-h-0 ${view.kind === 'building' ? '' : 'bg-panel'}`}>
+        <div className="relative flex flex-1 min-h-0 min-w-0 overflow-hidden">
+        {/* every view visited so far, the current one on top and settling in (see Layer) */}
+        {[...alive.current].map(([key, v]) => {
+          const on = key === keyOf(view);
+          return (
+            <Layer key={key} active={on} plain={v.kind === 'building'}>
+              <Suspense fallback={<div className="flex-1 bg-panel" />}>{renderView(on ? view : v, on)}</Suspense>
+            </Layer>
+          );
+        })}
+        {/* the current view's zoom (wheel, + / −, or a click on the track) */}
+        <ZoomRail stage={view.kind} right={view.kind === 'unit' ? '6.75rem' : '3.75rem'} />
         </div>
       </main>
       <div id="history-panel">
@@ -182,5 +217,6 @@ export default function App() {
           onOpenEntry={openEntry} onClear={() => dispatch({ type: 'clearLog' })} />
       </div>
     </div>
+    </DockMenuContext.Provider>
   );
 }
