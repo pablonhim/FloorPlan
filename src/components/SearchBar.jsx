@@ -4,6 +4,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { buildIndex, search } from '../model/search.js';
 import { icon } from './SceneButton.jsx';
+import { useOneOpen } from '../lib/oneOpen.js';
 
 const KIND = {
   floor: icon(<><path d="M2.5 6 8 3l5.5 3L8 9z" /><path d="M2.5 9.5 8 12.5l5.5-3" /></>),
@@ -18,6 +19,7 @@ const KIND_NAME = { floor: 'Floor', unit: 'Unit', person: 'Employee', desk: 'Des
 export default function SearchBar({ plans, onPick }) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
+  useOneOpen(open, () => setOpen(false));
   // the index is built once the box is first used (and kept current with the plans from then on)
   const [used, setUsed] = useState(false);
   useEffect(() => { if (open) setUsed(true); }, [open]);
@@ -74,18 +76,18 @@ export default function SearchBar({ plans, onPick }) {
           type="search" role="combobox" aria-expanded={Boolean(show)} aria-controls={`${id}-list`} aria-autocomplete="list"
           aria-activedescendant={show && results[act] ? `${id}-${act}` : undefined} aria-label="Search employees, units, rooms and storage"
           placeholder="Search people, rooms…" spellCheck={false}
-          className="min-w-0 flex-1 bg-transparent text-[12px] text-ink-hi outline-none placeholder:text-ink/70 [&::-webkit-search-cancel-button]:hidden" />
+          className="min-w-0 flex-1 bg-transparent text-[14px] text-ink-hi outline-none placeholder:text-ink/70 [&::-webkit-search-cancel-button]:hidden" />
         {q ? (
           <button type="button" onClick={() => { setQ(''); input.current?.focus(); }} aria-label="Clear search"
             className="grid size-5 shrink-0 place-items-center rounded-full text-ink hover:text-accent">
             {icon(<path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />)}
           </button>
         ) : (
-          <kbd className="shrink-0 rounded border border-edge px-1 font-sans text-[10px] leading-4 text-ink">Ctrl K</kbd>
+          <kbd className="shrink-0 font-sans text-[11px] leading-4 text-ink">Ctrl K</kbd>
         )}
       </div>
       {show && (
-        <div className="frost-panel frost-edge absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded-2xl">
+        <div className="frost-panel frost-edge absolute bottom-full left-0 right-0 z-40 mb-2 overflow-hidden rounded-2xl">
           {results.length ? (
             <ul ref={list} id={`${id}-list`} role="listbox" aria-label="Search results" className="no-scrollbar max-h-[min(26rem,60vh)] overflow-y-auto p-1.5">
               {results.map((r, i) => (

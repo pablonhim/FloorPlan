@@ -24,6 +24,7 @@ import SceneButton, { icon } from './SceneButton.jsx';
 import { ViewTools, Divider, FloorUnitButtons, StatusLine, sentence } from './ViewTools.jsx';
 import DockMenu from './DockMenu.jsx';
 import MenuPanel from './MenuPanel.jsx';
+import { useOneOpen } from '../lib/oneOpen.js';
 
 /** Each item's drawing, made once and kept (by item: an edited item is a new object; a unit's items are
  *  only ever drawn in that unit's frame). Filled ahead of time while the app is idle (prewarmUnits). */
@@ -157,7 +158,8 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const [panelOpen, setPanelOpen] = useState(false);   // the right-hand panel (menu at the bottom right)
   useEffect(() => { if (selected) setPanelOpen(true); }, [selected]);   // selecting an item opens it
   useEffect(() => { setPanelOpen(false); }, [pid]);                      // another unit: closed again
-  const [paletteMin, setPaletteMin] = useState(false);   // the objects panel collapsed to its icons   // the right-hand panel folded down to its header
+  const [paletteMin, setPaletteMin] = useState(false);
+  useOneOpen(!paletteMin, () => setPaletteMin(true));   // the objects panel too: one menu or panel open at a time   // the objects panel collapsed to its icons   // the right-hand panel folded down to its header
   const cut = false;   // tall walls and objects at full height (the cutaway switch is gone)
   const [msg, setMsg] = useState('');
   const drag = useRef(null);
@@ -503,10 +505,10 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
         <div ref={stageRef} className="relative flex-1 min-h-0 overflow-hidden stage-glow">
           <svg
             ref={svgRef}
-            className="office-lit w-full h-full block select-none touch-none"
+            className="office-lit cam-over select-none touch-none"
             data-hot={hoverUnit || undefined}
             style={{ cursor: placing ? 'copy' : undefined }}
-            viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
+            viewBox={cam.box}
             role="img"
             aria-label={`Isometric floor plan of floor ${plan.floor}, unit ${plan.unit}. Drag desks and partitions to move them on the 20 cm grid; R rotates, Delete removes.`}
             onPointerDown={onPointerDown}
@@ -537,7 +539,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
           </svg>
           <HoverTip tip={tip} />
           {tools}
-          {/* the status line (and any message above it), bottom centre */}
+          {/* the status line (and any message above it), top centre */}
           <StatusLine>
             {msg ? <div className="text-accent-hi">{sentence(msg)}</div> : null}
             <div className="text-ink-hi">{status}</div>
@@ -554,12 +556,12 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
           {icon(<><path d="M5.5 3 2.5 6l3 3" /><path d="M2.5 6H10a3.5 3.5 0 0 1 0 7H7" /></>)}</SceneButton>
       </div>
       <MenuPanel open={panelOpen} onOpen={setPanelOpen} fill label={`Unit ${plan.unit} details`}>
-        <div className="flex items-center gap-2 border-b border-[color-mix(in_srgb,var(--ink)_18%,transparent)] px-3 py-2">
+        <div className="flex items-center gap-2 border-b border-[color-mix(in_srgb,var(--ink)_18%,transparent)] px-2.5 py-1.5">
           <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink-hi">
             {sel ? 'Selected' : `Unit ${plan.unit}`}<span className="text-ink"> · {st.assigned}/{st.desks} seats</span>
           </span>
         </div>
-        <div className="flex min-h-0 flex-1 flex-col px-3 pt-3">
+        <div className="flex min-h-0 flex-1 flex-col px-2 pt-2">
           <Inspector
             plan={plan}
             item={sel}

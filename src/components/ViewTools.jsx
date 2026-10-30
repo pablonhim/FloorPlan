@@ -3,7 +3,9 @@
 // Hints and the floor menu open upward, away from the bottom edge.
 import { useEffect, useRef, useState } from 'react';
 import SceneButton from './SceneButton.jsx';
+import Compass from './Compass.jsx';
 import { RENTED, UNITS, PLANS, planId } from '../model/floors.js';
+import { useOneOpen } from '../lib/oneOpen.js';
 
 /**
  * The bottom-left tool dock (place it in the drawing's positioned container); `after` floats beside it, and
@@ -12,16 +14,17 @@ import { RENTED, UNITS, PLANS, planId } from '../model/floors.js';
 export function ViewTools({ children, after = null, left = '1rem' }) {
   return (
     <div className="absolute bottom-3 z-20 flex h-10 items-center gap-2" style={{ left }}>
+      <Compass />
       <div className="frost-panel frost-edge flex h-10 items-center gap-0 rounded-full px-1" role="toolbar" aria-label="View tools">{children}</div>
       {after}
     </div>
   );
 }
 
-/** A view's status line (and any message above it), centred at the bottom on the docks' 40px line. */
+/** A view's status line (and any message below it), centred at the top on the header's line. */
 export function StatusLine({ children }) {
   return (
-    <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 flex h-10 -translate-x-1/2 flex-col items-center justify-center whitespace-nowrap text-center text-[12px] leading-tight tabular-nums"
+    <div className="pointer-events-none absolute top-0 left-1/2 z-10 flex min-h-14 -translate-x-1/2 flex-col items-center justify-center whitespace-nowrap text-center text-[12px] leading-tight tabular-nums"
       aria-live="polite">{children}</div>
   );
 }
@@ -38,6 +41,7 @@ export const Divider = () => <span className="mx-0.5 block h-5 w-px bg-[color-mi
  */
 function FloorDropdown({ floor, onFloor }) {
   const [open, setOpen] = useState(false);
+  useOneOpen(open, () => setOpen(false));
   const box = useRef(null);
   useEffect(() => {
     if (!open) return undefined;

@@ -2,24 +2,50 @@
 // non-scaling strokes and labels: ~30 ms a write), so while the camera moves — wheel, drag, a glide —
 // the <svg> is only moved with a CSS transform (the compositor scales what is already painted), and the
 // viewBox is written once, when the move settles. Ambient loops pause while it moves (.cam-moving).
+// The <svg> is drawn bigger than its holder, OVER of the holder's size past every edge (.cam-over; the holder
+// clips it), so a drag or a zoom-out shows drawing that is already painted instead of a blank edge until the
+// move settles.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CELL } from '../iso/units.js';
 
 const ease = (k) => (k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2);
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+/** How far the svg reaches past its holder on every side, as a share of the holder's size (see .cam-over). */
+export const OVER = 0.25;
+
 /**
- * The CSS transform (origin 0 0) that makes an svg of size W × H drawn with viewBox `from` show viewBox
- * `to` instead — both the same aspect, preserveAspectRatio xMidYMid meet.
+ * The viewBox to write on an svg with .cam-over in a W × H holder so that the holder shows view v (fitted,
+ * xMidYMid meet): v's fit, grown by the overscan on every side.
+ */
+export function overBox(v, W, H) {
+  if (!(W > 1 && H > 1)) return `${v.x} ${v.y} ${v.w} ${v.h}`;
+  const k = Math.min(W / v.w, H / v.h);
+  const x = v.x - ((W - v.w * k) / 2 + OVER * W) / k, y = v.y - ((H - v.h * k) / 2 + OVER * H) / k;
+  return `${x.toFixed(2)} ${y.toFixed(2)} ${(((1 + 2 * OVER) * W) / k).toFixed(2)} ${(((1 + 2 * OVER) * H) / k).toFixed(2)}`;
+}
+
+/** Writes view v on svg `el` (.cam-over, in its parent holder); the view itself is kept as data-view. */
+export function setBox(el, v) {
+  if (!el) return;
+  const r = el.parentElement.getBoundingClientRect();
+  el.setAttribute('viewBox', overBox(v, r.width, r.height));
+  el.dataset.view = `${v.x} ${v.y} ${v.w} ${v.h}`;
+}
+
+/**
+ * The CSS transform (origin 0 0) that makes an svg (.cam-over) in a W × H holder, drawn showing view `from`,
+ * show view `to` instead (preserveAspectRatio xMidYMid meet).
  */
 export function camTransform(W, H, from, to) {
-  const k = Math.min(W / from.w, H / from.h), s = from.w / to.w;
-  const ox = (W - from.w * k) / 2, oy = (H - from.h * k) / 2;
-  const tx = ox * (1 - s) + s * k * (from.x - to.x), ty = oy * (1 - s) + s * k * (from.y - to.y);
+  const kf = Math.min(W / from.w, H / from.h), kt = Math.min(W / to.w, H / to.h), s = kt / kf;
+  const pw = OVER * W, ph = OVER * H;
+  const tx = (from.x - to.x) * kt + (W - to.w * kt) / 2 + pw - s * ((W - from.w * kf) / 2 + pw);
+  const ty = (from.y - to.y) * kt + (H - to.h * kt) / 2 + ph - s * ((H - from.h * kf) / 2 + ph);
   return `translate(${tx.toFixed(2)}px, ${ty.toFixed(2)}px) scale(${s.toFixed(5)})`;
 }
 
-/** Shows viewBox `to` on `el` (drawn with `from`) by a CSS transform, or clears it (to = null). */
+/** Shows viewBox `to` on `el` (drawn with `from`; size: its holder's) by a CSS transform, or clears it (to = null). */
 export function showVia(el, size, from, to) {
   if (!el) return;
   if (!to) {
@@ -52,7 +78,7 @@ export const overlaps = (a, b, pad = 0) => a.x < b.x + b.w * (1 + pad) && b.x - 
 
 /**
  * The camera of one plan view (svg filling its parent); onView(view) hears of every view it shows.
- * - vb: the committed viewBox (React state: render it as the svg's viewBox)
+ * - vb: the committed view (React state); box: the viewBox to render for it (overscanned: see overBox)
  * - live: ref to the view shown right now (vb, or where a move has got to)
  * - move(next | fn, settle = 140): show `next` at once (transform); commit it once quiet (see watch)
  * - jump(next): commit at once (no animation); glideTo(to, { ms, delay, onDone, commit }); cancel()
@@ -65,6 +91,17 @@ export function useSvgCamera(svgRef, VB0, onView) {
   seen.current = onView;
   const live = useRef(VB0), drawn = useRef(VB0), size = useRef([1, 1]);
   const raf = useRef(0), quiet = useRef({ id: 0, at: 0, frames: 0, settle: 140 });
+  // the holder's size, as state: the overscanned viewBox depends on it
+  const [hold, setHold] = useState([0, 0]);
+  useLayoutEffect(() => {
+    const el = svgRef.current?.parentElement;
+    if (!el) return undefined;
+    const read = () => { const r = el.getBoundingClientRect(); if (r.width && r.height) setHold((h) => (h[0] === r.width && h[1] === r.height ? h : [r.width, r.height])); };
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [svgRef]);
 
   const measure = () => {
     const r = svgRef.current?.parentElement?.getBoundingClientRect();
@@ -127,5 +164,6 @@ export function useSvgCamera(svgRef, VB0, onView) {
     return Math.min(r.width / v.w, r.height / v.h);
   }, [svgRef]);
 
-  return { vb, live, move, jump, glideTo, cancel, commit, toSvg, scale };
+  const box = overBox(vb, hold[0], hold[1]);
+  return { vb, box, live, move, jump, glideTo, cancel, commit, toSvg, scale };
 }

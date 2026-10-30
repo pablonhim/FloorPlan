@@ -312,8 +312,8 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
         <div ref={stageRef} className="relative flex-1 min-h-0 overflow-hidden stage-glow">
           <svg
             ref={svgRef}
-            className="floor-ov office-lit w-full h-full block select-none touch-none"
-            viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
+            className="floor-ov office-lit cam-over select-none touch-none"
+            viewBox={cam.box}
             role="img"
             aria-label={`Isometric plan of floor ${floor} with units ${plan.units.map((u) => u.unit).join(' and ')}. Click a unit to open it.`}
             onPointerDown={onPointerDown}
@@ -334,7 +334,7 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
           </svg>
           <HoverTip tip={tip} />
           {tools}
-          {/* the status line (and any message or route note above it), bottom centre */}
+          {/* the status line (and any message or route note above it), top centre */}
           <StatusLine>
             {msg ? <div className="text-accent-hi">{sentence(msg)}</div> : null}
             {kosign && <div className="text-accent-hi">{kosign.path ? `Follow the line to ${kosign.room.label}` : 'No route to KOSIGN on this floor'}</div>}
@@ -349,20 +349,20 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
       {/* the units list: a menu button at the bottom right whose frosted panel grows out of it (as on the
           building page); closed when the floor opens */}
       <MenuPanel open={unitsOpen} onOpen={setUnitsOpen} label={`Units on floor ${floor}`}>
-        <div className="no-scrollbar flex min-h-0 flex-col gap-1 overflow-y-auto p-2">
-          <h3 className="px-1 pt-1 text-[10px] uppercase tracking-[.18em] text-ink">Units on floor {floor}</h3>
+        <div className="no-scrollbar flex min-h-0 flex-col gap-0.5 overflow-y-auto p-1">
+          <h3 className="px-2 pt-1 text-[10px] uppercase tracking-[.18em] text-ink">Units on floor {floor}</h3>
           {plan.units.map((u) => {
             const p = PLANS[u.id], s = unitStats[u.unit];
             return (
               <button key={u.unit} type="button" onClick={() => onUnit(floor, u.unit)}
                 onPointerEnter={() => setHoverUnit(u.unit)} onPointerLeave={() => setHoverUnit(null)}
-                className={`text-left rounded-xl border px-2.5 py-2 transition-colors ${hoverUnit === u.unit ? 'border-accent bg-accent-dim' : 'border-transparent hover:bg-accent-dim'}`}>
+                className={`text-left rounded-md border px-2 py-1 transition-colors ${hoverUnit === u.unit ? 'border-accent bg-accent-dim' : 'border-transparent hover:bg-accent-dim'}`}>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-[14px] text-ink-hi">Unit {u.unit}</span>
+                  <span className="text-[13px] leading-5 text-ink-hi">Unit {u.unit}</span>
                   <span className="text-[11px] text-accent-hi tabular-nums">{s.assigned}/{s.desks} seats</span>
                 </div>
-                <div className="truncate text-[11px] text-ink mt-0.5">{p.subtitleEn || p.subtitle}</div>
-                <ol className="mt-1.5 space-y-0.5 text-[11px]">
+                <div className="truncate text-[11px] leading-4 text-ink">{p.subtitleEn || p.subtitle}</div>
+                <ol className="mt-0.5 text-[11px] leading-4">
                   {p.legend.map((l, i) => <li key={l} className="flex min-w-0 gap-2"><span className="w-3 shrink-0 text-accent tabular-nums">{i + (p.legendStart || 1)}</span><span className="truncate text-ink-hi">{l}</span></li>)}
                 </ol>
               </button>

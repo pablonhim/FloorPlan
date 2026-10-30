@@ -15,7 +15,7 @@ import SceneButton, { icon } from './SceneButton.jsx';
 import { ViewTools, Divider } from './ViewTools.jsx';
 import { vehicle, VEHICLE_DEFS } from '../iso/vehicles.js';
 import { leg, cubicLeg, pose, person, planPath, duration } from '../iso/scenes.js';
-import { showVia } from '../lib/svgCamera.js';
+import { showVia, setBox } from '../lib/svgCamera.js';
 import { exportPng } from '../lib/exportPng.js';
 import DockMenu from './DockMenu.jsx';
 import { factorOf, fracOf, onZoomCommand, setZoom } from '../lib/zoomStore.js';
@@ -1417,9 +1417,9 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
     if (t !== camAimed.current) {
       camAimed.current = t;
       if (svgEl && t.w > c.w * 1.02 && d > 0.6) {
-        svgEl.setAttribute('viewBox', `${t.x.toFixed(2)} ${t.y.toFixed(2)} ${t.w.toFixed(2)} ${t.h.toFixed(2)}`);
+        setBox(svgEl, t);
         camDrawn.current = t === VIEW_ALL ? null : { ...t };
-        if (!svgEl.style.transform) { const r = svgEl.getBoundingClientRect(); camSize.current = [r.width, r.height]; }
+        if (!svgEl.style.transform) { const r = svgEl.parentElement.getBoundingClientRect(); camSize.current = [r.width, r.height]; }
         showVia(svgEl, camSize.current, camDrawn.current || VIEW_ALL, c);
       }
     }
@@ -1429,18 +1429,18 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
         c.x += (t.x - c.x) * k; c.y += (t.y - c.y) * k; c.w += (t.w - c.w) * k; c.h += (t.h - c.h) * k;
         if (d < 0.6) {                               // there: snap onto it and write the viewBox, once
           Object.assign(c, t);
-          svgEl.setAttribute('viewBox', `${c.x.toFixed(2)} ${c.y.toFixed(2)} ${c.w.toFixed(2)} ${c.h.toFixed(2)}`);
+          setBox(svgEl, c);
           camDrawn.current = t === VIEW_ALL ? null : { ...c };
           showVia(svgEl, null, null, null);
         } else {                                     // on the way: only the compositor moves the drawing
-          if (!svgEl.style.transform) { const r = svgEl.getBoundingClientRect(); camSize.current = [r.width, r.height]; }
+          if (!svgEl.style.transform) { const r = svgEl.parentElement.getBoundingClientRect(); camSize.current = [r.width, r.height]; }
           showVia(svgEl, camSize.current, camDrawn.current || VIEW_ALL, c);
         }
       }
     }
     setZoom({ frac: fracOf(c.w / VIEW_ALL.w, ZMIN, 1) });   // the zoom rail follows the camera
     const done = !lead && d <= 0.05;
-    if (done && t === VIEW_ALL) { svgEl?.setAttribute('viewBox', K.viewBox); showVia(svgEl, null, null, null); camDrawn.current = null; cam.current = null; }
+    if (done && t === VIEW_ALL) { setBox(svgEl, VIEW_ALL); showVia(svgEl, null, null, null); camDrawn.current = null; cam.current = null; }
     if (done) last.current = 0;
     loop.current = done ? 0 : requestAnimationFrame(tick);
   };
@@ -1602,14 +1602,14 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
       focusView.current = v;
       cam.current = { ...v };
       const svgEl = svgOf();
-      if (!svgEl.style.transform) { const rr = svgEl.getBoundingClientRect(); camSize.current = [rr.width, rr.height]; }
+      if (!svgEl.style.transform) { const rr = svgEl.parentElement.getBoundingClientRect(); camSize.current = [rr.width, rr.height]; }
       showVia(svgEl, camSize.current, camDrawn.current || VIEW_ALL, v);
       setZoom({ frac: fracOf(v.w / VIEW_ALL.w, ZMIN, 1) });
       };
     const commitNow = () => {
       const svgEl = svgOf(), v = cam.current;
       if (!v || !svgEl.style.transform) return;
-      svgEl.setAttribute('viewBox', `${v.x.toFixed(2)} ${v.y.toFixed(2)} ${v.w.toFixed(2)} ${v.h.toFixed(2)}`);
+      setBox(svgEl, v);
       camDrawn.current = { ...v };
       showVia(svgEl, null, null, null);
     };
@@ -1675,6 +1675,17 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
       el.removeEventListener('pointerup', onUp); el.removeEventListener('pointercancel', onUp);
     };
   }, []);
+
+  // the svg reaches past the holder (svgCamera's .cam-over): its viewBox follows the holder's size
+  useLayoutEffect(() => {
+    const el = holder.current, svgEl = svgRef.current;
+    if (!el || !svgEl) return undefined;
+    const fit = () => { if (!svgEl.style.transform) setBox(svgEl, camDrawn.current || VIEW_ALL); };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // entering dark mode: the windows start dark, then the lights flicker on one by one and the floors bloom
   const mounting = useRef(true);
@@ -1785,8 +1796,9 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
       </ViewTools>
       <svg
         ref={svgRef}
-        className="twr w-full h-full block select-none touch-none"
+        className="twr cam-over select-none touch-none"
         viewBox={K.viewBox}
+        data-view={K.viewBox}
         role="img"
         aria-label="Isometric view of the TELA Office Building, 11 storeys including the ground floor. Floors 2 and 4 are rented and glow; click one, or use arrow keys and Enter, to open its floor plan."
         onClick={(e) => { const f = e.target.closest('.fl'); if (f) pick(+f.dataset.f); }}
@@ -1804,7 +1816,7 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
       </svg>
       {tip && plans && <FloorTip {...tip} plans={plans} box={holder.current.getBoundingClientRect()} />}
       {/* bottom centre, on the docks' 40px line: the floor picked, or what a scene is doing */}
-      <div className="pointer-events-none absolute bottom-3 left-1/2 flex h-10 -translate-x-1/2 items-center whitespace-nowrap text-[12px] text-ink-hi tabular-nums" aria-live="polite">{read}</div>
+      <div className="pointer-events-none absolute top-0 left-1/2 flex h-14 -translate-x-1/2 items-center whitespace-nowrap text-[12px] text-ink-hi tabular-nums" aria-live="polite">{read}</div>
     </div>
   );
 }

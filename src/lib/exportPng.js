@@ -40,7 +40,8 @@ export async function exportPng(svg, { filename, viewBox, width = 2400 }) {
   const cs = getComputedStyle(root);
   const clone = svg.cloneNode(true);
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-  if (viewBox) clone.setAttribute('viewBox', viewBox);
+  // the view itself, not the overscanned box the camera draws (svgCamera's setBox)
+  if (viewBox || svg.dataset.view) clone.setAttribute('viewBox', viewBox || svg.dataset.view);
   clone.querySelectorAll('[data-noexport]').forEach((n) => n.remove());
   clone.querySelectorAll('.sel').forEach((n) => n.classList.remove('sel'));
 

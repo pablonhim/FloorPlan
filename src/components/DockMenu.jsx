@@ -3,7 +3,9 @@
 // switch — which come from DockMenuContext (App). Closes on a choice, a click outside or Escape; ↑ ↓ move
 // through it.
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { icon } from './SceneButton.jsx';
+import { useOneOpen } from '../lib/oneOpen.js';
 
 /** { openHistory(), labels, setLabels(on) } — provided by App. */
 export const DockMenuContext = createContext(null);
@@ -20,42 +22,53 @@ const I = {
 export default function DockMenu({ items = [] }) {
   const shared = useContext(DockMenuContext);
   const [open, setOpen] = useState(false);
-  const box = useRef(null);
+  useOneOpen(open, () => setOpen(false));
+  const box = useRef(null), menu = useRef(null);
+  // the menu is drawn at the page's top level, placed over the button: inside the dock (itself frosted) its
+  // backdrop blur would only see the dock, not the drawing behind it
+  const [at, setAt] = useState(null);
+  const toggle = () => {
+    if (!open) {
+      const r = box.current.getBoundingClientRect();
+      setAt({ left: r.left + r.width / 2, bottom: window.innerHeight - r.top + 8 });
+    }
+    setOpen((o) => !o);
+  };
   useEffect(() => {
     if (!open) return undefined;
-    const away = (e) => { if (!box.current?.contains(e.target)) setOpen(false); };
+    const away = (e) => { if (!box.current?.contains(e.target) && !menu.current?.contains(e.target)) setOpen(false); };
     const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('pointerdown', away);
     document.addEventListener('keydown', esc);
-    box.current?.querySelector('[role^="menuitem"]')?.focus();
+    menu.current?.querySelector('[role^="menuitem"]')?.focus();
     return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc); };
   }, [open]);
   const onKey = (e) => {
-    const els = [...box.current.querySelectorAll('[role^="menuitem"]')], i = els.indexOf(document.activeElement);
+    const els = [...menu.current.querySelectorAll('[role^="menuitem"]')], i = els.indexOf(document.activeElement);
     if (e.key === 'ArrowDown') { e.preventDefault(); els[(i + 1) % els.length]?.focus(); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); els[(i - 1 + els.length) % els.length]?.focus(); }
   };
-  const row = 'flex w-full items-center gap-2.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-left text-[12px] outline-none hover:bg-accent-dim focus-visible:bg-accent-dim';
+  const row = 'flex w-full items-center gap-2 whitespace-nowrap rounded-md px-2 py-1 text-left text-[12px] leading-4 outline-none hover:bg-accent-dim focus-visible:bg-accent-dim';
   const choose = (fn) => () => { setOpen(false); fn(); };
   return (
     <div ref={box} className="relative">
-      <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label="More" onClick={() => setOpen((o) => !o)}
+      <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label="More" onClick={toggle}
         className={`group relative grid size-8 place-items-center rounded-full transition-colors ${open ? 'bg-accent-dim text-accent' : 'text-ink-hi hover:bg-accent-dim hover:text-accent'}`}>
         {I.more}
         {!open && (
           <span role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 -translate-x-1/2 whitespace-nowrap rounded-full frost-panel frost-edge px-2.5 py-1 text-[11px] font-medium leading-none text-ink-hi opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100">More</span>
         )}
       </button>
-      {open && (
-        <div role="menu" aria-label="More" onKeyDown={onKey}
-          className="frost-panel frost-edge dock-menu absolute bottom-full left-1/2 z-40 mb-2 flex min-w-[172px] -translate-x-1/2 flex-col rounded-xl p-1">
+      {open && at && createPortal(
+        <div ref={menu} role="menu" aria-label="More" onKeyDown={onKey} style={{ left: at.left, bottom: at.bottom }}
+          className="frost-panel frost-edge dock-menu fixed z-50 flex min-w-[140px] -translate-x-1/2 flex-col rounded-[10px] p-0.5">
           {items.map((it) => (
             <button key={it.label} type="button" role="menuitem" onClick={choose(it.onClick)}
               className={`${row} ${it.danger ? 'text-[#e5484d]' : 'text-ink-hi'}`}>
               <span className="text-ink">{I[it.icon || 'export']}</span>{it.label}
             </button>
           ))}
-          {items.length > 0 && <div className="mx-2 my-1 h-px bg-[color-mix(in_srgb,var(--ink)_18%,transparent)]" />}
+          {items.length > 0 && <div className="mx-1.5 my-0.5 h-px bg-[color-mix(in_srgb,var(--ink)_18%,transparent)]" />}
           {shared && (
             <>
               <button type="button" role="menuitem" onClick={choose(shared.openHistory)} className={`${row} text-ink-hi`}>
@@ -72,7 +85,8 @@ export default function DockMenu({ items = [] }) {
               </button>
             </>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

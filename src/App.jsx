@@ -12,6 +12,7 @@ import ZoomRail from './components/ZoomRail.jsx';
 import { DockMenuContext } from './components/DockMenu.jsx';
 import { useCameraNav } from './lib/useCameraNav.js';
 import { whenIdle } from './lib/keep.js';
+import { useOneOpen } from './lib/oneOpen.js';
 
 // the floor and unit pages load as their own chunks (the building page is the first view); both are
 // fetched as soon as the browser is idle after the first paint, so opening a floor never waits on them
@@ -80,6 +81,9 @@ export default function App() {
   }, [state.plans]);
   useEffect(() => { saveLog(state.log); }, [state.log]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // one menu or side panel open at a time (lib/oneOpen): the floor list and History count too
+  useOneOpen(floorsOpen, () => setFloorsOpen(false));
+  useOneOpen(historyOpen, () => setHistoryOpen(false));
   const dockMenu = useMemo(() => ({ openHistory: () => setHistoryOpen(true), labels, setLabels }), [labels, setLabels]);
   // a search result (or an edit in the history): open its page; `focus` (a fresh object every time, so
   // picking the same thing again glides again) is the spot the camera moves onto
@@ -111,21 +115,21 @@ export default function App() {
                   onOpen={(f) => openFloor(f, true)} onGuide={(f) => setView({ kind: 'floor', floor: f, guide: true })} />
               </div>
               {/* floor list: a menu button at the bottom right that opens a floating frosted panel above it */}
-              <div className="pointer-events-none absolute top-[3.75rem] bottom-3 right-3 z-10 flex w-64 flex-col items-end justify-end gap-2">
+              <div className="pointer-events-none absolute top-[3.75rem] bottom-3 right-3 z-10 flex w-56 flex-col items-end justify-end gap-2">
               {/* always mounted so it can grow out of / shrink back into the menu button (no fade): it scales
                   from the button's centre, 20px in from its right edge and 28px below it (8px gap + half the
                   40px button); inert while closed */}
               <aside id="floor-panel" inert={!floorsOpen} aria-hidden={!floorsOpen}
-                className={`frost-panel frost-edge w-64 min-h-0 origin-[calc(100%-20px)_calc(100%+28px)] rounded-2xl p-3 flex flex-col gap-2 overflow-auto transition-[scale,visibility] motion-reduce:transition-none ${floorsOpen ? 'pointer-events-auto visible scale-100 duration-[420ms] ease-[cubic-bezier(.34,1.56,.64,1)]' : 'pointer-events-none invisible scale-0 duration-[260ms] ease-[cubic-bezier(.55,0,.75,.2)]'}`}>
-                <h3 className="text-[10px] uppercase tracking-[.18em] text-ink">Floors</h3>
-                <ul className="flex flex-col gap-0.5">
+                className={`frost-panel frost-edge w-56 min-h-0 origin-[calc(100%-20px)_calc(100%+28px)] rounded-xl p-1 flex flex-col gap-0.5 overflow-auto transition-[scale,visibility] motion-reduce:transition-none ${floorsOpen ? 'pointer-events-auto visible scale-100 duration-[420ms] ease-[cubic-bezier(.34,1.56,.64,1)]' : 'pointer-events-none invisible scale-0 duration-[260ms] ease-[cubic-bezier(.55,0,.75,.2)]'}`}>
+                <h3 className="px-2 pt-1 text-[10px] uppercase tracking-[.18em] text-ink">Floors</h3>
+                <ul className="flex flex-col gap-px">
                   {floors.map((f) => {
                     const rented = RENTED.includes(f);
                     const o = occupancy[f];
                     return (
                       <li key={f}>
                         <button type="button" disabled={!rented} onClick={() => openFloor(f, true)}
-                          className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] ${rented ? 'border border-accent/60 bg-accent-dim text-ink-hi hover:border-accent' : 'border border-transparent text-ink cursor-default'}`}>
+                          className={`w-full flex items-center gap-2 rounded-md px-2 py-0.5 text-left text-[12px] leading-5 ${rented ? 'border border-accent/60 bg-accent-dim text-ink-hi hover:border-accent' : 'border border-transparent text-ink cursor-default'}`}>
                           <span className={`size-1.5 rounded-full ${rented ? 'bg-accent' : 'bg-detail'}`} />
                           <span className="tabular-nums w-8">{f === 0 ? 'G' : `F${String(f).padStart(2, '0')}`}</span>
                           <span className="flex-1">{rented ? `Units ${UNITS[f].join(' · ')}` : f === 0 ? 'Lobby' : 'Vacant'}</span>
@@ -135,7 +139,7 @@ export default function App() {
                     );
                   })}
                 </ul>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink">
+                <p className="px-2 pb-1 pt-0.5 text-[11px] leading-snug text-ink">
                   Floors 2 and 4 are rented (Units C and D each), laid out from the official layout PDF of 2026-09-29.
                   Lit windows show how many desks have someone assigned.
                 </p>
@@ -188,10 +192,6 @@ export default function App() {
           <Credit />
         </div>
         <span className="flex-1" />
-        {/* the search box sits at the screen's centre, whatever the header's sides hold */}
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          <SearchBar plans={state.plans} onPick={(r) => goTo(r.view)} />
-        </div>
         <div className="pointer-events-auto flex items-center gap-4">
           <Switch checked={theme === 'dark'} onChange={(on) => setTheme(on ? 'dark' : 'light')} label="Dark mode" icon={ICONS.theme} />
         </div>
@@ -210,6 +210,10 @@ export default function App() {
         })}
         {/* the current view's zoom (wheel, + / −, or a click on the track) */}
         <ZoomRail stage={view.kind} right={view.kind === 'unit' ? '6.75rem' : '3.75rem'} />
+        {/* the search box, bottom centre on the docks' line (its results open upward) */}
+        <div className="absolute bottom-3 left-1/2 z-30 -translate-x-1/2">
+          <SearchBar plans={state.plans} onPick={(r) => goTo(r.view)} />
+        </div>
         </div>
       </main>
       <div id="history-panel">

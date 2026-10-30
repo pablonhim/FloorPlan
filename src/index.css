@@ -34,9 +34,14 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
   background: radial-gradient(ellipse 55% 50% at 50% 46%, #f9fafb 0%, rgb(249 250 251 / 0) 70%), linear-gradient(180deg, #f3f4f6 0%, #e5e7eb 100%);
 }
 
-/* theme switch: the old look fades slowly into the new one (started by setTheme in lib/theme.js) */
+/* a camera-driven svg reaches past its holder on every side (svgCamera's OVER: 25%), so moving it shows
+   drawing already painted; the holder (position: relative, overflow: hidden) clips it */
+.cam-over { position: absolute; left: -25%; top: -25%; width: 150%; height: 150%; max-width: none; display: block; }
+
+/* the theme switch: no cross-fade; the new theme is revealed by a growing circle (theme.js) over the old */
 ::view-transition-old(root),
-::view-transition-new(root) { animation-duration: 0.6s; animation-timing-function: ease-in-out; }
+::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+::view-transition-new(root) { z-index: 1; }
 
 /* frosted-glass card (tower floor tooltip): a heavy frost, so lines and text behind it melt into a soft
    blur and only its own text reads */
@@ -109,6 +114,13 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 
 /* the dock's More menu opens with a small springy pop (as the edit buttons), staying a column */
 .dock-menu { animation: dock-menu-in .18s cubic-bezier(.34, 1.56, .64, 1); transform-origin: bottom center; }
+/* the ⋯ menu shows what is behind it, blurred: a thinner, more see-through frost than the panels */
+.frost-panel.dock-menu {
+  background: color-mix(in srgb, #ffffff 45%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  backdrop-filter: blur(14px) saturate(1.6);
+}
+:root:not([data-theme="light"]) .frost-panel.dock-menu { background: color-mix(in srgb, #2a2d33 50%, transparent); }
 @keyframes dock-menu-in { from { opacity: 0; scale: .85; } }
 @media (prefers-reduced-motion: reduce) { .dock-menu { animation: none; } }
 
@@ -120,3 +132,9 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
   42%, 89.5%, 94.5% { transform: scaleY(.08); }
 }
 @media (prefers-reduced-motion: reduce) { .eye-blink { animation: none; } }
+
+/* everything clickable shows the pointer finger (Tailwind v4 no longer gives buttons one) */
+@layer base {
+  button:not(:disabled), [role="button"], [role="switch"], [role="option"], [role="menuitem"], a[href], summary, select, label:has(input[type="checkbox"]) { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+}
