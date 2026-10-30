@@ -2,7 +2,7 @@
 import { CELL, TILE, PILLAR_H, SLAB } from './units.js';
 import { esc, frame } from './kernel.js';
 import { footprint } from './grid.js';
-import { renderParts } from './parts.js';
+import { renderParts, placeRect } from './parts.js';
 import { partsFor, SIZES, zoneTag, LAYER, isLive, tipFor, TIP_LANGS, NEUTRAL_TYPES } from '../model/catalog.js';
 import { depthSort } from './depth.js';
 import { shadowLayer, rectsPath, hull } from './shadow.js';
@@ -65,22 +65,34 @@ export function itemNode(item) {
  * { it, cls }) whose drawing overlaps its outline on screen are drawn again blurred over a plain backdrop,
  * clipped to that outline, just under the pane. `html(it)` gives an item's drawing. Map: glass id → svg.
  */
+let GLASS_SEQ = 0;
 export function glassBackdrops(K, nodes, html, cut = Infinity) {
+  // clip ids unique to this drawing: the views are kept alive side by side in one document (the floor view
+  // and the unit editor both draw the same glass walls, in different frames), and a url(#id) resolves to the
+  // first element with that id in the document — a shared id would clip with another view's outline
+  const seq = ++GLASS_SEQ;
   const scr = (n) => {
     const z1 = Math.min(n.z1, cut), pts = [];
     for (const x of [n.x0, n.x1]) for (const y of [n.y0, n.y1]) for (const z of [n.z0, z1]) pts.push(K.P(x, y, z));
     const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
     return { pts, x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
   };
+  // a glass wall's pane exactly (it is thinner than the wall's grid cell): clipping to the whole cell
+  // would leave a blurred strip, with no pane over it, along both faces of the glass
+  const pane = (it) => {
+    const { W0, D0, parts } = partsFor(it), p = parts.find((q) => /\bpane\b/.test(q.cls || '')) || parts[0];
+    const w = placeRect(p, W0, D0, it.rot, it.gx * CELL, it.gy * CELL);
+    return scr({ x0: w.x, y0: w.y, x1: w.x + w.w, y1: w.y + w.d, z0: p.z, z1: p.z + p.h });
+  };
   const boxes = nodes.map(scr), out = new Map();
   nodes.forEach((n, i) => {
     if (n.it.type !== 'glass' || n.ghost) return;
-    const g = boxes[i], behind = [];
+    const g = pane(n.it), behind = [];
     for (let j = 0; j < i; j++) {
       const b = boxes[j];
       if (!nodes[j].ghost && nodes[j].it.type !== 'glass' && b.x0 < g.x1 && g.x0 < b.x1 && b.y0 < g.y1 && g.y0 < b.y1) behind.push(nodes[j]);
     }
-    const d = 'M' + hull(g.pts).map((p) => p.map((v) => v.toFixed(2)).join(' ')).join('L') + 'Z', id = `glb-${n.it.id}`;
+    const d = 'M' + hull(g.pts).map((p) => p.map((v) => v.toFixed(2)).join(' ')).join('L') + 'Z', id = `glb${seq}-${n.it.id}`;
     out.set(n.it.id, `<g class="glass-behind"><defs><clipPath id="${id}"><path d="${d}"/></clipPath></defs>` +
       `<g clip-path="url(#${id})"><path class="glass-backdrop" d="${d}"/><g filter="url(#frost-blur)">` +
       behind.map((b) => `<g class="${b.cls || 'it'}">${html(b.it)}</g>`).join('') + `</g></g></g>`);
@@ -123,36 +135,35 @@ export function tipData(item) {
  * screen space (text stays upright and level), back to front so nearer pills overlap farther ones; meant for
  * a layer over the whole scene.
  */
-const CALLOUT = { z: 38, rise: 6, fs: 10, padX: 6, h: 31, r: 6, pic: 13, padT: 3, notch: 4.5, notchW: 3.5 };
+// The desks' name cards: a frosted card floating just above the monitor (everything behind it blurs: an HTML
+// card in a foreignObject, with backdrop-filter), no border; a rounded-square profile picture with the name
+// under it. Every card is the same width, wrapped tight round the picture; a long name shrinks to fit.
+const CALLOUT = { rise: 3, pad: 3, pic: 24, gap: 2, fs: 7.5, nameH: 9 };
 const textW = (s, fs) => [...s].reduce((w, c) => w + (/[\u1100-\uffff]/.test(c) ? 1.02 : 0.6) * fs, 0);
-/** A rounded box w × h (corner radius r) whose bottom edge sits at y = bottom, centred on x, with a sharp
- *  notch of depth `nd` and half-width `nw` hanging from its bottom centre (a speech bubble's tail). */
-const bubble = (x, bottom, w, h, r, nd, nw) => {
-  const x0 = x - w / 2, x1 = x + w / 2, y0 = bottom - h, f = (n) => n.toFixed(1);
-  return `M${f(x0 + r)} ${f(y0)}H${f(x1 - r)}A${r} ${r} 0 0 1 ${f(x1)} ${f(y0 + r)}V${f(bottom - r)}A${r} ${r} 0 0 1 ${f(x1 - r)} ${f(bottom)}` +
-    `H${f(x + nw)}L${f(x)} ${f(bottom + nd)}L${f(x - nw)} ${f(bottom)}H${f(x0 + r)}A${r} ${r} 0 0 1 ${f(x0)} ${f(bottom - r)}` +
-    `V${f(y0 + r)}A${r} ${r} 0 0 1 ${f(x0 + r)} ${f(y0)}Z`;
-};
-/** A simple profile picture: a person's head and shoulders in a disc of diameter d centred on (x, y). */
-const avatar = (x, y, d) => {
-  const r = d / 2, f = (n) => n.toFixed(1);
-  return `<circle class="callout-pic" cx="${f(x)}" cy="${f(y)}" r="${f(r)}"/>` +
-    `<circle class="callout-pic-fig" cx="${f(x)}" cy="${f(y - r * 0.2)}" r="${f(r * 0.36)}"/>` +
-    `<path class="callout-pic-fig" d="M${f(x - r * 0.66)} ${f(y + r * 0.72)}A${f(r * 0.66)} ${f(r * 0.52)} 0 0 1 ${f(x + r * 0.66)} ${f(y + r * 0.72)}` +
-    `A${f(r)} ${f(r)} 0 0 1 ${f(x - r * 0.66)} ${f(y + r * 0.72)}Z"/>`;
-};
+/** The profile picture: a placeholder head and shoulders for now (a real photo will go in its place). */
+const PIC = '<svg viewBox="0 0 30 30" preserveAspectRatio="xMidYMid slice"><circle class="callout-pic-fig" cx="15" cy="12" r="5.6"/>' +
+  '<path class="callout-pic-fig" d="M4.5 31a10.5 9 0 0 1 21 0Z"/></svg>';
+/** Where a desk's card floats: just above the top of its monitor (world point, rotation included). */
+function monitorTop(it) {
+  const { W0, D0, parts } = partsFor(it), p = parts.find((q) => /\bmonitor-body\b/.test(q.cls || ''));
+  if (!p) { const f = footprint(it); return [(it.gx + f.w / 2) * CELL, (it.gy + f.d / 2) * CELL, SIZES.desk.h]; }
+  const w = placeRect(p, W0, D0, it.rot, it.gx * CELL, it.gy * CELL);
+  return [w.x + w.w / 2, w.y + w.d / 2, p.z + p.h];
+}
 export function renderDeskCallouts(K, items) {
-  const { z, rise, fs, padX, h, r, pic, padT, notch, notchW } = CALLOUT;
+  const { rise, pad, pic, gap, fs, nameH } = CALLOUT;
+  const W = pic + 2 * pad, H = pad + pic + gap + nameH + pad * 0.6;
   return items.filter((it) => it.type === 'desk' && (it.name || '').trim())
-    .map((it) => { const f = footprint(it); return { it, cx: (it.gx + f.w / 2) * CELL, cy: (it.gy + f.d / 2) * CELL }; })
-    .sort((a, b) => a.cx + a.cy - (b.cx + b.cy))
-    .map(({ it, cx, cy }) => {
-      // the profile picture on top, the name under it
-      const name = it.name.trim(), [ax, ay] = K.P(cx, cy, z), top = ay - rise, w = Math.max(textW(name, fs), pic) + 2 * padX;
-      return `<g class="desk-callout" data-for="${esc(it.id)}">` +
-        `<path class="callout-pill" d="${bubble(ax, top, w, h, r, notch, notchW)}"/>` +
-        avatar(ax, top - h + padT + pic / 2, pic) +
-        `<text class="callout-name" x="${ax.toFixed(1)}" y="${(top - 4.4).toFixed(1)}" font-size="${fs}" text-anchor="middle">${esc(name)}</text></g>`;
+    .map((it) => ({ it, at: monitorTop(it) }))
+    .sort((a, b) => a.at[0] + a.at[1] - (b.at[0] + b.at[1]))
+    .map(({ it, at }) => {
+      const name = it.name.trim(), [ax, ay] = K.P(...at), x = ax - W / 2, y = ay - rise - H;
+      const size = Math.min(fs, (pic + pad) / Math.max(textW(name, 1), 1e-6));
+      return `<foreignObject class="desk-callout" data-for="${esc(it.id)}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${W}" height="${H.toFixed(1)}">` +
+        `<div xmlns="http://www.w3.org/1999/xhtml" class="callout-card" style="padding:${pad}px ${pad}px ${(pad * 0.6).toFixed(1)}px">` +
+        `<div class="callout-pic" style="width:${pic}px;height:${pic}px">${PIC}</div>` +
+        `<div class="callout-name" style="margin-top:${gap}px;height:${nameH}px;line-height:${nameH}px;font-size:${size.toFixed(2)}px">${esc(name)}</div>` +
+        `</div></foreignObject>`;
     }).join('');
 }
 

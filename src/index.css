@@ -150,17 +150,41 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
    (the sun is in the south-west); night: a deep cool blue on the tops and east faces. The Corten fins and the
    floors' hover tint keep their own fills. */
 :root[data-sky="morning"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap), :root[data-sky="morning"] .cam-over .it:not(.sel) :is(.face.furn, .face.tableTop).top { fill: color-mix(in srgb, var(--struct-top) 91%, #ffdc8f); }
-:root[data-sky="morning"] .cam-over .face.slab.top { fill: color-mix(in srgb, var(--deck) 94%, #ffdc8f); }
+:root[data-sky="morning"] .cam-over .face.slab.top { fill: color-mix(in srgb, var(--floor) 94%, #ffdc8f); }
 :root[data-sky="morning"] .cam-over :is(.face.struct, .face.slab, .face.fixture).side:not(.pilaster, .band), :root[data-sky="morning"] .cam-over .it:not(.sel) :is(.face.furn, .face.tableTop).side { fill: color-mix(in srgb, var(--struct-lit) 90%, #ffd27a); }
 :root[data-sky="morning"] .twr .fl:not(:hover, .cursor) .face.band.side { fill: color-mix(in srgb, var(--struct-lit) 90%, #ffd27a); }
 :root[data-sky="evening"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap), :root[data-sky="evening"] .cam-over .it:not(.sel) :is(.face.furn, .face.tableTop).top { fill: color-mix(in srgb, var(--struct-top) 89%, #ffb77a); }
-:root[data-sky="evening"] .cam-over .face.slab.top { fill: color-mix(in srgb, var(--deck) 93%, #ffb77a); }
+:root[data-sky="evening"] .cam-over .face.slab.top { fill: color-mix(in srgb, var(--floor) 93%, #ffb77a); }
 :root[data-sky="evening"] .cam-over :is(.face.struct, .face.slab, .face.fixture).front:not(.pilaster, .band), :root[data-sky="evening"] .cam-over .it:not(.sel) :is(.face.furn, .face.tableTop).front { fill: color-mix(in srgb, var(--struct-shade) 87%, #ffa560); }
 :root[data-sky="evening"] .twr .fl:not(:hover, .cursor) .face.band.front { fill: color-mix(in srgb, var(--struct-shade) 87%, #ffa560); }
 :root[data-sky="night"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap), :root[data-sky="night"] .cam-over .it:not(.sel) :is(.face.furn, .face.tableTop).top { fill: color-mix(in srgb, var(--struct-top) 86%, #4f72b8); }
-:root[data-sky="night"] .cam-over .face.slab.top { fill: color-mix(in srgb, var(--deck) 90%, #4f72b8); }
+:root[data-sky="night"] .cam-over .face.slab.top { fill: color-mix(in srgb, var(--floor) 90%, #4f72b8); }
 :root[data-sky="night"] .cam-over :is(.face.struct, .face.slab, .face.fixture).side:not(.pilaster, .band), :root[data-sky="night"] .cam-over .it:not(.sel) :is(.face.furn, .face.tableTop).side { fill: color-mix(in srgb, var(--struct-lit) 88%, #3e5c9a); }
 :root[data-sky="night"] .twr .fl:not(:hover, .cursor) .face.band.side { fill: color-mix(in srgb, var(--struct-lit) 88%, #3e5c9a); }
+/* the neighbouring units' building finish (iso.css --nb-*) takes the sky's cast like the building's own */
+:root[data-sky="morning"], :root[data-sky="morning"] .office-lit {
+  --nb-top: color-mix(in srgb, var(--struct-top) 91%, #ffdc8f); --nb-side: color-mix(in srgb, var(--struct-lit) 90%, #ffd27a); }
+:root[data-sky="evening"], :root[data-sky="evening"] .office-lit {
+  --nb-top: color-mix(in srgb, var(--struct-top) 89%, #ffb77a);
+  --nb-front: color-mix(in srgb, color-mix(in srgb, var(--struct-shade) 94%, var(--ink)) 87%, #ffa560); }
+:root[data-sky="night"], :root[data-sky="night"] .office-lit {
+  --nb-top: color-mix(in srgb, var(--struct-top) 86%, #4f72b8); --nb-side: color-mix(in srgb, var(--struct-lit) 88%, #3e5c9a); }
+/* the desk monitors' dark screens reflect the sky: a faint wash of the time of day's light across the glass */
+:root:root:root[data-sky="morning"] .glass.monitor { fill: color-mix(in srgb, #16191e 90%, #ffd98a); }
+:root:root:root[data-sky="evening"] .glass.monitor { fill: color-mix(in srgb, #16191e 89%, #ffab6e); }
+:root:root:root[data-sky="night"] .glass.monitor { fill: color-mix(in srgb, #16191e 88%, #5d7fc4); }
+/* …and in the floor and unit views (.office-lit), a clearer cast on the floor, the walls and the pillars — their
+   tops (the grey caps too), their sun-facing sides and, in the evening, their south faces — whatever the
+   material style, so the plans take the time of day as the building does */
+:root:root[data-sky="morning"] .office-lit .face.slab.top { fill: color-mix(in srgb, var(--floor) 90%, #ffdc8f); }
+:root:root[data-sky="morning"] .office-lit .it :is(.face.wall, .face.pillar).top { fill: color-mix(in srgb, var(--struct-cap) 86%, #ffdc8f); }
+:root:root[data-sky="morning"] .office-lit .it :is(.face.wall, .face.pillar).side { fill: color-mix(in srgb, var(--struct-lit) 84%, #ffd27a); }
+:root:root[data-sky="evening"] .office-lit .face.slab.top { fill: color-mix(in srgb, var(--floor) 88%, #ffb77a); }
+:root:root[data-sky="evening"] .office-lit .it :is(.face.wall, .face.pillar).top { fill: color-mix(in srgb, var(--struct-cap) 84%, #ffb77a); }
+:root:root[data-sky="evening"] .office-lit .it :is(.face.wall, .face.pillar):not(.top, .side) { fill: color-mix(in srgb, var(--struct-shade) 82%, #ffa560); }
+:root:root[data-sky="night"] .office-lit .face.slab.top { fill: color-mix(in srgb, var(--floor) 86%, #4f72b8); }
+:root:root[data-sky="night"] .office-lit .it :is(.face.wall, .face.pillar).top { fill: color-mix(in srgb, var(--struct-cap) 84%, #4f72b8); }
+:root:root[data-sky="night"] .office-lit .it :is(.face.wall, .face.pillar).side { fill: color-mix(in srgb, var(--struct-lit) 84%, #3e5c9a); }
 
 /* time of day (lib/sky: data-sky on the root). The sky is the stage's background, behind the drawing, fixed
    upright on the screen; muted, natural tones. */
@@ -306,7 +330,8 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
   --shadow: #2a2a2a; --ao-a: .42;
 }
 :root[data-clay="on"] .cam-over :is(.face:not(.furn, .it .face), .glass, .pn, .door-panel, .gate-panel, .car-face, .car-tyre) { stroke-width: .45 !important; }
-:root[data-clay="on"] :is(.slab-grid, .tile-line, .floor-grid, .zone-hatch) { stroke-opacity: .12 !important; stroke-width: .35 !important; }
+:root[data-clay="on"] .slab-grid { stroke-opacity: .2 !important; stroke-width: .5 !important; }
+:root[data-clay="on"] :is(.tile-line, .floor-grid, .zone-hatch) { stroke-opacity: .12 !important; stroke-width: .35 !important; }
 /* Corten & terracotta (data-corten, the dock's ⋯ menu; exclusive with the model): a biophilic architectural
    palette — crisp matte off-white shell and roof (#F5F5F7), the façade's pilasters, window frames and podium in
    weathered Corten steel (#B3512E → #964223, burnt sienna), forest-green lawns, beds and shrubs (#2D6A4F,

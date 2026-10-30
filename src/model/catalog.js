@@ -11,7 +11,7 @@ import { rotPoint } from '../iso/parts.js';
  * `sizable` lists which of w/d an item may override (walls only change length).
  */
 export const SIZES = {
-  desk:         { w: 7, d: 6, h: 54, label: 'Desk', note: '140 × 120 cm incl. chair', sizable: 'wd' },
+  desk:         { w: 7, d: 6, h: 63, label: 'Desk', note: '140 × 120 cm incl. chair', sizable: 'wd' },
   drawer:       { w: 2, d: 2, h: 30, label: 'Lead drawer', kr: '팀장의 서랍' },
   stool:        { w: 2, d: 2, h: 24, label: 'Stool' },
   serverRack:   { w: 3, d: 6, h: 56, label: 'Server rack', kr: '서버 랙', note: '60 × 120 cm, 42U (shown cut)' },
@@ -158,6 +158,29 @@ const seat = (x, y, live, s = 16) => [
   { x, y, z: 20, w: s, d: s, h: 4, r: s / 3, cls: live ? 'seat furn live' : 'seat furn' },
 ];
 
+/**
+ * Modern office chair in a W × D box at (x, y), the sitter facing `facing` ('-y' toward a desk behind
+ * -y, '+y', '+x', '-x'), kept minimal: a round foot, a column, a rounded seat (CSS .chair) and one backrest
+ * panel with rounded ends, standing on the seat's back edge (no seams across it). Drawn in the -y frame and turned; the boxes never interpenetrate, so the part depth sort stays
+ * exact.
+ */
+function officeChair(x, y, W, D, facing, live) {
+  // W across the sitter, D front to back (in the -y frame)
+  const c = W / 2, m = D / 2, f = Math.min(W, D) * 0.56, L = live ? ' live' : '';
+  const parts = [
+    { x: c - f / 2, y: m - f / 2, z: 0, w: f, d: f, h: 1, r: f / 2, cls: 'furn chair-base' },          // round foot
+    { x: c - 0.8, y: m - 0.8, z: 1, w: 1.6, d: 1.6, h: 17, cls: 'furn chair-base' },                   // column
+    { x: 1, y: 1, z: 18, w: W - 2, d: D - 3, h: 4, r: Math.min(W, D) / 4, cls: `seat furn chair${L}` }, // seat
+    { x: W * 0.09, y: D - 2.6, z: 22, w: W * 0.82, d: 1.6, h: 17, r: 0.8, cls: `seat backrest furn chair shell${L}` },  // backrest: one panel
+  ];
+  const turn = ({ x: px, y: py, w, d, ...p }) => (
+    facing === '+y' ? { ...p, x: px, y: D - py - d, w, d }
+      : facing === '+x' ? { ...p, x: D - py - d, y: px, w: d, d: w }
+        : facing === '-x' ? { ...p, x: py, y: px, w: d, d: w }
+          : { ...p, x: px, y: py, w, d });
+  return parts.map(turn).map((p) => ({ ...p, x: p.x + x, y: p.y + y }));
+}
+
 // ---------- elements ----------
 
 /** Teams whose desks have no side extension table. */
@@ -169,17 +192,18 @@ function desk(item, W, D) {
   const top = Math.round(D * 0.58);            // worktop depth; the rest is the chair zone
   // 25 cm extension table at the x = 0 end (the employee's left); none for the teams in NO_EXT_TEAMS
   const EXT = NO_EXT_TEAMS.has((item.team || '').trim()) ? 0 : 12.5;
-  const mid = 1 + EXT + (W - 2 - EXT) / 2;     // centre of the desk proper: monitor and chair line up on it
+  // centre of the desk proper (the extension is a side table at its end, not part of the worktop): the
+  // monitor and the chair line up on it
+  const mid = EXT + (W - EXT) / 2;
   // desks facing each other in a pair differ by 180°, which would put their extensions at opposite ends;
   // the 180° / 270° desks are mirrored so the extensions of a facing pair line up on the same end
   const flip = (item.rot || 0) >= 180;
-  const screen = (w, h) => `<rect class="glass hot monitor" x="1.5" y="1.5" width="${w - 3}" height="${h - 3}" rx="1"/>` +
-    `<rect class="scr-accent" x="4" y="4" width="${w * 0.5}" height="1.6"/><rect class="scr-accent" x="4" y="7.5" width="${w * 0.32}" height="1.6"/>`;
+  const screen = (w, h) => `<rect class="glass hot monitor" x="0" y="0" width="${w}" height="${h}"/>`;  // frameless: the white glass to the edges
   // the screen's light as a ray across the worktop: a widening, fading beam from just in front of the
   // monitor to the desk's front edge, in the worktop's own frame turned to the desk's rotation (the
   // beam is symmetric, so the mirroring of 180° / 270° desks does not change it); #ray-<rot> fades it
   const ray = (rot) => {
-    const pw = W - 2 - EXT, pd = top - 1, u = pw / 2;
+    const pw = W - EXT, pd = top, u = pw / 2;
     const pts = [[u - 10, 6], [u + 10, 6], [u + 17, pd], [u - 17, pd]].map(([a, b]) => rotPoint(a, b, pw, pd, rot));
     // each desk's beam breathes on its own (CSS beam-breathe), phase and pace seeded from its id — on the
     // shared ambient tick (see AMBIENT_TICK): a pace of 2·n ticks, n steps up and n down, and a phase of whole
@@ -190,15 +214,18 @@ function desk(item, W, D) {
     return `<path class="monitor-ray" style="${style}" fill="url(#ray-${rot})" d="M${pts.map((p) => p.map((n) => n.toFixed(2)).join(' ')).join('L')}Z"/>`;
   };
   return [
-    // the extension: its own board, as deep as the desk, butted against the desk's end, on its own legs
+    // flush geometry: the worktop and the extension run edge to edge across the desk's footprint (so the
+    // desks of a row, and back-to-back pairs, meet without a gap), and the panel legs are exactly as deep as
+    // the worktop and flush with its ends — one under the extension's outer end, one under the seam (its face
+    // continuing the seam line straight down), one at the far end — so nothing overhangs
     ...(EXT ? [
-      { x: 2, y: 3, z: 0, w: 2, d: top - 6, h: 36, cls: 'furn' },
-      { x: 1, y: 1, z: 36, w: EXT, d: top - 1, h: 2, cls: 'deskExt furn' },
+      { x: 0, y: 0, z: 0, w: 2, d: top, h: 36, cls: 'furn desk-leg' },
+      { x: 0, y: 0, z: 36, w: EXT, d: top, h: 2, cls: 'deskExt furn' },
     ] : []),
-    { x: 1 + EXT + 2, y: 3, z: 0, w: 2, d: top - 6, h: 36, cls: 'furn' },          // desk legs
-    { x: W - 5, y: 3, z: 0, w: 2, d: top - 6, h: 36, cls: 'furn' },
+    { x: EXT, y: 0, z: 0, w: 2, d: top, h: 36, cls: 'furn desk-leg' },                     // desk legs
+    { x: W - 2, y: 0, z: 0, w: 2, d: top, h: 36, cls: 'furn desk-leg' },
     {
-      x: 1 + EXT, y: 1, z: 36, w: W - 2 - EXT, d: top - 1, h: 2, cls: live ? 'deskTop furn live' : 'deskTop furn',
+      x: EXT, y: 0, z: 36, w: W - EXT, d: top, h: 2, cls: live ? 'deskTop furn live' : 'deskTop furn',
       top: (w, d, rot = 0) => {
         // the employee's name floats above the desk in a callout (render.renderDeskCallouts); an unassigned
         // desk keeps its small note on the worktop
@@ -206,23 +233,28 @@ function desk(item, W, D) {
         return ray(rot);
       },
     },
+    // the monitor on its stand: a flat foot on the worktop, a neck rising at the back, and the screen
+    // held up on it (the boxes never interpenetrate, so the part depth sort stays exact)
+    // set a little in from the back edge, toward the sitter
+    { x: mid - 5.5, y: 8.5, z: 38, w: 11, d: 6, h: 0.8, r: 1.5, cls: 'furn monitor-stand' },       // foot
+    { x: mid - 1.25, y: 9.5, z: 38.8, w: 2.5, d: 1.5, h: 6.2, cls: 'furn monitor-stand' },        // neck
     {
-      x: mid - 11, y: 5, z: 38, w: 22, d: 2, h: 14, cls: 'furn',                   // monitor, screen faces the chair
+      x: mid - 15, y: 11, z: 45, w: 30, d: 1.5, h: 18, cls: 'furn monitor-body',                 // screen, facing the chair
       deco: {
         // every desk's screen is on, assigned or not, facing its own chair; from behind (a desk turned
         // away) the monitor shows its back, with the screen's glow spilling round its edge
         '+y': screen,
         '-y': (w, h) => `<rect class="monitor-halo" x="-.5" y="-.5" width="${w + 1}" height="${h + 1}" rx="1.5"/>` +
-          `<rect class="monitor-back" x="1.5" y="1.5" width="${w - 3}" height="${h - 3}" rx="1"/>`,
+          `<rect class="monitor-back" x="0" y="0" width="${w}" height="${h}"/>`,                       // frameless back, edge to edge
       },
     },
-    ...seat(mid - 9, top + 3, live, 18),
-    { x: mid - 9, y: D - 5, z: 24, w: 18, d: 3, h: 20, r: 1, cls: live ? 'seat backrest furn live' : 'seat backrest furn' },  // backrest
+    ...officeChair(mid - 14, top + 3, 28, Math.min(22, D - top - 4), '-y', live),   // wide, as deep as the chair zone allows
   ].map((p) => (flip ? { ...p, x: W - p.x - p.w } : p));
 }
 
 function drawer() {
-  const face = (w, h) => slits(h / 3, h - 2, h / 3, 2, w - 2, false) + `<rect class="detail" x="${w / 2 - 3}" y="3" width="6" height="1.2"/>`;
+  // two drawers: one seam across the middle, and a handle near the top
+  const face = (w, h) => `<line class="drawer-line" x1="2" y1="${h / 2}" x2="${w - 2}" y2="${h / 2}"/>` + `<rect class="drawer-line" x="${w / 2 - 3}" y="3" width="6" height="1.2"/>`;
   return [{ x: 1, y: 1, z: 0, w: 18, d: 18, h: 30, cls: 'drawer furn', deco: { '+y': face, '+x': face } }];
 }
 
@@ -295,12 +327,12 @@ function roundTable() {
 
 function meetingTable() {
   return [
-    ...[40, 80, 120, 150].flatMap((x) => seat(x, 6, false)),
-    ...seat(8, 42, false),
+    ...[40, 80, 120, 150].flatMap((x) => officeChair(x - 1, 5, 18, 18, '+y')),
+    ...officeChair(7, 41, 18, 18, '+x'),
     { x: 70, y: 46, z: 0, w: 8, d: 8, h: 36, cls: 'furn' }, { x: 122, y: 46, z: 0, w: 8, d: 8, h: 36, cls: 'furn' },
     { x: 30, y: 26, z: 36, w: 140, d: 48, h: 2, r: 20, cls: 'tableTop furn' },
-    ...seat(176, 42, false),
-    ...[40, 80, 120, 150].flatMap((x) => seat(x, 78, false)),
+    ...officeChair(175, 41, 18, 18, '-x'),
+    ...[40, 80, 120, 150].flatMap((x) => officeChair(x - 1, 77, 18, 18, '-y')),
   ];
 }
 

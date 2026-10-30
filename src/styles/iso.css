@@ -75,21 +75,38 @@
 /* the object under the pointer (with its hover card, HoverTip) lights up; more so at night */
 .tip-hot { filter:brightness(1.12) saturate(1.15); }
 :root:not([data-theme="light"]) .tip-hot { filter:brightness(1.55) saturate(1.2); }
-/* neighbouring units around the one being edited: faded; hovered one lifts and is clickable (glide) */
-.nb { opacity:.28; cursor:pointer; transition:opacity .2s ease; }
-.nb.hot { opacity:.6; }
+/* neighbouring units around the one being edited: at full strength, every piece in the building's own default
+   finish — its three surface tones (top / east / a deeper south face) and its line — with the sky's cast (the
+   --nb-* tones, index.css), in the light and the dark theme alike; no colour, no shadows, so the unit being edited
+   is the only one in colour. The ground (the slab and the room areas) keeps its own colour. Clickable (glide). */
+:root, .office-lit {
+  --nb-top:var(--struct-top); --nb-side:var(--struct-lit);
+  --nb-front:color-mix(in srgb, var(--struct-shade) 94%, var(--ink)); --nb-glass:var(--struct-glass); }
+.nb { cursor:pointer; }
+/* …a little faded; the hovered one comes up to full strength (still in the building's finish) */
+:is(.nb:not(.core), .it.nbi) { opacity:.55; transition:opacity .2s ease; }
+:is(.nb.hot, svg[data-hot="A"] .nbi[data-unit="A"], svg[data-hot="B"] .nbi[data-unit="B"], svg[data-hot="C"] .nbi[data-unit="C"], svg[data-hot="D"] .nbi[data-unit="D"]) { opacity:1; }
+:is(.nb:not(.core), .it.nbi) {
+  & :is(path, rect, circle, ellipse, polygon):not(.slab, .slab-grid, .zone-hatch, .tile-line, .floor-grid, .zone, .zone-edge, .zone-badge, .door-arc) {
+    fill:var(--nb-side) !important; fill-opacity:1 !important; filter:none !important;
+    stroke:var(--struct-line) !important; stroke-opacity:.6 !important; }
+  & .face:not(.slab, .zone, .top, .side) { fill:var(--nb-front) !important; }
+  & .face.top:not(.slab, .zone) { fill:var(--nb-top) !important; }
+  & :is(.glass, .face.pane, .face.frost-glass) { fill:var(--nb-glass) !important; fill-opacity:.85 !important; }
+  & :is(.cast-shadow, .ao, .shadow-slice, .monitor-ray, .glass-behind) { display:none; }
+}
 .nb .it { cursor:pointer; }
 .nb.core { opacity:1; pointer-events:none; }   /* the building core round a unit: shown at full strength, not a target */
 .it.core-faded { pointer-events:none; }   /* …its walls and fixtures (WCs, lifts, storage), sorted in with the unit's own items */
 .it.core-faded[data-tip] { pointer-events:auto; cursor:default; }   /* …the ones with a hover tip take the pointer (a press on them still pans) */
-/* a neighbouring unit's pieces near this one, sorted in with its items: faded like the rest of that unit, lifted together on hover */
-.it.nbi { opacity:.28; cursor:pointer; transition:opacity .2s ease; }
-svg[data-hot="A"] .nbi[data-unit="A"], svg[data-hot="B"] .nbi[data-unit="B"], svg[data-hot="C"] .nbi[data-unit="C"], svg[data-hot="D"] .nbi[data-unit="D"] { opacity:.6; }
+/* a neighbouring unit's pieces near this one, sorted in with its items: in the building's finish like the rest of that unit (above), in colour on hover */
+.it.nbi { cursor:pointer; }
+
 /* units a floor does not rent (floor 4: A and B): their shell only, faded, not a target */
 .shell-units { opacity:.3; }
 .it.faded { opacity:.3; pointer-events:none; }   /* their walls and pillars, depth-sorted in with the floor */
 /* floor tile grid: exactly 10% stroke alpha, drawn once per edge (see renderPlate) */
-.slab-grid { fill:none; stroke:var(--line); stroke-opacity:.1; stroke-width:1; vector-effect:non-scaling-stroke; }
+.slab-grid { fill:none; stroke:var(--line); stroke-opacity:.22; stroke-width:1; vector-effect:non-scaling-stroke; }
 /* every grid-like line on a floor (tiles, room hatching, restroom tiles, tower paving): same colour, 10% */
 .zone-hatch, .tile-line, .floor-grid { stroke:var(--line) !important; stroke-opacity:.1 !important; opacity:1 !important; }
 .tick { fill:var(--ink); font-family:var(--font); opacity:.8; }
@@ -109,7 +126,7 @@ svg[data-hot="A"] .nbi[data-unit="A"], svg[data-hot="B"] .nbi[data-unit="B"], sv
 .face.slab.front { fill:var(--struct-shade); stroke:var(--struct-line); stroke-width:.6; }
 .face.slab.side { fill:var(--struct-lit); stroke:var(--struct-line); stroke-width:.6; }
 /* the floor surface itself: one even tone, no seam outline between the per-row slab boxes */
-.face.slab.top { fill:var(--deck); stroke:none; }
+.face.slab.top { fill:var(--floor); stroke:none; }
 .pillar-cap { display:none; }
 /* plan cut: walls and pillars read as solid cobalt from above */
 .face.wall.top, .face.pillar.top, .face.cap.top { fill:var(--struct-cap); stroke:var(--struct-line); }
@@ -185,10 +202,12 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 :root:not([data-theme="light"]) .glass.monitor { fill:color-mix(in srgb, var(--accent) 30%, #e6f2ff); fill-opacity:.95; stroke:var(--accent-hi); filter:url(#soft); }
 :root:not([data-theme="light"]) .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.9; }
 .it.live .scr-accent { fill:#fff; opacity:.85; }
-/* …but the desk monitors are drawn like the building, not blue: the screen in the building's glass with its
-   line, the screen's content as faint pale bars, a plain back; no blue light ray or glow */
-:root:root .glass.monitor { fill:var(--struct-glass); fill-opacity:1; stroke:var(--struct-line); stroke-opacity:.6; stroke-width:.6; filter:none; }
-:root:root .glass.monitor ~ .scr-accent { fill:var(--struct-top); opacity:.75; }
+/* …the desk monitors: a dark, near-black screen with a soft cool glow round it (stronger at night), taking a
+   faint wash of the sky's light (index.css); a plain back; no blue light ray */
+:root:root .glass.monitor { fill:#16191e; fill-opacity:1; stroke:var(--struct-line); stroke-opacity:.4; stroke-width:.6;
+  filter:drop-shadow(0 0 1.2px rgb(205 225 255 / .75)) drop-shadow(0 0 3px rgb(170 200 255 / .35)); }
+:root:root:not([data-theme="light"]) .glass.monitor { filter:drop-shadow(0 0 1.5px rgb(205 225 255 / .9)) drop-shadow(0 0 5px rgb(150 190 255 / .55)); }
+:root:root .glass.monitor ~ .scr-accent { fill:var(--struct-top); opacity:.35; }
 :root:root .monitor-back { fill:var(--struct-lit); stroke:var(--struct-line); stroke-opacity:.6; }
 :root:root :is(.monitor-ray, .monitor-halo) { display:none; }
 .door-arc { fill:var(--accent-dim); stroke:none; opacity:.8; }
@@ -224,7 +243,10 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 .face.pane { fill:color-mix(in srgb, var(--struct-lit) 80%, var(--accent) 20%); fill-opacity:.72; stroke:var(--struct-line); stroke-width:.6; }
 .face.pane.side { fill-opacity:.78; }
 .glass-behind { pointer-events:none; }
-.glass-backdrop { fill:var(--deck); }
+.glass-backdrop { fill:var(--floor); }
+/* the plans' floor: the deck's white (--floor, worked out on the slab itself so it follows every theme's /
+   style's deck; the sky's cast is mixed into it in index.css) */
+:is(.face.slab, .glass-backdrop) { --floor:var(--deck); }
 .face.tile { fill:var(--recess); }
 /* sanitary fixtures (toilets, urinals) and basins in the core WCs */
 /* sanitary fittings (toilets, urinals, basin counters, stall partitions): the building's neutral white /
@@ -262,6 +284,62 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 .face.seat.furn.side { fill:var(--chair-side); }
 .face.seat.furn.top { fill:var(--chair-top); }
 .face.seat.backrest.furn.top { fill:var(--chair-back-top); }   /* the backrest's top edge stays white */
+/* meeting-room chairs (not the desks' chairs, which stay white; not the café stools): the seat cushion in a
+   light, wood-toned brown leather (warm oak tones), a step lighter on top, with a soft walnut edge; the backrest and the base stay in
+   the furniture's building finish; a selected one still turns blue */
+:root:root:root .it:not(.sel, :has(.face.deskTop)) .face.seat.chair:not(.backrest) { fill:#a77b52; fill-opacity:1; stroke:#8a6142; stroke-opacity:.6; }
+:root:root:root .it:not(.sel, :has(.face.deskTop)) .face.seat.chair:not(.backrest).side { fill:#c39a6b; }
+:root:root:root .it:not(.sel, :has(.face.deskTop)) .face.seat.chair:not(.backrest).top { fill:#d8b98f; }
+:root:root:root:not([data-theme="light"]) .it:not(.sel, :has(.face.deskTop)) .face.seat.chair:not(.backrest) { fill:#8a6a4a; stroke:#b08a62; stroke-opacity:.5; }
+:root:root:root:not([data-theme="light"]) .it:not(.sel, :has(.face.deskTop)) .face.seat.chair:not(.backrest).side { fill:#a07d58; }
+:root:root:root:not([data-theme="light"]) .it:not(.sel, :has(.face.deskTop)) .face.seat.chair:not(.backrest).top { fill:#b89670; }
+/* drawers (the pedestal units by the desks): a bright, yellowish light wood (maple / birch), a step lighter
+   on top, with a soft honey edge; a selected one still turns blue */
+:root:root:root .it:not(.sel) .face.drawer.furn { fill:#d9b878; stroke:#b8935a; stroke-opacity:.6; }
+:root:root:root .it:not(.sel) .face.drawer.furn.side { fill:#e6c98e; }
+:root:root:root .it:not(.sel) .face.drawer.furn.top { fill:#f3dfaf; }
+:root:root:root:not([data-theme="light"]) .it:not(.sel) .face.drawer.furn { fill:#a8884f; stroke:#c9a76c; stroke-opacity:.5; }
+:root:root:root:not([data-theme="light"]) .it:not(.sel) .face.drawer.furn.side { fill:#b8975c; }
+:root:root:root:not([data-theme="light"]) .it:not(.sel) .face.drawer.furn.top { fill:#c9aa70; }
+/* …the drawer fronts' seams and handles in a darker wood */
+.drawer-line { fill:none; stroke:#b08a55; stroke-opacity:.7; stroke-width:.6; vector-effect:non-scaling-stroke; }
+:root:not([data-theme="light"]) .drawer-line { stroke:#8a6a40; }
+/* the curved backrest's panels read as one shell: their seams in a faint line */
+:root:root:root .it:not(.sel) .face.chair.shell { stroke-opacity:.45; }
+/* the office chairs' line a little darker than the other furniture's */
+:root:root .it:not(.sel) :is(.face.chair, .face.chair-base):not(.shell) { stroke-opacity:1; }
+/* the desks' chairs: seat and backrest in the furniture's neutral white (as the WeCafe stools) */
+/* …the foot and column's line lighter, so the leather reads as the chair's main shape */
+:root:root:root:root .it:not(.sel):has(.face.deskTop) .face.chair-base { stroke-opacity:.5; }
+/* …and the desks' chairs a step darker again, so they hold their line against the blue desks */
+:root:root:root .it:not(.sel):has(.face.deskTop) :is(.face.chair, .face.chair-base) { stroke:rgba(36, 46, 62, .38); stroke-opacity:1; }
+:root:root:root .it:not(.sel):has(.face.deskTop) .face.chair.shell { stroke-opacity:.4; }   /* the backrest's inner seams faint */
+:root:root:root:not([data-theme="light"]) .it:not(.sel):has(.face.deskTop) :is(.face.chair, .face.chair-base) { stroke:rgba(225, 232, 244, .38); }
+/* …and its round foot and column in a darker graphite, as the metal of a real chair */
+:root:root:root .it:not(.sel, :has(.face.deskTop)) .face.chair-base { fill:color-mix(in srgb, var(--struct-shade) 55%, var(--ink)); }
+:root:root:root .it:not(.sel, :has(.face.deskTop)) .face.chair-base.side { fill:color-mix(in srgb, var(--struct-lit) 62%, var(--ink)); }
+:root:root:root .it:not(.sel, :has(.face.deskTop)) .face.chair-base.top { fill:color-mix(in srgb, var(--struct-top) 70%, var(--ink)); }
+/* the desks themselves (worktop, extension, legs; not the monitor or the chair) in the selection's blue: the
+   selected top's light blue on the worktop and the accent down the sides, with the sky's cast and every shading
+   rule still applied on top (they work from these tones) */
+.it:has(.face.deskTop) .face.furn:not(.chair, .chair-base, .monitor-stand, .monitor-body) {
+  --struct-top:color-mix(in srgb, var(--accent) 72%, #fff);
+  --struct-lit:color-mix(in srgb, var(--accent) 88%, #fff);
+  --struct-shade:var(--accent); }
+/* …their line in a deeper blue, a touch darker than the other furniture's */
+.it:not(.sel):has(.face.deskTop) .face.furn:not(.chair, .chair-base, .monitor-stand, .monitor-body) { stroke:var(--accent-hi); }
+/* the desks and their monitors in more contrast: their grey faces deeper and their line lighter (the white
+   worktop and its sky cast as they were) */
+.it:not(.sel):has(.face.deskTop) .face.furn:not(.chair, .chair-base) { stroke-opacity:.55; }
+.it:not(.sel):has(.face.deskTop) .face.furn:not(.chair, .chair-base).side { fill:color-mix(in srgb, var(--struct-lit) 78%, var(--ink)); }
+.it:not(.sel):has(.face.deskTop) .face.furn:not(.chair, .chair-base).front { fill:color-mix(in srgb, var(--struct-shade) 64%, var(--ink)); }
+/* …but the desks' legs bright: barely shaded, with a slightly firmer line, so the frames read light under the
+   worktop */
+.it:not(.sel):has(.face.deskTop) .face.furn.desk-leg { stroke-opacity:.8; }
+.it:not(.sel):has(.face.deskTop) .face.furn.desk-leg.side { fill:color-mix(in srgb, var(--struct-lit) 96%, var(--ink)); }
+.it:not(.sel):has(.face.deskTop) .face.furn.desk-leg.front { fill:color-mix(in srgb, var(--struct-shade) 90%, var(--ink)); }
+/* the desks' chairs drawn exactly like the WeCafe's stools: the furniture's building finish throughout (the
+   graphite foot and column and the darker desk shading are for other pieces, below / above) */
 :root[data-theme="light"] .it.sel .face.seat.furn { fill:var(--accent); stroke:var(--accent-hi); }
 :root[data-theme="light"] .it.sel .face.seat.furn.top { fill:color-mix(in srgb, var(--accent) 72%, #fff); }
 /* server racks: charcoal cabinets, the status LEDs blink forever (each its own rate / phase, set inline);
@@ -708,19 +786,24 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 .ghost-wall.front { fill:var(--struct-shade); fill-opacity:.18; }
 .ghost-floor { fill:none; stroke:var(--struct-line); stroke-width:.7; stroke-opacity:.4; vector-effect:non-scaling-stroke; }
 
-/* desk name callouts (render.renderDeskCallouts): an upright white pill with a blueprint-blue edge floating
-   just above each occupied desk (no leader); hidden with the labels; on the floor
-   overview only once zoomed in (.near) */
+/* desk name cards (render.renderDeskCallouts): a borderless frosted card over the monitor — whatever is behind
+   it blurs — a rounded-square profile picture, the name under it; hidden with the labels; on the floor overview
+   only once zoomed in (.near) */
 .desk-callouts { pointer-events:none; }
-.callout-pill { fill:#ffffff; stroke:color-mix(in srgb, var(--accent) 70%, #ffffff); stroke-width:.8; vector-effect:non-scaling-stroke; }
-.callout-name { fill:#1f2933; font-family:var(--font); font-weight:600; }
-/* the profile picture above the name: a soft accent disc with a plain head-and-shoulders figure */
-.callout-pic { fill:color-mix(in srgb, var(--accent) 14%, #ffffff); stroke:color-mix(in srgb, var(--accent) 45%, #ffffff); stroke-width:.6; vector-effect:non-scaling-stroke; }
-.callout-pic-fig { fill:color-mix(in srgb, var(--accent) 60%, #ffffff); }
-:root:not([data-theme="light"]) .callout-pic { fill:color-mix(in srgb, var(--accent-hi) 18%, #1f2329); stroke:color-mix(in srgb, var(--accent-hi) 45%, transparent); }
+.desk-callout { overflow:visible; }
+.callout-card { box-sizing:border-box; width:100%; height:100%; border-radius:6px; overflow:hidden;
+  display:flex; flex-direction:column; align-items:center;
+  background:rgb(255 255 255 / .5); -webkit-backdrop-filter:blur(3px) saturate(1.4); backdrop-filter:blur(3px) saturate(1.4);
+  box-shadow:0 1px 3px rgb(20 30 50 / .12); }
+.callout-pic { flex:none; border-radius:5px; overflow:hidden; background:color-mix(in srgb, var(--accent) 16%, #ffffff); }
+.callout-pic svg, .callout-pic img { display:block; width:100%; height:100%; object-fit:cover; }
+.callout-pic-fig { fill:color-mix(in srgb, var(--accent) 55%, #ffffff); }
+.callout-name { flex:none; max-width:100%; white-space:nowrap; overflow:hidden; text-align:center;
+  color:#1f2933; font-family:var(--font); font-weight:600; }
+:root:not([data-theme="light"]) .callout-card { background:rgb(28 32 38 / .5); box-shadow:0 1px 4px rgb(0 0 0 / .35); }
+:root:not([data-theme="light"]) .callout-pic { background:color-mix(in srgb, var(--accent-hi) 18%, #1f2329); }
 :root:not([data-theme="light"]) .callout-pic-fig { fill:color-mix(in srgb, var(--accent-hi) 70%, #1f2329); }
-:root:not([data-theme="light"]) .callout-pill { fill:#1f2329; stroke:color-mix(in srgb, var(--accent-hi) 70%, transparent); }
-:root:not([data-theme="light"]) .callout-name { fill:#eef1f5; }
+:root:not([data-theme="light"]) .callout-name { color:#eef1f5; }
 [data-labels="off"] .desk-callouts { display:none; }
 .floor-ov:not(.near) .desk-callouts { display:none; }
 
