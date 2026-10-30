@@ -3,7 +3,7 @@ import { CELL, TILE, PILLAR_H, SLAB } from './units.js';
 import { esc, frame } from './kernel.js';
 import { footprint } from './grid.js';
 import { renderParts } from './parts.js';
-import { partsFor, SIZES, zoneTag, LAYER, isLive, tipFor, NEUTRAL_TYPES } from '../model/catalog.js';
+import { partsFor, SIZES, zoneTag, LAYER, isLive, tipFor, TIP_LANGS, NEUTRAL_TYPES } from '../model/catalog.js';
 import { depthSort } from './depth.js';
 import { shadowLayer, rectsPath } from './shadow.js';
 import { roomDoorIds } from './doorSwing.js';
@@ -64,31 +64,54 @@ export function renderItem(K, item, cut = Infinity) {
   return renderParts(K, parts, { W0, D0, rot: item.rot, ox: item.gx * CELL, oy: item.gy * CELL, z0: 0, cut });
 }
 
-/** The hover card's text as attributes for an item's group (read by HoverTip), or '' for none. */
+/**
+ * The hover card's text as attributes for an item's group (read by HoverTip), or '' for none: English as
+ * data-tip / data-tip-sub, and each other language that differs as data-tip-<lang> / data-tip-sub-<lang>
+ * (HoverTip shows the display language's, so a language change needs no redraw).
+ */
 export function tipAttrs(item) {
-  const t = tipFor(item);
-  return t ? ` data-tip="${esc(t.title)}" data-tip-sub="${esc(t.sub || '')}"` : '';
+  return Object.entries(tipData(item)).map(([k, v]) => ` ${k}="${esc(v)}"`).join('');
+}
+
+/** The same as an object of attributes ({} for none), for React. */
+export function tipData(item) {
+  const en = tipFor(item, 'en');
+  if (!en) return {};
+  const out = { 'data-tip': en.title, 'data-tip-sub': en.sub || '' };
+  for (const l of TIP_LANGS) {
+    if (l === 'en') continue;
+    const t = tipFor(item, l);
+    if (t.title !== en.title) out[`data-tip-${l}`] = t.title;
+    if ((t.sub || '') !== (en.sub || '')) out[`data-tip-sub-${l}`] = t.sub || '';
+  }
+  return out;
 }
 
 /** Zone name tag on the floor plane, for the overlay layer above the furniture. */
 /**
- * Name callouts for the occupied desks: an upright pill with the employee's name floating above each desk,
- * a thin leader from the pill's bottom centre down to the desk's worktop, and a dot where it lands. Drawn in
+ * Name callouts for the occupied desks: a speech bubble with the employee's name floating just above each
+ * desk's worktop, a pill whose small sharp notch at the bottom centre points down at the desk. Drawn in
  * screen space (text stays upright and level), back to front so nearer pills overlap farther ones; meant for
  * a layer over the whole scene.
  */
-const CALLOUT = { z: 38, rise: 34, fs: 10, padX: 6, h: 15 };
+const CALLOUT = { z: 38, rise: 6, fs: 10, padX: 6, h: 15, notch: 4.5, notchW: 3.5 };
 const textW = (s, fs) => [...s].reduce((w, c) => w + (/[\u1100-\uffff]/.test(c) ? 1.02 : 0.6) * fs, 0);
+/** A pill w × h whose bottom edge sits at y = bottom, centred on x, with a sharp notch of depth `nd` and
+ *  half-width `nw` hanging from its bottom centre (a speech bubble's tail). */
+const bubble = (x, bottom, w, h, nd, nw) => {
+  const r = h / 2, x0 = x - w / 2 + r, x1 = x + w / 2 - r, y0 = bottom - h, f = (n) => n.toFixed(1);
+  return `M${f(x0)} ${f(y0)}H${f(x1)}A${r} ${r} 0 0 1 ${f(x1)} ${f(bottom)}H${f(x + nw)}L${f(x)} ${f(bottom + nd)}` +
+    `L${f(x - nw)} ${f(bottom)}H${f(x0)}A${r} ${r} 0 0 1 ${f(x0)} ${f(y0)}Z`;
+};
 export function renderDeskCallouts(K, items) {
-  const { z, rise, fs, padX, h } = CALLOUT;
+  const { z, rise, fs, padX, h, notch, notchW } = CALLOUT;
   return items.filter((it) => it.type === 'desk' && (it.name || '').trim())
     .map((it) => { const f = footprint(it); return { it, cx: (it.gx + f.w / 2) * CELL, cy: (it.gy + f.d / 2) * CELL }; })
     .sort((a, b) => a.cx + a.cy - (b.cx + b.cy))
     .map(({ it, cx, cy }) => {
       const name = it.name.trim(), [ax, ay] = K.P(cx, cy, z), top = ay - rise, w = textW(name, fs) + 2 * padX;
-      return `<g class="desk-callout" data-for="${esc(it.id)}"><line class="callout-lead" x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${ax.toFixed(1)}" y2="${top.toFixed(1)}"/>` +
-        `<circle class="callout-dot" cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="1.3"/>` +
-        `<rect class="callout-pill" x="${(ax - w / 2).toFixed(1)}" y="${(top - h).toFixed(1)}" width="${w.toFixed(1)}" height="${h}" rx="${h / 2}"/>` +
+      return `<g class="desk-callout" data-for="${esc(it.id)}">` +
+        `<path class="callout-pill" d="${bubble(ax, top, w, h, notch, notchW)}"/>` +
         `<text class="callout-name" x="${ax.toFixed(1)}" y="${(top - h / 2 + fs * 0.36).toFixed(1)}" font-size="${fs}" text-anchor="middle">${esc(name)}</text></g>`;
     }).join('');
 }

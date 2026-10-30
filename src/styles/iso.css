@@ -77,8 +77,9 @@
 .nb { opacity:.28; cursor:pointer; transition:opacity .2s ease; }
 .nb.hot { opacity:.6; }
 .nb .it { cursor:pointer; }
-.nb.core { pointer-events:none; }   /* the building core round a unit: shown, not a target */
-.it.core-faded { opacity:.28; pointer-events:none; }   /* …its walls and fixtures, sorted in with the unit's own items */
+.nb.core { opacity:1; pointer-events:none; }   /* the building core round a unit: shown at full strength, not a target */
+.it.core-faded { pointer-events:none; }   /* …its walls and fixtures (WCs, lifts, storage), sorted in with the unit's own items */
+.it.core-faded[data-tip] { pointer-events:auto; cursor:default; }   /* …the ones with a hover tip take the pointer (a press on them still pans) */
 /* a neighbouring unit's pieces near this one, sorted in with its items: faded like the rest of that unit, lifted together on hover */
 .it.nbi { opacity:.28; cursor:pointer; transition:opacity .2s ease; }
 svg[data-hot="A"] .nbi[data-unit="A"], svg[data-hot="B"] .nbi[data-unit="B"], svg[data-hot="C"] .nbi[data-unit="C"], svg[data-hot="D"] .nbi[data-unit="D"] { opacity:.6; }
@@ -112,6 +113,11 @@ svg[data-hot="A"] .nbi[data-unit="A"], svg[data-hot="B"] .nbi[data-unit="B"], sv
 .pillar-cap { display:none; }
 /* plan cut: walls and pillars read as solid cobalt from above */
 .face.wall.top, .face.pillar.top, .face.cap.top { fill:var(--struct-cap); stroke:var(--struct-line); }
+/* on the building's roof, the parapet, lift overruns and penthouse tops catch the same sky as the white roof:
+   lit, a hair off the roof's white so their edges still read (not the plans' dark wall caps) */
+.twr .face.struct.cap.top { fill:color-mix(in srgb, var(--struct-top) 93%, var(--struct-shade)); }
+/* …except the parapet round the roof's edge: its top is a soft grey band that draws the roof's outline */
+.twr .face.struct.cap.parapet.top { fill:color-mix(in srgb, var(--struct-cap) 55%, var(--struct-top)); }
 
 /* sharp cast shadows + soft contact shadows; one group each so overlaps merge */
 .cast-shadow { pointer-events:none; }
@@ -121,8 +127,8 @@ svg[data-hot="A"] .nbi[data-unit="A"], svg[data-hot="B"] .nbi[data-unit="B"], sv
 .ao path { fill:var(--shadow); }
 .shell-shadows { pointer-events:none; }
 /* tower: a lighter contact shadow around the building's base */
-.twr-ground-shadow .ao { opacity:calc(var(--ao-a) * .5); }
-.tower-shadow .ao { opacity:calc(var(--ao-a) * .12); }   /* the building's base rim: barely there on its lit (right) sides */
+.twr-ground-shadow .ao { opacity:calc(var(--ao-a) * .75); }
+.tower-shadow .ao { opacity:calc(var(--ao-a) * .55); }   /* the building's base rim: a firm contact shadow where it meets the ground */
 .roof-shadow .ao { opacity:calc(var(--ao-a) * .4); }
 :root[data-theme="light"] .desk-name { fill:var(--ink-hi); }
 :root[data-theme="light"] .desk-name.scr { fill:var(--accent-hi); font-weight:500; }
@@ -417,6 +423,11 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 .gate-beacon.open { fill:#ffb020; animation:beacon-flash .6s steps(1) infinite; }
 @keyframes beacon-flash { 50% { fill:#9a6a1c; } }
 .site-gate, .gate-beacon { pointer-events:none; }
+/* the building's south façades a touch deeper, so it stands out against the sky (its line work stays subtle) */
+.twr .bld .face.struct { stroke-opacity:.6; }
+.twr .bld .face.struct.front { fill:color-mix(in srgb, var(--struct-shade) 94%, var(--ink)); }
+/* the site's features with a hover pill (TowerView tipG) take the pointer, the ATM room and the gates included */
+.ext-tip .atm-kiosk, .ext-tip .site-gate { pointer-events:auto; }
 @media (prefers-reduced-motion: reduce) { .site-gate .gate-slide { transition:none; } .gate-beacon.open { animation:none; } }
 /* VIP checkpoint: booth glass, barrier arms (swing up about their pivot when .open) */
 .booth-glass { fill:color-mix(in srgb, var(--struct-glass) 70%, var(--accent)); stroke:var(--struct-line); stroke-width:.4; vector-effect:non-scaling-stroke; }
@@ -683,16 +694,13 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 .ghost-floor { fill:none; stroke:var(--struct-line); stroke-width:.7; stroke-opacity:.4; vector-effect:non-scaling-stroke; }
 
 /* desk name callouts (render.renderDeskCallouts): an upright white pill with a blueprint-blue edge floating
-   above each occupied desk, a hairline leader down to the worktop; hidden with the labels; on the floor
+   just above each occupied desk (no leader); hidden with the labels; on the floor
    overview only once zoomed in (.near) */
 .desk-callouts { pointer-events:none; }
 .callout-pill { fill:#ffffff; stroke:color-mix(in srgb, var(--accent) 70%, #ffffff); stroke-width:.8; vector-effect:non-scaling-stroke; }
 .callout-name { fill:#1f2933; font-family:var(--font); font-weight:600; }
-.callout-lead { stroke:color-mix(in srgb, var(--accent) 75%, #ffffff); stroke-width:.8; vector-effect:non-scaling-stroke; }
-.callout-dot { fill:var(--accent); }
 :root:not([data-theme="light"]) .callout-pill { fill:#1f2329; stroke:color-mix(in srgb, var(--accent-hi) 70%, transparent); }
 :root:not([data-theme="light"]) .callout-name { fill:#eef1f5; }
-:root:not([data-theme="light"]) .callout-lead { stroke:color-mix(in srgb, var(--accent-hi) 75%, transparent); }
 [data-labels="off"] .desk-callouts { display:none; }
 .floor-ov:not(.near) .desk-callouts { display:none; }
 

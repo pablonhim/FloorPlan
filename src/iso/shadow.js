@@ -1,8 +1,9 @@
 // Cast shadows and ambient occlusion for the structural shell.
 //
-// One sun, coming from the right: +x faces are lit, +y faces sit in shade, and shadows fall to the
-// left on the floor. A box of height h casts the convex hull of its footprint and the footprint
-// shifted by h · SUN on the ground plane.
+// One sun, on the isometric grid's top-right axis (from −y, the north side: up and to the right on
+// screen, 30° above the horizontal): shadows fall straight along +y, parallel to the floor grid's lines
+// (down and to the left on screen); +y faces sit in shade, +x faces are lit side-on. A box of height h
+// casts the convex hull of its footprint and the footprint shifted by h · SUN on the ground plane.
 //
 // Realism: a shadow is darkest where it meets its caster and fades toward the tip. Each shadow is
 // drawn as n stacked layers (more for tall casters, so the fade has no visible steps) — the shadow of the bottom 1/n, 2/n … n/n of the caster — so ground
@@ -10,7 +11,7 @@
 // darker blotches where walls meet), and a light blur (#penumbra) softens the edges.
 
 /** Ground offset per unit of height (world units). */
-export const SUN = { dx: -0.78, dy: 0.34 };
+export const SUN = { dx: 0, dy: 0.85 };
 
 /** Andrew's monotone chain convex hull. */
 function hull(pts) {

@@ -27,6 +27,9 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 ::selection { background: var(--accent-dim); }
 .stage-glow { background: radial-gradient(ellipse 50% 45% at 50% 52%, var(--accent-dim), transparent 72%); }
 :root[data-theme="light"] .stage-glow { background: none; }
+/* the weather background off (or no time of day), light theme: every view sits on the same soft light-grey
+   gradient as the building page, never plain white */
+:root[data-theme="light"][data-sky="none"] .stage-glow { background: radial-gradient(ellipse 55% 50% at 50% 46%, #f9fafb 0%, rgb(249 250 251 / 0) 70%), linear-gradient(180deg, #f3f4f6 0%, #e5e7eb 100%); }
 .backdrop-bld { background: var(--panel); }
 /* the building page's backdrop in the light theme: a soft light-gray gradient (lighter where the site
    stands), behind the header too (it has no background of its own) */
@@ -34,14 +37,161 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
   background: radial-gradient(ellipse 55% 50% at 50% 46%, #f9fafb 0%, rgb(249 250 251 / 0) 70%), linear-gradient(180deg, #f3f4f6 0%, #e5e7eb 100%);
 }
 
+/* the dock's icons come alive under the pointer: a springy hop up (a little tilt, a squash as it lands) that
+   settles a touch larger and raised; pressed, they sink */
+.pop-ico > .ico { display: grid; place-items: center; transition: transform .35s cubic-bezier(.34, 1.7, .5, 1); }
+.pop-ico:hover:not(:disabled) > .ico, .pop-ico:focus-visible > .ico { transform: translateY(-1.5px) scale(1.14); animation: ico-hop .5s cubic-bezier(.3, .7, .4, 1); }
+.pop-ico:active:not(:disabled) > .ico { transform: translateY(0) scale(.88); transition-duration: .08s; animation: none; }
+@keyframes ico-hop {
+  0%   { transform: translateY(0) scale(1) rotate(0); }
+  30%  { transform: translateY(-4px) scale(1.2, 1.12) rotate(-8deg); }
+  55%  { transform: translateY(0) scale(1.2, .94) rotate(4deg); }
+  75%  { transform: translateY(-2.5px) scale(1.1, 1.17) rotate(-2deg); }
+  100% { transform: translateY(-1.5px) scale(1.14) rotate(0); }
+}
+@media (prefers-reduced-motion: reduce) { .pop-ico > .ico { transition: none; animation: none !important; } }
+
+/* evening: the header's text (title, page, credit) and the status line turn white over the dusk sky */
+:root[data-sky="evening"] .sky-head { color: #fff; text-shadow: 0 1px 6px rgb(60 40 70 / .35); }
+:root[data-sky="evening"] .sky-head :is(.text-ink-hi, .text-accent-hi) { color: #fff; }
+:root[data-sky="evening"] .sky-head .text-ink-hi\/45 { color: rgb(255 255 255 / .7); }
+:root[data-sky="evening"] .sky-head .text-ink\/60 { color: rgb(255 255 255 / .8); }
+
+/* the bottom bars (tool dock, zoom rail, search, menu buttons) and the menus they open: a thin frost, 10% fill and a strong blur, so the
+   sky and the drawing show through; their icons and text get a soft halo to stay legible on any backdrop */
+.frost-panel.frost-thin {
+  background: color-mix(in srgb, #ffffff 10%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  backdrop-filter: blur(22px) saturate(1.5);
+  /* the edge is the scene's line colour (blueprint blue-grey, morning gold, evening amber, night blue) */
+  border-color: color-mix(in srgb, var(--line) 55%, transparent);
+  box-shadow: 0 2px 12px rgb(0 0 0 / .06);
+}
+/* over the evening's warm horizon the bars need a little more body to stay readable */
+:root[data-sky="evening"] .frost-panel.frost-thin { background: color-mix(in srgb, #ffffff 22%, transparent); }
+:root[data-sky="evening"] .frost-thin input::placeholder, :root[data-sky="evening"] .frost-thin kbd { color: var(--ink-hi); }
+:root:not([data-theme="light"]) .frost-panel.frost-thin { background: color-mix(in srgb, #1c1e22 10%, transparent); border-color: color-mix(in srgb, var(--line) 90%, transparent); }
+.frost-thin { text-shadow: 0 0 3px rgb(255 255 255 / .9); }
+.frost-thin svg { filter: drop-shadow(0 0 2px rgb(255 255 255 / .85)); }
+.frost-thin input::placeholder { text-shadow: 0 0 3px rgb(255 255 255 / .9); }
+:root:not([data-theme="light"]) .frost-thin { text-shadow: 0 0 3px rgb(0 0 0 / .85); }
+:root:not([data-theme="light"]) .frost-thin svg { filter: drop-shadow(0 0 2px rgb(0 0 0 / .8)); }
+:root:not([data-theme="light"]) .frost-thin input::placeholder { text-shadow: 0 0 3px rgb(0 0 0 / .85); }
+
+/* the line work, one architectural family everywhere (building, floor and unit views): every stroke — outlines,
+   walls, floor slabs, the tile grid, ground markings' edges — is drawn in the same soft, low-alpha line colour
+   (--struct-line, and --line for the grid and details), a blueprint blue-grey on white by default, which the
+   time of day tints: soft gold in the morning, warm amber in the evening, a crisp cool blue at night. Never
+   stark black or dark grey. */
+:root[data-theme="light"] {
+  --struct-line: rgba(58, 84, 126, .36); --line: #8e9bb1; --detail: #d4dae4;
+  /* the architecture's default surfaces (building, walls, pillars, floors, storage, lifts, WCs and the site round
+     it): the architectural model's matte off-white and pale grey, with this line work drawn over it */
+  --struct-top: #fafafa; --struct-lit: #f1f1f1; --struct-shade: #e5e5e5; --struct-glass: #e9ebed;
+  --deck: #f5f5f5; --body: #efefef; --recess: #e8e8e8; --glass: #eceef0;
+  --paving: #f3f3f3; --asphalt: #e7e7e7; --concrete: #dddddd; --concrete-lit: #e6e6e6; --concrete-ramp: #ececec;
+  --struct-cap: #a4a7ac;   /* wall and pillar tops (seen from above): a subtle neutral grey, whatever the sky */
+}
+:root:not([data-theme="light"]) {
+  --struct-line: rgba(150, 182, 235, .30); --line: #3d4f6b; --detail: #29313d;
+  --struct-cap: #464a51;
+}
+:root:not([data-theme="light"]) .office-lit {
+  --struct-line: rgba(170, 200, 245, .40); --line: #566b8c; --detail: #36404f;
+  --struct-cap: #5c626c;
+}
+
+/* …the objects round the building take the same line colour: cars and people (--car-edge), paving joints,
+   the VIP bays' markings, door and handle edges */
+:root { --car-edge: var(--struct-line); }
+.paver-joint { stroke: color-mix(in srgb, var(--line) 55%, var(--paving)); }
+:root:not([data-theme="light"]) .vip-bay { stroke: color-mix(in srgb, var(--line) 85%, transparent); }
+.door-leaf, .door-panel-edge, .entry-handle { stroke: color-mix(in srgb, var(--line) 55%, var(--ink-hi)); }
+
+/* time of day on the drawing's faces, by the way each one faces (kernel.box tags them): east faces (.side, +x,
+   lower right on screen) and south faces (.front, +y, lower left) take the low sun differently. Morning:
+   the sun is in the east, so east faces are a touch brighter and warmer and south faces cooler; evening: it
+   is in the south-west, so south faces take a soft peach and east faces a soft slate. Shadows take the sky's
+   colour. Muted on purpose (architectural, not neon); only colour variables change: nothing is redrawn. */
+:root[data-sky="morning"] {
+  --struct-top: #ffffff; --struct-lit: #fbf7ee;
+  --concrete-lit: #dedcd5;
+  --shadow: #26324a;
+  /* the line work and the site round the building take the morning too: soft gold lines, paving and roads a
+     touch cooler, concrete a touch warmer where the sun hits */
+  --struct-line: rgba(128, 102, 52, .36); --line: #ad9f80; --detail: #e2dbc9;
+  /* against the bright sky: deeper ambient occlusion and a deeper shaded (south) face and glass */
+  --ao-a: .5; --struct-shade: #d0d6e1; --struct-glass: #c2c8d1;
+  --paving: #dfe2e7; --asphalt: #cbd0d8; --concrete: #c9ccd2; --concrete-ramp: #dde1e7; --lawn: #d6e3f1;
+}
+:root[data-sky="evening"] {
+  --struct-top: #f9f6f2; --struct-shade: #eddfd2;
+  --concrete-lit: #d2d4d8;
+  --shadow: #33293a;
+  /* the line work and the site round the building take the dusk too: warm amber lines, paving, roads and
+     concrete warmed by the low sun */
+  --struct-line: rgba(140, 82, 42, .38); --line: #b4917a; --detail: #e4d3c5;
+  /* against the bright sky: deeper ambient occlusion and a deeper shaded (east) face and glass */
+  --ao-a: .5; --struct-lit: #c9ced7; --struct-glass: #c8c2c0;
+  --paving: #e5ddd6; --asphalt: #d1c9c4; --concrete: #cfc6bf; --concrete-ramp: #e4dbd3; --lawn: #dcd8e2;
+}
+
+/* morning and evening: a clean rim light along the building's roof edge (the top catches the low sun), so its
+   silhouette stays crisp against the horizon glow; the window recesses a step deeper */
+:root[data-sky="morning"] .twr .bld > .face.top.struct { stroke: rgb(255 250 236 / .95); stroke-width: 1.6; stroke-opacity: 1; }
+:root[data-sky="evening"] .twr .bld > .face.top.struct { stroke: rgb(255 226 190 / .95); stroke-width: 1.6; stroke-opacity: 1; }
+:root:is([data-sky="morning"], [data-sky="evening"]) .twr .pn:not(.on, .lobby) { fill: color-mix(in srgb, var(--struct-glass) 88%, var(--ink)); }
+
+/* time of day (lib/sky: data-sky on the root). The sky is the stage's background, behind the drawing, fixed
+   upright on the screen; muted, natural tones. */
+:root[data-sky="morning"] .stage-glow,
+:root[data-sky="morning"] .backdrop-bld {
+  background: linear-gradient(180deg, #a9c3dd 0%, #c3d6e8 30%, #dde7ef 58%, #ece9dc 80%, #eee0b9 93%, #e9d6a3 100%);
+}
+:root[data-sky="evening"] .stage-glow,
+:root[data-sky="evening"] .backdrop-bld {
+  background: linear-gradient(180deg, #46598a 0%, #6a7ba6 24%, #a3a6c2 44%, #d3bfc4 62%, #ecc9b1 80%, #eab182 92%, #df9561 100%);
+}
+:root[data-sky="night"] .stage-glow {
+  background: radial-gradient(ellipse 50% 45% at 50% 52%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 72%);
+}
+/* the light: one fixed wash over the drawing (.stage-glow::after), a soft multiply so the structural lines stay
+   crisp, running along the isometric grid's 30° axis rather than up and down the screen: in the morning it
+   comes from the top right (warm there, cooling toward the bottom left); in the evening it comes from the
+   bottom left (warm there, slate toward the top right) */
+.stage-glow::after { content: ''; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; opacity: 0; }
+:root[data-sky="morning"] .stage-glow::after {
+  opacity: 1;
+  background: linear-gradient(240deg, rgb(255 238 200 / .22) 0%, rgb(250 248 240 / .06) 50%, rgb(205 218 238 / .22) 100%);
+}
+:root[data-sky="evening"] .stage-glow::after {
+  opacity: 1;
+  background: linear-gradient(60deg, rgb(240 190 150 / .30) 0%, rgb(245 225 210 / .10) 50%, rgb(170 180 215 / .24) 100%);
+}
+
 /* a camera-driven svg reaches past its holder on every side (svgCamera's OVER: 25%), so moving it shows
    drawing already painted; the holder (position: relative, overflow: hidden) clips it */
 .cam-over { position: absolute; left: -25%; top: -25%; width: 150%; height: 150%; max-width: none; display: block; }
 
-/* the theme switch: no cross-fade; the new theme is revealed by a growing circle (theme.js) over the old */
+/* the hover pill (HoverTip) pops up from the pointer with a gentle, water-like give: a small overshoot and
+   one soft wobble */
+.tip-pop { animation: tip-pop .42s ease-out both; }
+@keyframes tip-pop {
+  0%   { transform: scale(.6, .6);     opacity: 0; }
+  40%  { transform: scale(1.04, .97);  opacity: 1; }
+  70%  { transform: scale(.99, 1.01); }
+  100% { transform: scale(1, 1); }
+}
+@media (prefers-reduced-motion: reduce) { .tip-pop { animation: none; } }
+
+/* the theme switch: a plain cross-fade of the whole page (started by setTheme in lib/theme.js) */
 ::view-transition-old(root),
-::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
-::view-transition-new(root) { z-index: 1; }
+::view-transition-new(root) { animation-duration: .45s; animation-timing-function: ease-in-out; }
+/* …except the time-of-day toggle, shown live through the fade so its knob slides (SkyToggle) */
+.sky-toggle { view-transition-name: sky-toggle; }
+::view-transition-old(sky-toggle) { display: none; }
+::view-transition-new(sky-toggle) { animation: none; }
+::view-transition-group(sky-toggle) { animation: none; }
 
 /* frosted-glass card (tower floor tooltip): a heavy frost, so lines and text behind it melt into a soft
    blur and only its own text reads */
@@ -114,15 +264,102 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 
 /* the dock's More menu opens with a small springy pop (as the edit buttons), staying a column */
 .dock-menu { animation: dock-menu-in .18s cubic-bezier(.34, 1.56, .64, 1); transform-origin: bottom center; }
-/* the ⋯ menu shows what is behind it, blurred: a thinner, more see-through frost than the panels */
-.frost-panel.dock-menu {
-  background: color-mix(in srgb, #ffffff 45%, transparent);
-  -webkit-backdrop-filter: blur(14px) saturate(1.6);
-  backdrop-filter: blur(14px) saturate(1.6);
-}
-:root:not([data-theme="light"]) .frost-panel.dock-menu { background: color-mix(in srgb, #2a2d33 50%, transparent); }
 @keyframes dock-menu-in { from { opacity: 0; scale: .85; } }
-@media (prefers-reduced-motion: reduce) { .dock-menu { animation: none; } }
+/* the Objects panel collapsed to its icons: smaller thumbnails, so the column stays slim */
+.pal-min svg.office-lit { width: 2.75rem; height: 2rem; }
+
+
+/* view settings (lib/prefs, switched in the dock's ⋯ menu) */
+/* Show floor grid off: the tile grid on the slabs and the paving's grid lines go */
+:root[data-grid="off"] :is(.slab-grid, .tile-line, .floor-grid, .zone-hatch) { display: none; }
+
+/* Architectural model (data-clay, the dock's ⋯ menu): the scene as a clean presentation model — matte off-white
+   and pale grey volumes (#FAFAFA → #E5E5E5) with soft ambient occlusion, and the office itself as the focal
+   point: desks, tables, stools, cabinets and the barista counter in warm oak-to-walnut wood, chairs in graphite
+   upholstery (the architecture stays white clay), razor-thin lines at very low alpha (site-model
+   paper), and the grid as a faint technical texture. Its colours win over the time of day's and the theme's;
+   the live information (lit windows, occupied desks' blue, routes) keeps its accent. */
+:root[data-clay="on"], :root[data-clay="on"] .office-lit {
+  --struct-top: #fafafa; --struct-lit: #f1f1f1; --struct-shade: #e5e5e5; --struct-cap: #dcdcdc; --struct-glass: #e9ebed;
+  --deck: #f5f5f5; --body: #efefef; --recess: #e8e8e8; --glass: #eceef0;
+  --furn-top: #fafafa; --furn: #ededed; --furn-side: #e3e3e3; --desk-top: #f6f6f6;
+  --chair: #f0f0f0; --chair-side: #e2e2e2; --chair-back-top: #fafafa; --chair-top: #dadada;
+  --furn-edge: rgba(0, 0, 0, .12);
+  --paving: #f3f3f3; --asphalt: #e7e7e7; --concrete: #dddddd; --concrete-lit: #e6e6e6; --concrete-ramp: #ececec; --lawn: #ebebeb;
+  --struct-line: rgba(0, 0, 0, .12); --line: #c8c8c8; --detail: #ececec; --car-edge: rgba(0, 0, 0, .12);
+  --shadow: #2a2a2a; --ao-a: .42;
+}
+:root[data-clay="on"] .cam-over :is(.face, .glass, .pn, .door-panel, .gate-panel, .car-face, .car-tyre) { stroke-width: .45 !important; }
+:root[data-clay="on"] :is(.slab-grid, .tile-line, .floor-grid, .zone-hatch) { stroke-opacity: .12 !important; stroke-width: .35 !important; }
+/* Corten & terracotta (data-corten, the dock's ⋯ menu; exclusive with the model): a biophilic architectural
+   palette — crisp matte off-white shell and roof (#F5F5F7), the façade's pilasters, window frames and podium in
+   weathered Corten steel (#B3512E → #964223, burnt sienna), forest-green lawns, beds and shrubs (#2D6A4F,
+   #1B4332); inside, terracotta and warm-wood furniture, bronze chairs and partitions. Volumetric gradients and
+   soft shadows as everywhere; live information keeps its accent. */
+:root[data-corten="on"], :root[data-corten="on"] .office-lit {
+  --struct-top: #f5f5f7; --struct-lit: #eeeef1; --struct-shade: #e2e2e6; --struct-cap: #c9b8ae; --struct-glass: #dfe3e6;
+  --deck: #f4f2ef; --body: #efeceb;
+  --lawn: #2d6a4f; --paving: #ece8e3; --concrete: #d8d0c8; --concrete-lit: #e4dcd4;
+  --struct-line: rgba(110, 50, 25, .30); --line: #b9a093; --detail: #e6dcd6; --car-edge: rgba(80, 40, 20, .25);
+  --furn-edge: rgba(110, 50, 25, .28); --shadow: #2b1a12;
+}
+.vc-a { stop-color: #c8673f; } .vc-b { stop-color: #b3512e; } .vc-c { stop-color: #964223; } .vc-d { stop-color: #7c3519; }
+.vt2-a { stop-color: #d9a07a; } .vt2-b { stop-color: #c4825a; } .vt2-c { stop-color: #a8663f; }
+/* the façade's accents in Corten steel: pilasters (vertical fins), window frames, the ground-floor podium */
+:root[data-corten="on"] .twr .face.struct.pilaster { fill: url(#vol-corten-side); }
+:root[data-corten="on"] .twr .pn:not(.on) { stroke: #964223; stroke-opacity: .8; }
+:root[data-corten="on"] .twr .fl[data-f="0"] .face.band, :root[data-corten="on"] .twr .fl[data-f="1"] .face.band { fill: url(#vol-corten-side); }
+/* greenery: lawns, beds and shrubs in forest green */
+:root[data-corten="on"] .face.shrub { fill: #2d6a4f; stroke: rgba(27, 67, 50, .6); }
+:root[data-corten="on"] .face.shrub.top { fill: #40916c; }
+:root[data-corten="on"] .flower.f1 { fill: #95d5b2; } :root[data-corten="on"] .flower.f2 { fill: #1b4332; }
+/* inside: terracotta and warm wood furniture, bronze chairs and partitions */
+:root[data-corten="on"] .cam-over :is(.face.furn:not(.seat), .face.tableTop, .face.fixture.counter).top { fill: url(#vol-terra); }
+:root[data-corten="on"] .cam-over :is(.face.furn:not(.seat), .face.tableTop, .face.fixture.counter):is(.side, .front) { fill: url(#vol-terra-side); }
+:root[data-corten="on"] .cam-over .face.seat.furn { fill: #5a3e2b; }
+:root[data-corten="on"] .cam-over .face.seat.furn.side { fill: #4a3222; }
+:root[data-corten="on"] .cam-over .face.seat.furn.top { fill: #6e4c34; }
+:root[data-corten="on"] .cam-over .face.partition.struct { fill: url(#vol-corten-side); }
+:root[data-corten="on"] .cam-over .it.live .face.deskTop { stroke: #964223; }
+:root[data-corten="on"] .callout-pill { fill: #fbf6f2; stroke: #b3512e; }
+:root[data-corten="on"] .callout-name { fill: #5a2a16; }
+:root[data-corten="on"] .cam-over .it.cafe :is(.face.furn, .face.tableTop, .face.seat).top { fill: var(--struct-top); }
+:root[data-corten="on"] .cam-over .it.cafe :is(.face.furn, .face.tableTop, .face.seat).side { fill: var(--struct-lit); }
+:root[data-corten="on"] .cam-over .it.cafe :is(.face.furn, .face.tableTop, .face.seat).front { fill: var(--struct-shade); }
+
+/* wood on the office furniture */
+.vw-a { stop-color: #d8b98f; } .vw-b { stop-color: #c39a6b; } .vw-c { stop-color: #a77b52; } .vw-d { stop-color: #8a6142; }
+:root[data-clay="on"] .cam-over :is(.face.furn:not(.seat), .face.tableTop, .face.fixture.counter).top { fill: url(#vol-wood); }
+:root[data-clay="on"] .cam-over :is(.face.furn:not(.seat), .face.tableTop, .face.fixture.counter):is(.side, .front) { fill: url(#vol-wood-side); }
+/* chairs in a soft graphite upholstery against the wood, so every workstation reads at a glance */
+:root[data-clay="on"] .cam-over .face.seat.furn { fill: #6b6e73; }
+:root[data-clay="on"] .cam-over .face.seat.furn.side { fill: #55585d; }
+:root[data-clay="on"] .cam-over .face.seat.furn.top { fill: #7d8085; }
+/* …the occupied desks and their name bubbles take the wood's tones instead of the blueprint blue: a walnut edge
+   on the desk top and the bubble, the name in dark walnut on warm white */
+:root[data-clay="on"] .cam-over .it.live .face.deskTop { stroke: #8a6142; }
+:root[data-clay="on"] .cam-over .face.furn { stroke: rgba(90, 60, 35, .28); }
+:root[data-clay="on"] .callout-pill { fill: #fbf7f1; stroke: #a77b52; }
+:root[data-clay="on"] .callout-name { fill: #4a3424; }
+/* the WeCafe's tables, stools and chairs (Unit D's café, not office furniture) stay white clay */
+:root[data-clay="on"] .cam-over .it.cafe :is(.face.furn, .face.tableTop, .face.seat).top { fill: var(--furn-top); }
+:root[data-clay="on"] .cam-over .it.cafe :is(.face.furn, .face.tableTop, .face.seat).side { fill: var(--furn-side); }
+:root[data-clay="on"] .cam-over .it.cafe :is(.face.furn, .face.tableTop, .face.seat).front { fill: var(--furn); }
+:root[data-clay="on"] .cam-over .it.cafe :is(.face.furn, .face.seat) { stroke: rgba(0, 0, 0, .12); }
+/* the desks themselves stay white clay in both material styles (the model and Corten & terracotta), so the
+   workstations read as clean white desks with their chairs and screens; the other furniture keeps the style's
+   wood or terracotta */
+:root:is([data-clay="on"], [data-corten="on"]) .cam-over .it:has(.face.deskTop) .face.furn:not(.seat).top { fill: #fafafa; }
+:root:is([data-clay="on"], [data-corten="on"]) .cam-over .it:has(.face.deskTop) .face.furn:not(.seat).side { fill: #e6e6e6; }
+:root:is([data-clay="on"], [data-corten="on"]) .cam-over .it:has(.face.deskTop) .face.furn:not(.seat).front { fill: #eeeeee; }
+
+/* the screens and the plain glass go matte with the rest */
+:root[data-clay="on"] .glass.monitor { fill: #e6e8ea; stroke: #c4c6c9; filter: none; }
+:root[data-clay="on"] .glass.monitor ~ .scr-accent, :root[data-clay="on"] .monitor-ray { display: none; }
+
+/* the hamburger menus open the same way, out of their button at the bottom right */
+.menu-pop { animation: dock-menu-in .18s cubic-bezier(.34, 1.56, .64, 1); transform-origin: calc(100% - 20px) 100%; }
+@media (prefers-reduced-motion: reduce) { .dock-menu, .menu-pop { animation: none; } }
 
 /* the viewer count's eye blinks like a real one: open, a quick close-and-open every few seconds, now and
    then twice in a row (a 7 s loop: a blink at ~3 s, a double blink at the end) */
@@ -138,3 +375,32 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
   button:not(:disabled), [role="button"], [role="switch"], [role="option"], [role="menuitem"], a[href], summary, select, label:has(input[type="checkbox"]) { cursor: pointer; }
   button:disabled { cursor: not-allowed; }
 }
+
+/* the material styles at night (dark theme): the same ideas in the dark — the model as graphite clay with pale
+   hairlines, Corten & terracotta on a charcoal shell; the wood, Corten, terracotta and greenery keep their tones,
+   a step deeper; the white desks become pale grey */
+:root:not([data-theme="light"])[data-clay="on"], :root:not([data-theme="light"])[data-clay="on"] .office-lit {
+  --struct-top: #3b3e43; --struct-lit: #34373c; --struct-shade: #2b2e32; --struct-cap: #45494f; --struct-glass: #2a2e33;
+  --deck: #2f3236; --body: #2b2d31; --recess: #25272b; --glass: #2a2d31;
+  --furn-top: #3b3e43; --furn: #303337; --furn-side: #2a2c30; --desk-top: #3b3e43;
+  --chair: #303337; --chair-side: #2a2c30; --chair-back-top: #3b3e43; --chair-top: #44474c;
+  --furn-edge: rgba(255, 255, 255, .12);
+  --paving: #2a2c30; --asphalt: #222427; --concrete: #34363a; --concrete-lit: #3a3c40; --concrete-ramp: #303236; --lawn: #2c2f33;
+  --struct-line: rgba(255, 255, 255, .13); --line: #4a4e55; --detail: #34373c; --car-edge: rgba(255, 255, 255, .12);
+  --shadow: #000000; --ao-a: .5;
+}
+:root:not([data-theme="light"])[data-corten="on"], :root:not([data-theme="light"])[data-corten="on"] .office-lit {
+  --struct-top: #393b40; --struct-lit: #323438; --struct-shade: #2a2c30; --struct-cap: #4a3a32; --struct-glass: #2b2f34;
+  --deck: #2e2f33; --body: #2a2b2e;
+  --lawn: #1b4332; --paving: #2b2a2c; --concrete: #363230; --concrete-lit: #3c3734;
+  --struct-line: rgba(220, 150, 110, .22); --line: #5a4a42; --detail: #3a3330; --car-edge: rgba(220, 150, 110, .2);
+  --furn-edge: rgba(220, 150, 110, .25); --shadow: #000000;
+}
+:root:not([data-theme="light"]):is([data-clay="on"], [data-corten="on"]) .cam-over .it:has(.face.deskTop) .face.furn:not(.seat).top { fill: #8d9096; }
+:root:not([data-theme="light"]):is([data-clay="on"], [data-corten="on"]) .cam-over .it:has(.face.deskTop) .face.furn:not(.seat).side { fill: #6c6f75; }
+:root:not([data-theme="light"]):is([data-clay="on"], [data-corten="on"]) .cam-over .it:has(.face.deskTop) .face.furn:not(.seat).front { fill: #7a7d83; }
+:root:not([data-theme="light"])[data-clay="on"] .callout-pill { fill: #2b2620; stroke: #c39a6b; }
+:root:not([data-theme="light"])[data-clay="on"] .callout-name { fill: #f1e4d4; }
+:root:not([data-theme="light"])[data-corten="on"] .callout-pill { fill: #2b221d; stroke: #c8673f; }
+:root:not([data-theme="light"])[data-corten="on"] .callout-name { fill: #f4e2d6; }
+:root:not([data-theme="light"])[data-clay="on"] .glass.monitor { fill: #3a3d42; stroke: #55595f; }

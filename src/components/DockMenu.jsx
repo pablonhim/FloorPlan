@@ -1,13 +1,14 @@
 // The "More" button at the end of a view's bottom-left dock: one round button whose frosted menu opens
-// upward with the view's own actions (Export, Reset …) and the app's shared ones — History and the Labels
-// switch — which come from DockMenuContext (App). Closes on a choice, a click outside or Escape; ↑ ↓ move
-// through it.
+// upward with the view's own actions (Export, Reset …) and the app's shared ones — History, and the Labels,
+// Show weather background, Show floor grid, Architectural model and Corten &
+// terracotta switches — which come from DockMenuContext (App).
+// Closes on a choice, a click outside or Escape; ↑ ↓ move through it.
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { icon } from './SceneButton.jsx';
 import { useOneOpen } from '../lib/oneOpen.js';
 
-/** { openHistory(), labels, setLabels(on) } — provided by App. */
+/** { openHistory(), labels, setLabels(on), prefs, setPref(key, on) } — provided by App. */
 export const DockMenuContext = createContext(null);
 
 const I = {
@@ -16,6 +17,10 @@ const I = {
   export: icon(<path d="M8 2.5v8M4.5 7L8 10.5 11.5 7M3 13.5h10" />),
   reset: icon(<><path d="M3 8a5 5 0 1 0 1.5-3.6" /><path d="M3 2.5V5h2.5" /></>),
   labels: icon(<path d="M3 4.5h10M8 4.5v8" />),
+  weather: icon(<><circle cx="6" cy="6" r="2.5" /><path d="M5 13h6.5a2.5 2.5 0 0 0 0-5 3.5 3.5 0 0 0-6.6 1A2 2 0 0 0 5 13z" /></>),
+  grid: icon(<path d="M2.5 5.5h11M2.5 10.5h11M5.5 2.5v11M10.5 2.5v11" />),
+  corten: icon(<><path d="M3 13V5.5L8 3l5 2.5V13" /><path d="M5.5 13V7M8 13V6M10.5 13V7" /></>),
+  clay: icon(<><path d="M2.5 11.5 8 14l5.5-2.5L8 9z" /><path d="M5 9.5V5l3-1.5L11 5v4.5" /></>),
 };
 
 /** items: the view's own actions, [{ label, onClick, icon?: 'export' | 'reset', danger? }]. */
@@ -53,15 +58,15 @@ export default function DockMenu({ items = [] }) {
   return (
     <div ref={box} className="relative">
       <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label="More" onClick={toggle}
-        className={`group relative grid size-8 place-items-center rounded-full transition-colors ${open ? 'bg-accent-dim text-accent' : 'text-ink-hi hover:bg-accent-dim hover:text-accent'}`}>
-        {I.more}
+        className={`pop-ico group relative grid size-8 place-items-center rounded-full transition-colors ${open ? 'bg-accent-dim text-accent' : 'text-ink-hi hover:bg-[color-mix(in_srgb,var(--ink)_12%,transparent)]'}`}>
+        <span className="ico">{I.more}</span>
         {!open && (
           <span role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 -translate-x-1/2 whitespace-nowrap rounded-full frost-panel frost-edge px-2.5 py-1 text-[11px] font-medium leading-none text-ink-hi opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100">More</span>
         )}
       </button>
       {open && at && createPortal(
         <div ref={menu} role="menu" aria-label="More" onKeyDown={onKey} style={{ left: at.left, bottom: at.bottom }}
-          className="frost-panel frost-edge dock-menu fixed z-50 flex min-w-[140px] -translate-x-1/2 flex-col rounded-[10px] p-0.5">
+          className="frost-panel frost-edge frost-thin dock-menu fixed z-50 flex min-w-[210px] -translate-x-1/2 flex-col rounded-[10px] p-0.5">
           {items.map((it) => (
             <button key={it.label} type="button" role="menuitem" onClick={choose(it.onClick)}
               className={`${row} ${it.danger ? 'text-[#e5484d]' : 'text-ink-hi'}`}>
@@ -74,15 +79,25 @@ export default function DockMenu({ items = [] }) {
               <button type="button" role="menuitem" onClick={choose(shared.openHistory)} className={`${row} text-ink-hi`}>
                 <span className="text-ink">{I.history}</span>History
               </button>
-              {/* Labels: a switch row (the menu stays open, so it can be flicked on and off) */}
-              <button type="button" role="menuitemcheckbox" aria-checked={shared.labels} onClick={() => shared.setLabels(!shared.labels)}
-                className={`${row} text-ink-hi`}>
-                <span className="text-ink">{I.labels}</span>
-                <span className="flex-1">Labels</span>
-                <span className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${shared.labels ? 'bg-accent' : 'bg-[color-mix(in_srgb,var(--ink)_30%,transparent)]'}`}>
-                  <span className={`absolute top-0.5 size-3 rounded-full bg-white shadow transition-[left] ${shared.labels ? 'left-3.5' : 'left-0.5'}`} />
-                </span>
-              </button>
+              {/* Labels and the view settings: switch rows (the menu stays open, so they can be flicked on and off) */}
+              {[
+                { label: 'Labels', icon: I.labels, on: shared.labels, set: shared.setLabels },
+                ...(shared.prefs ? [
+                  { label: 'Show weather background', icon: I.weather, on: shared.prefs.weather, set: (v) => shared.setPref('weather', v) },
+                  { label: 'Show floor grid', icon: I.grid, on: shared.prefs.grid, set: (v) => shared.setPref('grid', v) },
+                  { label: 'Architectural model', icon: I.clay, on: shared.prefs.clay, set: (v) => shared.setPref('clay', v) },
+                  { label: 'Corten & terracotta', icon: I.corten, on: shared.prefs.corten, set: (v) => shared.setPref('corten', v) },
+                ] : []),
+              ].map((r) => (
+                <button key={r.label} type="button" role="menuitemcheckbox" aria-checked={r.on} onClick={() => r.set(!r.on)}
+                  className={`${row} text-ink-hi`}>
+                  <span className="text-ink">{r.icon}</span>
+                  <span className="flex-1">{r.label}</span>
+                  <span className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${r.on ? 'bg-accent' : 'bg-[color-mix(in_srgb,var(--ink)_30%,transparent)]'}`}>
+                    <span className={`absolute top-0.5 size-3 rounded-full bg-white shadow transition-[left] ${r.on ? 'left-3.5' : 'left-0.5'}`} />
+                  </span>
+                </button>
+              ))}
             </>
           )}
         </div>,

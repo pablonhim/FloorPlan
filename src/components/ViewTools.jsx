@@ -15,7 +15,7 @@ export function ViewTools({ children, after = null, left = '1rem' }) {
   return (
     <div className="absolute bottom-3 z-20 flex h-10 items-center gap-2" style={{ left }}>
       <Compass />
-      <div className="frost-panel frost-edge flex h-10 items-center gap-0 rounded-full px-1" role="toolbar" aria-label="View tools">{children}</div>
+      <div className="frost-panel frost-edge frost-thin flex h-10 items-center gap-0 rounded-full px-1" role="toolbar" aria-label="View tools">{children}</div>
       {after}
     </div>
   );
@@ -24,7 +24,7 @@ export function ViewTools({ children, after = null, left = '1rem' }) {
 /** A view's status line (and any message below it), centred at the top on the header's line. */
 export function StatusLine({ children }) {
   return (
-    <div className="pointer-events-none absolute top-0 left-1/2 z-10 flex min-h-14 -translate-x-1/2 flex-col items-center justify-center whitespace-nowrap text-center text-[12px] leading-tight tabular-nums"
+    <div className="sky-head pointer-events-none absolute top-0 left-1/2 z-10 flex min-h-14 -translate-x-1/2 flex-col items-center justify-center whitespace-nowrap text-center text-[12px] leading-tight tabular-nums"
       aria-live="polite">{children}</div>
   );
 }
@@ -61,7 +61,7 @@ function FloorDropdown({ floor, onFloor }) {
   return (
     <div ref={box} className="relative">
       <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}
-        className={`flex h-8 items-center gap-1 rounded-full pl-3 pr-2 text-[11.5px] font-semibold tabular-nums transition-colors ${open ? 'bg-accent-dim text-accent' : 'text-ink-hi hover:bg-accent-dim hover:text-accent'}`}>
+        className={`flex h-8 items-center gap-1 rounded-full pl-3 pr-2 text-[11.5px] font-semibold tabular-nums transition-colors ${open ? 'bg-accent-dim text-accent' : 'text-ink-hi hover:bg-[color-mix(in_srgb,var(--ink)_12%,transparent)]'}`}>
         Floor {floor}
         <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
           aria-hidden="true" className={`transition-transform duration-150 ${open ? 'rotate-180' : ''}`}><path d="M4 10l4-4 4 4" /></svg>

@@ -85,10 +85,10 @@ export default function Palette({ placing, setPlacing, showCore, collapsed = fal
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       {groups.map(({ group, types }) => (
         <section key={group}>
-          <h3 className="text-[10px] uppercase tracking-[.18em] text-ink mb-1 pl-1">{group}</h3>
+          <h3 className="text-[10px] uppercase tracking-[.18em] text-ink mb-0.5 pl-1.5">{group}</h3>
           <div className="flex flex-col gap-0.5">
             {types.map((t) => {
               const s = SIZES[t];

@@ -8,12 +8,6 @@ const ACCENT = { dark: ['#2f8fff', '#9fd0ff'], light: ['#1f7bff', '#0b5ed7'] };
 const read = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
 const write = (k, v) => { try { localStorage.setItem(k, v); } catch { /* storage blocked */ } };
 
-/** Where the pointer last went down: the theme switch's reveal grows from there. */
-const lastPress = { at: null };
-if (typeof window !== 'undefined') {
-  window.addEventListener('pointerdown', (e) => { lastPress.at = { x: e.clientX, y: e.clientY }; }, { capture: true, passive: true });
-}
-
 function applyTheme(theme) {
   const root = document.documentElement;
   root.dataset.theme = theme;
@@ -32,22 +26,17 @@ export function useTheme() {
     write('floorplan.theme.v2', theme);
   }, [theme]);
 
-  // switching themes: the new one spreads over the page in a circle from where it was clicked (the toggle),
-  // a view transition whose new snapshot is revealed by a growing clip; browsers without the API, or with
-  // reduced motion requested, switch instantly
-  const setTheme = useCallback((next) => {
+  // switching themes cross-fades the whole page (a view transition, timing in index.css); browsers without
+  // the API, or with reduced motion requested, switch instantly
+  // (also: `changes`, more to do inside the same fade, e.g. the time of day's sky — lib/sky)
+  const setTheme = useCallback((next, changes = null) => {
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    if (!document.startViewTransition || reduce) { setThemeNow(next); return; }
-    const { x, y } = lastPress.at || { x: window.innerWidth - 40, y: 28 };
-    const r = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
-    const t = document.startViewTransition(() => {
+    const run = () => {
       applyTheme(next);
-      flushSync(() => setThemeNow(next));
-    });
-    t.ready.then(() => document.documentElement.animate(
-      { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
-      { duration: 700, easing: 'cubic-bezier(.65, 0, .35, 1)', pseudoElement: '::view-transition-new(root)' },
-    )).catch(() => {});
+      flushSync(() => { setThemeNow(next); changes?.(); });
+    };
+    if (!document.startViewTransition || reduce) { run(); return; }
+    document.startViewTransition(run);
   }, []);
 
   // in-drawing text (room, team and employee names, signs, ground markings) can be hidden

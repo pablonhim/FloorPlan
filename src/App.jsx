@@ -3,7 +3,6 @@ import { useTheme } from './lib/theme.js';
 import { initState, reducer, save, saveLog, floorStats, planId, RENTED, TOTAL_FLOORS, UNITS, PLANS } from './model/floors.js';
 import { focusOf } from './model/search.js';
 import TowerView from './components/TowerView.jsx';
-import Switch, { ICONS } from './components/Switch.jsx';
 import MenuIcon from './components/MenuIcon.jsx';
 import Credit from './components/Credit.jsx';
 import SearchBar from './components/SearchBar.jsx';
@@ -13,6 +12,10 @@ import { DockMenuContext } from './components/DockMenu.jsx';
 import { useCameraNav } from './lib/useCameraNav.js';
 import { whenIdle } from './lib/keep.js';
 import { useOneOpen } from './lib/oneOpen.js';
+import { useSky } from './lib/sky.js';
+import SkyToggle from './components/SkyToggle.jsx';
+import VolumeDefs from './components/VolumeDefs.jsx';
+import { useViewPrefs } from './lib/prefs.js';
 
 // the floor and unit pages load as their own chunks (the building page is the first view); both are
 // fetched as soon as the browser is idle after the first paint, so opening a floor never waits on them
@@ -51,6 +54,10 @@ function Layer({ active, plain, children }) {
 
 export default function App() {
   const { theme, setTheme, light, labels, setLabels } = useTheme();
+  // morning / evening / night: the sky behind the drawing and its light, and the theme with it (lib/sky)
+  // view settings in the dock's ⋯ menu: line work, weather background, floor grid (lib/prefs)
+  const [prefs, setPref] = useViewPrefs();
+  const [sky, chooseSky] = useSky(theme, setTheme, prefs.weather);
   const [state, dispatch] = useReducer(reducer, null, initState);
   // view changes go through a camera-style zoom (see useCameraNav)
   const { view, go: setView } = useCameraNav({ kind: 'building' });
@@ -84,7 +91,7 @@ export default function App() {
   // one menu or side panel open at a time (lib/oneOpen): the floor list and History count too
   useOneOpen(floorsOpen, () => setFloorsOpen(false));
   useOneOpen(historyOpen, () => setHistoryOpen(false));
-  const dockMenu = useMemo(() => ({ openHistory: () => setHistoryOpen(true), labels, setLabels }), [labels, setLabels]);
+  const dockMenu = useMemo(() => ({ openHistory: () => setHistoryOpen(true), labels, setLabels, prefs, setPref }), [labels, setLabels, prefs, setPref]);
   // a search result (or an edit in the history): open its page; `focus` (a fresh object every time, so
   // picking the same thing again glides again) is the spot the camera moves onto
   const goTo = (v) => setView(v.focus ? { ...v, focus: { ...v.focus } } : v);
@@ -116,11 +123,9 @@ export default function App() {
               </div>
               {/* floor list: a menu button at the bottom right that opens a floating frosted panel above it */}
               <div className="pointer-events-none absolute top-[3.75rem] bottom-3 right-3 z-10 flex w-56 flex-col items-end justify-end gap-2">
-              {/* always mounted so it can grow out of / shrink back into the menu button (no fade): it scales
-                  from the button's centre, 20px in from its right edge and 28px below it (8px gap + half the
-                  40px button); inert while closed */}
+              {/* always mounted, inert while closed; it pops up like the dock's ⋯ menu (.menu-pop) */}
               <aside id="floor-panel" inert={!floorsOpen} aria-hidden={!floorsOpen}
-                className={`frost-panel frost-edge w-56 min-h-0 origin-[calc(100%-20px)_calc(100%+28px)] rounded-xl p-1 flex flex-col gap-0.5 overflow-auto transition-[scale,visibility] motion-reduce:transition-none ${floorsOpen ? 'pointer-events-auto visible scale-100 duration-[420ms] ease-[cubic-bezier(.34,1.56,.64,1)]' : 'pointer-events-none invisible scale-0 duration-[260ms] ease-[cubic-bezier(.55,0,.75,.2)]'}`}>
+                className={`frost-panel frost-edge frost-thin w-56 min-h-0 rounded-xl p-1 flex flex-col gap-0.5 overflow-auto ${floorsOpen ? 'menu-pop pointer-events-auto visible' : 'pointer-events-none invisible'}`}>
                 <h3 className="px-2 pt-1 text-[10px] uppercase tracking-[.18em] text-ink">Floors</h3>
                 <ul className="flex flex-col gap-px">
                   {floors.map((f) => {
@@ -147,7 +152,7 @@ export default function App() {
               <button type="button" onClick={toggleFloors} onAnimationEnd={() => setJelly(false)}
                 aria-expanded={floorsOpen} aria-controls="floor-panel" aria-label={floorsOpen ? 'Close floor list' : 'Open floor list'}
                 title={floorsOpen ? 'Close floor list' : 'Floors'}
-                className={`frost-panel pointer-events-auto grid size-10 shrink-0 place-items-center rounded-full text-ink-hi hover:text-accent ${jelly ? 'jelly' : ''}`}>
+                className={`frost-panel frost-edge frost-thin pointer-events-auto grid size-10 shrink-0 place-items-center rounded-full text-ink-hi hover:text-accent ${jelly ? 'jelly' : ''}`}>
                 <MenuIcon open={floorsOpen} />
               </button>
               </div>
@@ -174,12 +179,13 @@ export default function App() {
   return (
     // History and the Labels switch live in each view's dock menu (DockMenu)
     <DockMenuContext.Provider value={dockMenu}>
+    <VolumeDefs />
     {/* the building page sits on its own backdrop (a light-gray gradient in the light theme), header included */}
     <div className={`relative h-full flex flex-col ${view.kind === 'building' ? 'backdrop-bld overflow-hidden' : 'bg-panel'}`}>
       {/* the header floats over the drawing (no background, no strip of its own): the drawing runs up to the
           top edge, so zooming never crops it at a line; only its controls take the pointer */}
       <header className="pointer-events-none absolute inset-x-0 top-0 z-30 flex h-14 items-center gap-3 px-4">
-        <div className="flex flex-col gap-1">
+        <div className="sky-head flex flex-col gap-1">
           <div className="flex items-center gap-3">
             <span className="text-[18px] font-semibold leading-none text-ink-hi tracking-wide">Floor Plan</span>
             {/* the page you are on, beside the logo: same size, quieter (none on the building page) */}
@@ -193,7 +199,7 @@ export default function App() {
         </div>
         <span className="flex-1" />
         <div className="pointer-events-auto flex items-center gap-4">
-          <Switch checked={theme === 'dark'} onChange={(on) => setTheme(on ? 'dark' : 'light')} label="Dark mode" icon={ICONS.theme} />
+          <SkyToggle sky={sky} onChange={chooseSky} weather={prefs.weather} />
         </div>
       </header>
 

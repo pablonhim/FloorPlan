@@ -68,7 +68,7 @@ export default function SearchBar({ plans, onPick }) {
 
   return (
     <div ref={box} className="pointer-events-auto relative w-[min(16rem,34vw)]">
-      <div className={`frost-panel frost-edge flex h-10 items-center gap-2 rounded-full pl-3.5 pr-2.5 ${open ? 'ring-1 ring-accent' : ''}`}>
+      <div className={`frost-panel frost-edge frost-thin flex h-10 items-center gap-2 rounded-full pl-3.5 pr-2.5 ${open ? 'ring-1 ring-accent' : ''}`}>
         <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true" className="shrink-0 text-ink">
           <circle cx="7" cy="7" r="4.5" /><path d="m10.5 10.5 3 3" />
         </svg>

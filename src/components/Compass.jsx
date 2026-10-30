@@ -35,7 +35,7 @@ export default function Compass() {
   return (
     <svg viewBox="-20 -20 40 40" width="40" height="40" role="img" aria-label="Compass: north is up and to the right" className="pointer-events-auto shrink-0">
       <title>North</title>
-      <circle r="18.5" fill="none" stroke="var(--ink)" strokeWidth="1.2" opacity=".55" />
+      <circle r="18.5" fill="none" stroke="var(--line)" strokeWidth="1.2" opacity=".8" />
       <g ref={needle} transform={`rotate(${ROT})`}>
         <path d="M0 -10 L2.8 0 L-2.8 0 Z" fill="var(--ink-hi)" />
         <path d="M0 10 L2.8 0 L-2.8 0 Z" fill="none" stroke="var(--ink)" strokeWidth="1" strokeLinejoin="round" />

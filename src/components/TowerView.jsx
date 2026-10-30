@@ -17,6 +17,7 @@ import { vehicle, VEHICLE_DEFS } from '../iso/vehicles.js';
 import { leg, cubicLeg, pose, person, planPath, duration } from '../iso/scenes.js';
 import { showVia, setBox } from '../lib/svgCamera.js';
 import { exportPng } from '../lib/exportPng.js';
+import { HoverTip, useHoverTip } from './HoverTip.jsx';
 import DockMenu from './DockMenu.jsx';
 import { factorOf, fracOf, onZoomCommand, setZoom } from '../lib/zoomStore.js';
 
@@ -87,6 +88,12 @@ const RAMPS = [
 ];
 
 /** Flat courtyard surfaces on the plate: entrance band, the loop lane, VIP spur and zone, bays, park. */
+/**
+ * The site's features carry a hover tip (HoverTip, the same pill as the plans'): `inner` wrapped in a group
+ * with its name only, short, in English and Korean (data-tip-ko), picked by the display language.
+ */
+const tipG = (en, ko, inner) => `<g class="ext-tip" data-tip="${en}" data-tip-ko="${ko}">${inner}</g>`;
+
 function courtyard() {
   const { TOP } = K;
   const [p0, p1] = YARD.plaza, [r0, r1] = YARD.road, [b0, b1] = YARD.bays;
@@ -526,7 +533,7 @@ function roofBoxes() {
     const b = ya === yb
       ? { x: x0, y: iy > 0 ? y0 : y0 - GUARD.t, w: x1 - x0, d: GUARD.t }
       : { x: ix > 0 ? x0 : x0 - GUARD.t, y: y0, w: GUARD.t, d: y1 - y0 };
-    out.push({ ...b, h: GUARD.h, cls: 'struct cap' });
+    out.push({ ...b, h: GUARD.h, cls: 'struct cap parapet' });
   });
   for (const l of LIFTS) out.push({ x: wx(l.x0), y: wy(l.y0), w: (l.x1 - l.x0) * M, d: (l.y1 - l.y0) * M, h: 9, cls: 'struct cap' });
   out.push({ x: PENT.x0, y: PENT.y0, w: PENT.x1 - PENT.x0, d: PENT.y1 - PENT.y0, h: PENT.h, cls: 'struct cap', pent: true });
@@ -646,10 +653,10 @@ export function buildSvg({ occ, cursor, away, vipArrived, vipGone }) {
   svg += `<g transform="${FRONT(PLATE.x0, PLATE.y1, PZ)}"><text class="label" x="${(PLATE.x1 - PLATE.x0) / 2 - 40}" y="5.2" font-size="4" letter-spacing=".6">TELA OFFICE BUILDING · ${NF} STOREYS · ${EXTENT.w} × ${EXTENT.d} M</text></g>`;
 
   svg += courtyard();
-  svg += vipDeck();      // the raised VIP route with its graded ramp, bays and markings
+  svg += tipG('VIP route', 'VIP 통로', vipDeck());      // the raised VIP route with its graded ramp, bays and markings
   svg += vipWallBack();  // VIP perimeter wall along the back (north) of the route
-  svg += vipCars(vipArrived, vipGone); // VIP zone on the west (back-left) side, also behind the building
-  svg += ramp(RAMPS[1]); // west exit ramp: behind the building and inside its shadow
+  svg += tipG('VIP parking', 'VIP 주차장', vipCars(vipArrived, vipGone)); // VIP zone on the west (back-left) side, also behind the building
+  svg += tipG('Underground parking exit', '지하 주차장 출구', ramp(RAMPS[1])); // west exit ramp: behind the building and inside its shadow
   svg += `<g class="anim-back"></g>`; // moving actors behind the building (filled per frame)
 
   // ---- building shadow: lighter, blur growing toward the tip so the far corners round off ----
@@ -660,7 +667,7 @@ export function buildSvg({ occ, cursor, away, vipArrived, vipGone }) {
   svg += `</g>`;
   // the external public restroom on the west paved platform: after the building's ground shadow, which
   // lies on the paving round it (drawn before, it painted over most of the restroom's roof)
-  svg += publicWC();
+  svg += tipG('Public restroom', '공용 화장실', publicWC());
 
   svg += `<g class="bld">`; // the building itself: façades, roof and roof furniture (x-rayed on demand)
   // ---- façades, back to front: wall, per-floor bands with windows, pilasters on the pillar grid ----
@@ -722,28 +729,29 @@ export function buildSvg({ occ, cursor, away, vipArrived, vipGone }) {
     `<path d="${path(FOOTPRINT.map(([x, y]) => [wx(x), wy(y), PZ]))}Z"/>` +
     ends.map(([x, y]) => `<path d="${path([[wx(x), wy(y), PZ], [wx(x), wy(y), zt]])}"/>`).join('') + `</g>`;
   svg += `<g class="anim-over"></g>`; // actors inside the frosted building (the KOSIGN visitor, the lift)
-  svg += entrance();
-  svg += ramp(RAMPS[0]); // east entrance: in front of the building's east façade
+  svg += tipG('Main entrance', '정문', entrance());
+  svg += tipG('Underground parking entrance', '지하 주차장 입구', ramp(RAMPS[0])); // east entrance: in front of the building's east façade
   svg += vipWallInner();  // the VIP leg's left-hand wall (behind cars in the VIP lanes)
   svg += `<g class="anim-mid1"></g>`; // actors east of the building, west of the VIP centre curb
   svg += curbEast();     // VIP centre curb beside it
-  svg += vipGate();      // checkpoint booth and barriers on it
+  svg += tipG('VIP checkpoint', 'VIP 검문소', vipGate());      // checkpoint booth and barriers on it
   svg += `<g class="anim-mid2"></g>`; // actors between that curb and the VIP perimeter wall
   svg += vipWall();      // low perimeter wall along the VIP route's outer edge
-  svg += cars(away);
+  svg += tipG('Car park', '주차장', cars(away));
   // "No entry" at the P↑OUT ramp mouth (east side), facing the loop: the ramp is exit-only
   svg += noEntrySign(RAMPS[1].x1 + 3.5, YARD.road[0] - 1.5, '진입금지');
   svg += `<g class="anim-front"></g>`; // moving actors in front of it
-  svg += lawnBed();      // the front lawn in its low concrete border (in front of the car park and the loop)
+  svg += tipG('Front lawn', '앞마당 잔디', lawnBed());      // the front lawn in its low concrete border (in front of the car park and the loop)
   // "No entry" for the site exit, standing on the lawn bed's front corner next to the exit lane, facing
   // the street
   svg += noEntrySign(LAWN[0] + 3, YARD.park[1] - 3, 'NO ENTRY');   // on the paving in front of the garden wall
   // automatic sliding gates where the site meets the street: exit (south-west), entrance (south-east)
-  svg += siteGate('exit', EXIT[0], EXIT[1], 1) + siteGate('entry', ENTRY_GATE[0], ENTRY_GATE[1], -1, 2);
+  svg += tipG('Site exit gate', '출구 게이트', siteGate('exit', EXIT[0], EXIT[1], 1)) +
+    tipG('Site entrance gate', '입구 게이트', siteGate('entry', ENTRY_GATE[0], ENTRY_GATE[1], -1, 2));
 
   svg += gardenWall();   // the garden's front wall
-  svg += reflectingPool(); // a long decorative pool along it (west of the ATM room)
-  svg += atmKiosk();     // the ATM room against it, on the paving
+  svg += tipG('Reflecting pool', '연못', reflectingPool()); // a long decorative pool along it (west of the ATM room)
+  svg += tipG('ATM', 'ATM', atmKiosk());     // the ATM room against it, on the paving
   svg += fireflies();    // night only: a few fireflies round the underground ramp mouths
   return svg;
 }
@@ -1237,6 +1245,7 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
   const [cursor, setCursor] = useState(RENTED[0]);
   const [msg, setMsg] = useState('');
   const holder = useRef(null);
+  const [extHover, extTip, hideExtTip] = useHoverTip(holder, { top: true });   // the site features' hover pill
   // scenes: bay cars that have driven off (hidden from the static scene) and the actors now moving
   const [away, setAway] = useState(() => new Set());
   const actors = useRef([]);
@@ -1805,18 +1814,22 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
         onMouseOver={(e) => { const f = e.target.closest('.fl'); if (f) { setCursor(+f.dataset.f); setMsg(''); } }}
         onMouseMove={(e) => {
           const f = e.target.closest('.fl'), n = f ? +f.dataset.f : 0;
+          // the site's features (HoverTip pill): only the topmost thing under the pointer, never one hidden
+          // behind the building; none over a floor, while panning or while a scene plays
+          extTip(e, Boolean(f) || holder.current.classList.contains('panning') || actors.current.length > 0);
           if (!RENTED.includes(n)) { setTip(null); return; }
           const r = holder.current.getBoundingClientRect();
           setTip({ floor: n, x: e.clientX - r.left, y: e.clientY - r.top });
         }}
-        onMouseLeave={() => setTip(null)}
+        onMouseLeave={() => { setTip(null); hideExtTip(); }}
       >
         <IsoDefs light={light} />
         <g dangerouslySetInnerHTML={{ __html: svg }} />
       </svg>
       {tip && plans && <FloorTip {...tip} plans={plans} box={holder.current.getBoundingClientRect()} />}
+      <HoverTip tip={extHover} />
       {/* bottom centre, on the docks' 40px line: the floor picked, or what a scene is doing */}
-      <div className="pointer-events-none absolute top-0 left-1/2 flex h-14 -translate-x-1/2 items-center whitespace-nowrap text-[12px] text-ink-hi tabular-nums" aria-live="polite">{read}</div>
+      <div className="sky-head pointer-events-none absolute top-0 left-1/2 flex h-14 -translate-x-1/2 items-center whitespace-nowrap text-[12px] text-ink-hi tabular-nums" aria-live="polite">{read}</div>
     </div>
   );
 }

@@ -7,8 +7,8 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { CELL, CUT_H } from '../iso/units.js';
 import { cellRect, centerGrab, collides, footprint, normRot, rotateItem, snapOrigin, validate, worldToCell, onPlate } from '../iso/grid.js';
 import { depthSort } from '../iso/depth.js';
-import { planFrame, itemNode, renderCell, renderFoot, renderItem, renderPlate, renderZoneTag, renderShadows, renderScene, renderDeskCallouts, edgeItems, cafeIds } from '../iso/render.js';
-import { isLive, describe, defaults, LAYER, CORE, tipFor } from '../model/catalog.js';
+import { planFrame, itemNode, renderCell, renderFoot, renderItem, renderPlate, renderZoneTag, renderShadows, renderScene, renderDeskCallouts, edgeItems, cafeIds, tipData } from '../iso/render.js';
+import { isLive, describe, defaults, LAYER, CORE } from '../model/catalog.js';
 import { PLANS, UNITS, stats, floorPlan, coreItems, toFloor } from '../model/floors.js';
 import { exportPng } from '../lib/exportPng.js';
 import IsoDefs from './IsoDefs.jsx';
@@ -38,13 +38,13 @@ const htmlOf = (K, item, cut) => {
 
 const ItemG = memo(function ItemG({ K, item, cls, cut, ghost, faded, unit }) {
   const html = useMemo(() => htmlOf(K, item, cut), [K, item, cut]);
-  const tip = !ghost && tipFor(item);   // the hover card's text (HoverTip)
+  const tip = ghost ? {} : tipData(item);   // the hover card's text, in every language (HoverTip)
   // a faded piece round the unit (building core, or a neighbouring unit's: `unit`, which a click glides
-  // over to): shown, never edited, not exported
-  if (faded) return <g className={cls} data-unit={unit} data-noexport="" dangerouslySetInnerHTML={{ __html: html }} />;
+  // over to): shown, never edited, not exported; the core's WCs, lifts and storage get the hover tip too
+  if (faded) return <g className={cls} data-unit={unit} data-noexport="" {...(unit ? {} : tip)} dangerouslySetInnerHTML={{ __html: html }} />;
   return ghost || item.id.startsWith('edge-')
     ? <g className={cls} data-noexport={ghost ? '' : undefined} dangerouslySetInnerHTML={{ __html: html }} />
-    : <g data-id={item.id} className={cls} data-tip={tip?.title} data-tip-sub={tip?.sub || undefined} dangerouslySetInnerHTML={{ __html: html }} />;
+    : <g data-id={item.id} className={cls} {...tip} dangerouslySetInnerHTML={{ __html: html }} />;
 });
 
 const Html = ({ html, ...rest }) => <g {...rest} dangerouslySetInnerHTML={{ __html: html }} />;
@@ -101,7 +101,7 @@ function unitNeighbours(pid, plans) {
     });
   });
 }
-// the building core round it too (corridor, lifts, WCs, storage rooms, stairs), faded, not clickable. Its
+// the building core round it too (corridor, lifts, WCs, storage rooms, stairs), at full strength, not clickable. Its
 // flat parts (zones, door swings) lie under the unit; its walls, lifts and fixtures are depth-sorted in
 // with the unit's own items (see solidNodes): the WC pocket sits inside the unit's outline, behind some of
 // its walls and in front of others, so drawing the core as one block over or under the unit was wrong
@@ -158,8 +158,8 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const [panelOpen, setPanelOpen] = useState(false);   // the right-hand panel (menu at the bottom right)
   useEffect(() => { if (selected) setPanelOpen(true); }, [selected]);   // selecting an item opens it
   useEffect(() => { setPanelOpen(false); }, [pid]);                      // another unit: closed again
-  const [paletteMin, setPaletteMin] = useState(false);
-  useOneOpen(!paletteMin, () => setPaletteMin(true));   // the objects panel too: one menu or panel open at a time   // the objects panel collapsed to its icons   // the right-hand panel folded down to its header
+  const [paletteMin, setPaletteMin] = useState(true);   // the objects panel starts collapsed to its icons
+  useOneOpen(!paletteMin, () => setPaletteMin(true));   // the objects panel too: one menu or panel open at a time
   const cut = false;   // tall walls and objects at full height (the cutaway switch is gone)
   const [msg, setMsg] = useState('');
   const drag = useRef(null);
@@ -454,7 +454,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   // view): back to the floor, the floors with this floor's units (this one ringed; another glides over
   // to it), and fit
   const tools = (
-    <ViewTools left={`calc(0.75rem + ${paletteMin ? '4.75rem' : '14rem'} + 0.75rem)`} after={<>
+    <ViewTools left={`calc(0.75rem + ${paletteMin ? '3.5rem' : '14rem'} + 0.75rem)`} after={<>
       {/* editing actions: round frosted buttons floating beside the dock (R and Delete still work); Rotate shows
           only while there is something to turn (a movable item selected, or one being placed) and Delete only
           while a removable item is selected (Undo sits at the bottom right, by the menu button) */}
@@ -487,8 +487,8 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
       {/* the palette: a frosted card floating over the drawing at the left (no column of its own), full height;
           the bottom dock starts just right of it; its list scrolls inside and fades out at the bottom edge.
           Its header collapses it to a slim column of icons (names in a frosted card on hover) */}
-      <aside className={`frost-panel frost-edge absolute left-3 top-[3.75rem] bottom-3 z-10 flex flex-col rounded-2xl ${paletteMin ? 'w-[4.75rem]' : 'w-56'}`}>
-        <div className={`flex items-center gap-2 py-2 pr-1.5 ${paletteMin ? 'justify-center pl-1.5' : 'pl-3'} border-b border-[color-mix(in_srgb,var(--ink)_18%,transparent)]`}>
+      <aside className={`frost-panel frost-edge absolute left-3 top-[3.75rem] bottom-3 z-10 flex flex-col rounded-2xl ${paletteMin ? 'w-14' : 'w-56'}`}>
+        <div className={`flex items-center gap-2 py-1.5 pr-1 ${paletteMin ? 'justify-center pl-1' : 'pl-2.5'} border-b border-[color-mix(in_srgb,var(--ink)_18%,transparent)]`}>
           {!paletteMin && <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink-hi">Objects</span>}
           <button type="button" onClick={() => setPaletteMin((m) => !m)} aria-expanded={!paletteMin}
             aria-label={paletteMin ? 'Expand the objects panel' : 'Collapse the objects panel'} title={paletteMin ? 'Expand' : 'Collapse'}
@@ -496,7 +496,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
             {icon(<path d={paletteMin ? 'M6 4l4 4-4 4' : 'M10 4 6 8l4 4'} />)}
           </button>
         </div>
-        <div className="fade-bottom no-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2 pb-10">
+        <div className={`fade-bottom no-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-1 pb-10 ${paletteMin ? 'pal-min' : ''}`}>
           <Palette placing={placing} setPlacing={setPlacing} showCore={showCore} collapsed={paletteMin} />
         </div>
       </aside>

@@ -118,22 +118,35 @@ export function describe(item) {
   return s.label.toLowerCase();
 }
 
+/** The hover cards' languages: English, and Korean / Khmer where the catalog has the words. */
+export const TIP_LANGS = ['en', 'ko', 'km'];
+
+/** The display language's tip language (the browser's language: ko… → Korean, km… → Khmer, else English). */
+export function tipLang() {
+  const l = (typeof navigator !== 'undefined' && (navigator.languages?.[0] || navigator.language)) || 'en';
+  return TIP_LANGS.find((t) => t !== 'en' && l.toLowerCase().startsWith(t)) || 'en';
+}
+
 /**
- * Hover card text for an item: { title, sub }, or null for the ones that get no card (walls, doors, glass,
- * partitions and room areas: they are everywhere, a card on each would be noise).
+ * Hover card text for an item in one language: { title, sub }, or null for the ones that get no card
+ * (walls, doors, glass, partitions and room areas: they are everywhere, a card on each would be noise).
+ * One language only: words the catalog lacks in Korean or Khmer fall back to English.
  */
 const NO_TIP = new Set(['zone', 'door', 'wall', 'glass', 'partition']);
-export function tipFor(item) {
+export function tipFor(item, lang = 'en') {
   if (!item || NO_TIP.has(item.type)) return null;
-  const s = SIZES[item.type];
+  const s = SIZES[item.type], ko = lang === 'ko', km = lang === 'km';
   if (item.type === 'desk') {
     const name = (item.name || '').trim();
-    return { title: name || 'Unassigned desk', sub: [item.label, item.team].filter(Boolean).join(' · ') || s.note };
+    return { title: name || (ko ? '빈 자리' : 'Unassigned desk'), sub: [item.label, item.team].filter(Boolean).join(' · ') || (lang === 'en' ? s.note : '') };
   }
-  if (item.type === 'wc') return item.gender === 'm' ? { title: "Men's WC", sub: '남자 화장실' } : { title: "Women's WC", sub: '여자 화장실' };
-  if (item.type === 'elevator') return { title: 'Elevator', sub: 'to every floor · G – 10' };
-  if (item.type === 'pillar') return { title: 'Pillar', sub: `${s.km} · ${s.kr}` };
-  return { title: s.label, sub: [s.kr, s.note].filter(Boolean).join(' · ') };
+  if (item.type === 'wc') {
+    const m = item.gender === 'm';
+    return { title: ko ? (m ? '남자 화장실' : '여자 화장실') : (m ? "Men's WC" : "Women's WC"), sub: '' };
+  }
+  if (item.type === 'elevator') return { title: ko ? '엘리베이터' : 'Elevator', sub: ko ? '전 층 운행 · G – 10' : 'to every floor · G – 10' };
+  const title = (km && s.km) || (ko && s.kr) || s.label;
+  return { title, sub: lang === 'en' ? s.note || '' : '' };
 }
 
 // ---------- shared bits ----------
