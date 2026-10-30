@@ -142,6 +142,26 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 :root[data-sky="evening"] .twr .bld > .face.top.struct { stroke: rgb(255 226 190 / .95); stroke-width: 1.6; stroke-opacity: 1; }
 :root:is([data-sky="morning"], [data-sky="evening"]) .twr .pn:not(.on, .lobby) { fill: color-mix(in srgb, var(--struct-glass) 88%, var(--ink)); }
 
+/* the sky's light on the surfaces themselves (only while the weather background is on: data-sky is "none"
+   when it is off, and every surface keeps its neutral matte colour): a soft, low-opacity cast of the sky's
+   colour on the upper faces and on the faces turned to the sun, mixed into whatever each surface already is
+   (the default model look, the Architectural model, Corten & terracotta, night), so the materials keep their
+   character. Morning: soft gold on the tops and the east faces; evening: amber on the tops and the south faces
+   (the sun is in the south-west); night: a deep cool blue on the tops and east faces. The Corten fins and the
+   floors' hover tint keep their own fills. */
+:root[data-sky="morning"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap) { fill: color-mix(in srgb, var(--struct-top) 91%, #ffdc8f); }
+:root[data-sky="morning"] .cam-over .face.slab.top { fill: color-mix(in srgb, var(--deck) 94%, #ffdc8f); }
+:root[data-sky="morning"] .cam-over :is(.face.struct, .face.slab, .face.fixture).side:not(.pilaster, .band) { fill: color-mix(in srgb, var(--struct-lit) 90%, #ffd27a); }
+:root[data-sky="morning"] .twr .fl:not(:hover, .cursor) .face.band.side { fill: color-mix(in srgb, var(--struct-lit) 90%, #ffd27a); }
+:root[data-sky="evening"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap) { fill: color-mix(in srgb, var(--struct-top) 89%, #ffb77a); }
+:root[data-sky="evening"] .cam-over .face.slab.top { fill: color-mix(in srgb, var(--deck) 93%, #ffb77a); }
+:root[data-sky="evening"] .cam-over :is(.face.struct, .face.slab, .face.fixture).front:not(.pilaster, .band) { fill: color-mix(in srgb, var(--struct-shade) 87%, #ffa560); }
+:root[data-sky="evening"] .twr .fl:not(:hover, .cursor) .face.band.front { fill: color-mix(in srgb, var(--struct-shade) 87%, #ffa560); }
+:root[data-sky="night"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap) { fill: color-mix(in srgb, var(--struct-top) 86%, #4f72b8); }
+:root[data-sky="night"] .cam-over .face.slab.top { fill: color-mix(in srgb, var(--deck) 90%, #4f72b8); }
+:root[data-sky="night"] .cam-over :is(.face.struct, .face.slab, .face.fixture).side:not(.pilaster, .band) { fill: color-mix(in srgb, var(--struct-lit) 88%, #3e5c9a); }
+:root[data-sky="night"] .twr .fl:not(:hover, .cursor) .face.band.side { fill: color-mix(in srgb, var(--struct-lit) 88%, #3e5c9a); }
+
 /* time of day (lib/sky: data-sky on the root). The sky is the stage's background, behind the drawing, fixed
    upright on the screen; muted, natural tones. */
 :root[data-sky="morning"] .stage-glow,
