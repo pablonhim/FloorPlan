@@ -297,8 +297,8 @@ function meetingTable() {
   return [
     ...[40, 80, 120, 150].flatMap((x) => seat(x, 6, false)),
     ...seat(8, 42, false),
-    { x: 70, y: 46, z: 0, w: 8, d: 8, h: 36 }, { x: 122, y: 46, z: 0, w: 8, d: 8, h: 36 },
-    { x: 30, y: 26, z: 36, w: 140, d: 48, h: 2, r: 20, cls: 'tableTop' },
+    { x: 70, y: 46, z: 0, w: 8, d: 8, h: 36, cls: 'furn' }, { x: 122, y: 46, z: 0, w: 8, d: 8, h: 36, cls: 'furn' },
+    { x: 30, y: 26, z: 36, w: 140, d: 48, h: 2, r: 20, cls: 'tableTop furn' },
     ...seat(176, 42, false),
     ...[40, 80, 120, 150].flatMap((x) => seat(x, 78, false)),
   ];
@@ -384,7 +384,6 @@ export function elevatorParts({ open = 0, label = '▲▼' } = {}) {
       `<text class="scr" x="${w / 2}" y="8" font-size="5" text-anchor="middle">${esc(label)}</text>`;
   };
   return [
-    { x: 18, y: 78, z: 0, w: 54, d: 12, h: 1, cls: 'sill' },
     { x: 0, y: 0, z: 0, w: 90, d: 78, h: 56, cls: 'struct', deco: { '+y': doors },
       top: (w, d) => `<rect class="detail" x="4" y="4" width="${w - 8}" height="${d - 8}"/><line class="detail" x1="4" y1="4" x2="${w - 4}" y2="${d - 4}"/><line class="detail" x1="${w - 4}" y1="4" x2="4" y2="${d - 4}"/>` },
   ];

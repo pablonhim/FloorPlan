@@ -19,10 +19,12 @@
   /* warm interior light of occupied floors at night */
   --night-light:#ffd58a; --night-light-hi:#fff0cc;
   --shadow:#000000; --ao-a:.6;
-  /* furniture: flat three-tone volumes (top / front / side) with blue linework; live and selected pieces
-     turn solid blue */
-  --chair-top:var(--accent); --chair-back-top:var(--desk-top); --chair:var(--furn); --chair-side:var(--furn-side); --chair-edge:var(--furn-edge); /* chairs at night: the desks' blue */
-  --furn-top:#3a4272; --desk-top:#3a4272; --furn:#2b3258; --furn-side:#1f2546; --furn-edge:#6d8cff;
+  /* furniture (every object: desks, chairs, stools, tables, drawers, massage chairs …): always the
+     Architectural model's clay — whatever the material style or time of day — in flat three-tone volumes
+     (top / front / side) with a line a step darker than the model's; at night the model's graphite clay.
+     Live and selected pieces still turn accent blue. */
+  --furn-top:#3b3e43; --desk-top:#3b3e43; --furn:#303337; --furn-side:#2a2c30; --furn-edge:rgba(255,255,255,.19);
+  --chair:#303337; --chair-side:#2a2c30; --chair-back-top:#3b3e43; --chair-top:#44474c; --chair-edge:var(--furn-edge);
   /* Host Grotesk for Latin; it has no Khmer glyphs, so Khmer (សសរ …) always renders in Google Sans.
      Neither covers Hangul, so Korean falls back to the system Korean UI fonts. */
   --font:"Host Grotesk","Google Sans","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;
@@ -36,8 +38,8 @@
   --accent:#1f7bff; --accent-hi:#0b5ed7; --accent-dim:rgba(31,123,255,.12);
   --warn:#d13438;
   --shadow:#1e1e1e; --ao-a:.35;
-  --chair-top:var(--accent); --chair-back-top:#ffffff; --chair:#f1f2f4; --chair-side:#e2e4e8; --chair-edge:var(--furn-edge);
-  --furn-top:#fafcff; --desk-top:#b9d5fb; --furn:#e4ecfb; --furn-side:#cddbf5; --furn-edge:rgba(31,123,255,.5);
+  --furn-top:#fafafa; --desk-top:#f6f6f6; --furn:#ededed; --furn-side:#e3e3e3; --furn-edge:rgba(0,0,0,.19);
+  --chair:#f0f0f0; --chair-side:#e2e2e2; --chair-back-top:#fafafa; --chair-top:#dadada; --chair-edge:var(--furn-edge);
   /* neutral architectural render: white volumes, soft grey shade, fine grey lines; tops of walls, pillars
      and rooftop objects dark grey */
   --struct-top:#ffffff; --struct-lit:#f7f7f7; --struct-shade:#dedede; --struct-glass:#cfd1d4;
@@ -97,8 +99,6 @@ svg[data-hot="A"] .nbi[data-unit="A"], svg[data-hot="B"] .nbi[data-unit="B"], sv
   --deck:#2b2f35; --body:#262a30; --line:#5b6169; --detail:#3f444b; --recess:#1d2025; --glass:#1d2127;
   --ink:#a4a9ae;
   --struct-top:#4b515b; --struct-lit:#41464f; --struct-shade:#353a42; --struct-cap:#5c626c; --struct-line:rgba(205,214,228,.4);
-  --furn-top:#505c99; --desk-top:#505c99; --furn:#3e487d; --furn-side:#303865;
-  --chair:var(--furn); --chair-side:var(--furn-side); --chair-back-top:var(--desk-top);   /* re-resolved on the brighter blues */
 }
 .face.bare { fill:none; stroke:none; }
 
@@ -130,13 +130,31 @@ svg[data-hot="A"] .nbi[data-unit="A"], svg[data-hot="B"] .nbi[data-unit="B"], sv
 .twr-ground-shadow .ao { opacity:calc(var(--ao-a) * .75); }
 .tower-shadow .ao { opacity:calc(var(--ao-a) * .55); }   /* the building's base rim: a firm contact shadow where it meets the ground */
 .roof-shadow .ao { opacity:calc(var(--ao-a) * .4); }
+.plan-shadow .ao { opacity:calc(var(--ao-a) * .55); }   /* the plans' walls and pillars: a light contact shadow */
 :root[data-theme="light"] .desk-name { fill:var(--ink-hi); }
 :root[data-theme="light"] .desk-name.scr { fill:var(--accent-hi); font-weight:500; }
 .mullion { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
-.face.furn { fill:var(--furn); stroke:var(--furn-edge); stroke-width:.7; }
+.face.furn { fill:var(--furn); stroke:var(--furn-edge); stroke-width:.62; }
 .face.furn.side { fill:var(--furn-side); }
 .face.furn.top { fill:var(--furn-top); }
-/* desk worktops (--desk-top: a light blue in the light theme); the extension table
+/* every other object on the plans (walls, pillars, partitions, glass, doors, lifts, stairs, WCs, cabinets,
+   counters, racks …) is drawn in the furniture's line: its colour and weight, in every style and time of day */
+.it { --struct-line: var(--furn-edge); }
+.it :is(.face.struct, .face.fixture, .face.pane, .face.frost-glass, .face.rack, .face.slab, [class*="stair-step"]) { stroke-width:.62; }
+/* …except the furniture (the office's and the WeCafe's alike: desks, chairs, tables, stools, drawers, massage
+   chairs …), drawn exactly like the building in the tower view: its surfaces (top / east / a deeper south
+   face), its line (colour and weight; a touch more opaque than the building's) and, in index.css, the sky's cast; a selected piece still turns
+   accent blue */
+.it:has(.face.furn, .face.tableTop) { --struct-line: inherit; }
+.it:not(.sel) :is(.face.furn, .face.tableTop) { fill:color-mix(in srgb, var(--struct-shade) 94%, var(--ink)); stroke:var(--struct-line); stroke-width:.6; stroke-opacity:.78; }
+.it:not(.sel) :is(.face.furn, .face.tableTop).side { fill:var(--struct-lit); }
+.it:not(.sel) :is(.face.furn, .face.tableTop).top { fill:var(--struct-top); }
+/* the walls and pillars on the plans too: the building's line and its deeper south face (their tops keep the
+   grey cap, so the plan still reads from above) */
+.it:has(.face.wall, .face.pillar) { --struct-line: inherit; }
+.it:not(.sel) :is(.face.wall, .face.pillar).struct { stroke-width:.6; stroke-opacity:.6; }
+.it:not(.sel) :is(.face.wall, .face.pillar).struct:not(.side, .top) { fill:color-mix(in srgb, var(--struct-shade) 94%, var(--ink)); }
+/* desk worktops (--desk-top: a shade off the clay white); the extension table
    (25 cm, butted against the desk's end) a shade off it so the join reads */
 .face.deskTop.furn.top { fill:var(--desk-top); }
 .face.deskExt.furn.top { fill:color-mix(in srgb, var(--desk-top) 82%, var(--furn-side)); }
@@ -167,6 +185,12 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 :root:not([data-theme="light"]) .glass.monitor { fill:color-mix(in srgb, var(--accent) 30%, #e6f2ff); fill-opacity:.95; stroke:var(--accent-hi); filter:url(#soft); }
 :root:not([data-theme="light"]) .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.9; }
 .it.live .scr-accent { fill:#fff; opacity:.85; }
+/* …but the desk monitors are drawn like the building, not blue: the screen in the building's glass with its
+   line, the screen's content as faint pale bars, a plain back; no blue light ray or glow */
+:root:root .glass.monitor { fill:var(--struct-glass); fill-opacity:1; stroke:var(--struct-line); stroke-opacity:.6; stroke-width:.6; filter:none; }
+:root:root .glass.monitor ~ .scr-accent { fill:var(--struct-top); opacity:.75; }
+:root:root .monitor-back { fill:var(--struct-lit); stroke:var(--struct-line); stroke-opacity:.6; }
+:root:root :is(.monitor-ray, .monitor-halo) { display:none; }
 .door-arc { fill:var(--accent-dim); stroke:none; opacity:.8; }
 .door-leaf { stroke:var(--ink-hi); stroke-width:1.6; vector-effect:non-scaling-stroke; }
 /* a meeting-room / executive-office door drawn as an upright swinging leaf (doorSwing.roomDoors): its flat symbol, stored
@@ -195,8 +219,12 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 .it.locked { cursor:default; }
 /* every glass wall (meeting rooms, partitions, storage rooms) is frosted: dense milky white that only
    lets a faint smudge of what is behind through; see .frost-glass below */
-.face.pane { fill:color-mix(in srgb, #ffffff 72%, var(--struct-glass)); fill-opacity:.86; stroke:var(--struct-line); stroke-width:.6; }
-.face.pane.side { fill-opacity:.9; }
+/* …the glass walls in the unit entrance doors' blue glass, frosted: a light blue pane over a blurred copy of
+   what stands behind it (render.glassBackdrops: .glass-behind, the plain floor as its backdrop) */
+.face.pane { fill:color-mix(in srgb, var(--struct-lit) 80%, var(--accent) 20%); fill-opacity:.72; stroke:var(--struct-line); stroke-width:.6; }
+.face.pane.side { fill-opacity:.78; }
+.glass-behind { pointer-events:none; }
+.glass-backdrop { fill:var(--deck); }
 .face.tile { fill:var(--recess); }
 /* sanitary fixtures (toilets, urinals) and basins in the core WCs */
 /* sanitary fittings (toilets, urinals, basin counters, stall partitions): the building's neutral white /
@@ -210,7 +238,7 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 .face.frost-glass.side { fill-opacity:.9; }
 .face.frost-glass.top { fill-opacity:.82; }
 .frosted-inside { filter:url(#frost-blur); opacity:.55; }
-:root:not([data-theme="light"]) .face.pane, :root:not([data-theme="light"]) .face.frost-glass {
+:root:not([data-theme="light"]) .face.frost-glass {
   fill:color-mix(in srgb, #9aa7b6 30%, var(--struct-glass)); }
 :root:not([data-theme="light"]) .frost-mullion { stroke:#7f8a97; }
 .frost-mullion { fill:none; stroke:#ffffff; stroke-width:1.2; vector-effect:non-scaling-stroke; opacity:.9; }
@@ -224,7 +252,6 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 /* building-core zones (corridor, lift lobby, WCs): quiet neutral floor */
 .face.zone.zone-core { fill:color-mix(in srgb, var(--struct-shade) 35%, transparent); }
 .face.carpet { fill:var(--deck); }
-.face.sill { fill:var(--recess); }
 .tile-line { opacity:.6; }
 
 .it { cursor:grab; }
@@ -235,15 +262,8 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 .face.seat.furn.side { fill:var(--chair-side); }
 .face.seat.furn.top { fill:var(--chair-top); }
 .face.seat.backrest.furn.top { fill:var(--chair-back-top); }   /* the backrest's top edge stays white */
-/* WeCafe furniture (tables, stools, chairs in a cafe / barista zone, see render.cafeIds): the building's
-   neutral white / grey finish and linework instead of the blue office furniture */
-.it.cafe .face.furn { fill:var(--struct-shade); stroke:var(--struct-line); }
-.it.cafe .face.furn.side { fill:var(--struct-lit); }
-.it.cafe .face.furn.top, .it.cafe .face.seat.furn.top, .it.cafe .face.tableTop.top { fill:var(--struct-top); }
-.it.cafe .face.tableTop { stroke:var(--struct-line); }
-/* …but a selected one still turns accent blue like any other item */
-:root[data-theme="light"] .it.cafe.sel .face.furn { fill:var(--accent); stroke:var(--accent-hi); }
-:root[data-theme="light"] .it.cafe.sel .face.furn.top, :root[data-theme="light"] .it.cafe.sel .face.seat.furn.top { fill:color-mix(in srgb, var(--accent) 72%, #fff); }
+:root[data-theme="light"] .it.sel .face.seat.furn { fill:var(--accent); stroke:var(--accent-hi); }
+:root[data-theme="light"] .it.sel .face.seat.furn.top { fill:color-mix(in srgb, var(--accent) 72%, #fff); }
 /* server racks: charcoal cabinets, the status LEDs blink forever (each its own rate / phase, set inline);
    at night they glow */
 .face.rack { fill:#30343b; stroke:var(--struct-line); } .face.rack.side { fill:#3b4048; } .face.rack.top { fill:#4a5059; }
@@ -274,10 +294,6 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 .cam-moving .monitor-ray, .cam-moving .rack-led, .cam-moving .rack-scan, .cam-moving .meet-hi, .cam-moving .meet-glow,
 .cam-moving .route-glint, .cam-moving .route-pulse { animation-play-state:paused; }
 /* massage chair: the same neutral building finish as the WeCafe furniture (white / grey, grey linework) */
-.face.mchair.furn { fill:var(--struct-shade); stroke:var(--struct-line); }
-.face.mchair.furn.side { fill:var(--struct-lit); }
-.face.mchair.furn.top { fill:var(--struct-top); }
-.it.live .face.deskTop { stroke:var(--accent); }
 .it.live .face.pane { fill:color-mix(in srgb, var(--accent) 14%, #ffffff); fill-opacity:.86; stroke:var(--accent); }
 .it.live .glass.hot { filter:url(#soft); }
 :root[data-theme="light"] .it.sel .face { stroke:var(--accent-hi); }
@@ -606,7 +622,6 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 .canopy-lamp { fill:var(--night-light-hi); }
 :root:not([data-theme="light"]) .twr.dusk .canopy-light { animation:halo-on 1s ease-out 1.1s both; }
 @media (prefers-reduced-motion: reduce) { .twr.dusk .canopy-light { animation:none !important; } }
-.pwc-sign { fill:var(--ink-hi); font-family:var(--font); font-weight:600; }
 .pwc-glyph { fill:var(--ink-hi); font-family:var(--font); font-weight:600; }   /* ♀ ♂ sign: neutral like the building */
 /* night (dark theme): the VIP booth, the ATM room and the public restroom door are lit from inside with
    the same warm light as the tower's windows; booth and door flicker on at nightfall like the windows */
@@ -699,6 +714,11 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 .desk-callouts { pointer-events:none; }
 .callout-pill { fill:#ffffff; stroke:color-mix(in srgb, var(--accent) 70%, #ffffff); stroke-width:.8; vector-effect:non-scaling-stroke; }
 .callout-name { fill:#1f2933; font-family:var(--font); font-weight:600; }
+/* the profile picture above the name: a soft accent disc with a plain head-and-shoulders figure */
+.callout-pic { fill:color-mix(in srgb, var(--accent) 14%, #ffffff); stroke:color-mix(in srgb, var(--accent) 45%, #ffffff); stroke-width:.6; vector-effect:non-scaling-stroke; }
+.callout-pic-fig { fill:color-mix(in srgb, var(--accent) 60%, #ffffff); }
+:root:not([data-theme="light"]) .callout-pic { fill:color-mix(in srgb, var(--accent-hi) 18%, #1f2329); stroke:color-mix(in srgb, var(--accent-hi) 45%, transparent); }
+:root:not([data-theme="light"]) .callout-pic-fig { fill:color-mix(in srgb, var(--accent-hi) 70%, #1f2329); }
 :root:not([data-theme="light"]) .callout-pill { fill:#1f2329; stroke:color-mix(in srgb, var(--accent-hi) 70%, transparent); }
 :root:not([data-theme="light"]) .callout-name { fill:#eef1f5; }
 [data-labels="off"] .desk-callouts { display:none; }

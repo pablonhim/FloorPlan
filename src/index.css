@@ -149,17 +149,17 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
    character. Morning: soft gold on the tops and the east faces; evening: amber on the tops and the south faces
    (the sun is in the south-west); night: a deep cool blue on the tops and east faces. The Corten fins and the
    floors' hover tint keep their own fills. */
-:root[data-sky="morning"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap) { fill: color-mix(in srgb, var(--struct-top) 91%, #ffdc8f); }
+:root[data-sky="morning"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap), :root[data-sky="morning"] .cam-over .it:not(.sel) :is(.face.furn, .face.tableTop).top { fill: color-mix(in srgb, var(--struct-top) 91%, #ffdc8f); }
 :root[data-sky="morning"] .cam-over .face.slab.top { fill: color-mix(in srgb, var(--deck) 94%, #ffdc8f); }
-:root[data-sky="morning"] .cam-over :is(.face.struct, .face.slab, .face.fixture).side:not(.pilaster, .band) { fill: color-mix(in srgb, var(--struct-lit) 90%, #ffd27a); }
+:root[data-sky="morning"] .cam-over :is(.face.struct, .face.slab, .face.fixture).side:not(.pilaster, .band), :root[data-sky="morning"] .cam-over .it:not(.sel) :is(.face.furn, .face.tableTop).side { fill: color-mix(in srgb, var(--struct-lit) 90%, #ffd27a); }
 :root[data-sky="morning"] .twr .fl:not(:hover, .cursor) .face.band.side { fill: color-mix(in srgb, var(--struct-lit) 90%, #ffd27a); }
-:root[data-sky="evening"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap) { fill: color-mix(in srgb, var(--struct-top) 89%, #ffb77a); }
+:root[data-sky="evening"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap), :root[data-sky="evening"] .cam-over .it:not(.sel) :is(.face.furn, .face.tableTop).top { fill: color-mix(in srgb, var(--struct-top) 89%, #ffb77a); }
 :root[data-sky="evening"] .cam-over .face.slab.top { fill: color-mix(in srgb, var(--deck) 93%, #ffb77a); }
-:root[data-sky="evening"] .cam-over :is(.face.struct, .face.slab, .face.fixture).front:not(.pilaster, .band) { fill: color-mix(in srgb, var(--struct-shade) 87%, #ffa560); }
+:root[data-sky="evening"] .cam-over :is(.face.struct, .face.slab, .face.fixture).front:not(.pilaster, .band), :root[data-sky="evening"] .cam-over .it:not(.sel) :is(.face.furn, .face.tableTop).front { fill: color-mix(in srgb, var(--struct-shade) 87%, #ffa560); }
 :root[data-sky="evening"] .twr .fl:not(:hover, .cursor) .face.band.front { fill: color-mix(in srgb, var(--struct-shade) 87%, #ffa560); }
-:root[data-sky="night"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap) { fill: color-mix(in srgb, var(--struct-top) 86%, #4f72b8); }
+:root[data-sky="night"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap), :root[data-sky="night"] .cam-over .it:not(.sel) :is(.face.furn, .face.tableTop).top { fill: color-mix(in srgb, var(--struct-top) 86%, #4f72b8); }
 :root[data-sky="night"] .cam-over .face.slab.top { fill: color-mix(in srgb, var(--deck) 90%, #4f72b8); }
-:root[data-sky="night"] .cam-over :is(.face.struct, .face.slab, .face.fixture).side:not(.pilaster, .band) { fill: color-mix(in srgb, var(--struct-lit) 88%, #3e5c9a); }
+:root[data-sky="night"] .cam-over :is(.face.struct, .face.slab, .face.fixture).side:not(.pilaster, .band), :root[data-sky="night"] .cam-over .it:not(.sel) :is(.face.furn, .face.tableTop).side { fill: color-mix(in srgb, var(--struct-lit) 88%, #3e5c9a); }
 :root[data-sky="night"] .twr .fl:not(:hover, .cursor) .face.band.side { fill: color-mix(in srgb, var(--struct-lit) 88%, #3e5c9a); }
 
 /* time of day (lib/sky: data-sky on the root). The sky is the stage's background, behind the drawing, fixed
@@ -294,34 +294,30 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 :root[data-grid="off"] :is(.slab-grid, .tile-line, .floor-grid, .zone-hatch) { display: none; }
 
 /* Architectural model (data-clay, the dock's ⋯ menu): the scene as a clean presentation model — matte off-white
-   and pale grey volumes (#FAFAFA → #E5E5E5) with soft ambient occlusion, and the office itself as the focal
-   point: desks, tables, stools, cabinets and the barista counter in warm oak-to-walnut wood, chairs in graphite
-   upholstery (the architecture stays white clay), razor-thin lines at very low alpha (site-model
-   paper), and the grid as a faint technical texture. Its colours win over the time of day's and the theme's;
+   and pale grey volumes (#FAFAFA → #E5E5E5) with soft ambient occlusion (the furniture is this clay in every
+   style, see iso.css), razor-thin lines at very low alpha (site-model paper), and the grid as a faint
+   technical texture. Its colours win over the time of day's and the theme's;
    the live information (lit windows, occupied desks' blue, routes) keeps its accent. */
 :root[data-clay="on"], :root[data-clay="on"] .office-lit {
   --struct-top: #fafafa; --struct-lit: #f1f1f1; --struct-shade: #e5e5e5; --struct-cap: #dcdcdc; --struct-glass: #e9ebed;
   --deck: #f5f5f5; --body: #efefef; --recess: #e8e8e8; --glass: #eceef0;
-  --furn-top: #fafafa; --furn: #ededed; --furn-side: #e3e3e3; --desk-top: #f6f6f6;
-  --chair: #f0f0f0; --chair-side: #e2e2e2; --chair-back-top: #fafafa; --chair-top: #dadada;
-  --furn-edge: rgba(0, 0, 0, .12);
   --paving: #f3f3f3; --asphalt: #e7e7e7; --concrete: #dddddd; --concrete-lit: #e6e6e6; --concrete-ramp: #ececec; --lawn: #ebebeb;
   --struct-line: rgba(0, 0, 0, .12); --line: #c8c8c8; --detail: #ececec; --car-edge: rgba(0, 0, 0, .12);
   --shadow: #2a2a2a; --ao-a: .42;
 }
-:root[data-clay="on"] .cam-over :is(.face, .glass, .pn, .door-panel, .gate-panel, .car-face, .car-tyre) { stroke-width: .45 !important; }
+:root[data-clay="on"] .cam-over :is(.face:not(.furn, .it .face), .glass, .pn, .door-panel, .gate-panel, .car-face, .car-tyre) { stroke-width: .45 !important; }
 :root[data-clay="on"] :is(.slab-grid, .tile-line, .floor-grid, .zone-hatch) { stroke-opacity: .12 !important; stroke-width: .35 !important; }
 /* Corten & terracotta (data-corten, the dock's ⋯ menu; exclusive with the model): a biophilic architectural
    palette — crisp matte off-white shell and roof (#F5F5F7), the façade's pilasters, window frames and podium in
    weathered Corten steel (#B3512E → #964223, burnt sienna), forest-green lawns, beds and shrubs (#2D6A4F,
-   #1B4332); inside, terracotta and warm-wood furniture, bronze chairs and partitions. Volumetric gradients and
-   soft shadows as everywhere; live information keeps its accent. */
+   #1B4332); the furniture stays clay as in every style. Volumetric gradients and soft shadows as everywhere;
+   live information keeps its accent. */
 :root[data-corten="on"], :root[data-corten="on"] .office-lit {
   --struct-top: #f5f5f7; --struct-lit: #eeeef1; --struct-shade: #e2e2e6; --struct-cap: #c9b8ae; --struct-glass: #dfe3e6;
   --deck: #f4f2ef; --body: #efeceb;
   --lawn: #2d6a4f; --paving: #ece8e3; --concrete: #d8d0c8; --concrete-lit: #e4dcd4;
   --struct-line: rgba(110, 50, 25, .30); --line: #b9a093; --detail: #e6dcd6; --car-edge: rgba(80, 40, 20, .25);
-  --furn-edge: rgba(110, 50, 25, .28); --shadow: #2b1a12;
+  --shadow: #2b1a12;
 }
 .vc-a { stop-color: #c8673f; } .vc-b { stop-color: #b3512e; } .vc-c { stop-color: #964223; } .vc-d { stop-color: #7c3519; }
 .vt2-a { stop-color: #d9a07a; } .vt2-b { stop-color: #c4825a; } .vt2-c { stop-color: #a8663f; }
@@ -333,49 +329,6 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 :root[data-corten="on"] .face.shrub { fill: #2d6a4f; stroke: rgba(27, 67, 50, .6); }
 :root[data-corten="on"] .face.shrub.top { fill: #40916c; }
 :root[data-corten="on"] .flower.f1 { fill: #95d5b2; } :root[data-corten="on"] .flower.f2 { fill: #1b4332; }
-/* inside: terracotta and warm wood furniture, bronze chairs and partitions */
-:root[data-corten="on"] .cam-over :is(.face.furn:not(.seat), .face.tableTop, .face.fixture.counter).top { fill: url(#vol-terra); }
-:root[data-corten="on"] .cam-over :is(.face.furn:not(.seat), .face.tableTop, .face.fixture.counter):is(.side, .front) { fill: url(#vol-terra-side); }
-:root[data-corten="on"] .cam-over .face.seat.furn { fill: #5a3e2b; }
-:root[data-corten="on"] .cam-over .face.seat.furn.side { fill: #4a3222; }
-:root[data-corten="on"] .cam-over .face.seat.furn.top { fill: #6e4c34; }
-:root[data-corten="on"] .cam-over .face.partition.struct { fill: url(#vol-corten-side); }
-:root[data-corten="on"] .cam-over .it.live .face.deskTop { stroke: #964223; }
-:root[data-corten="on"] .callout-pill { fill: #fbf6f2; stroke: #b3512e; }
-:root[data-corten="on"] .callout-name { fill: #5a2a16; }
-:root[data-corten="on"] .cam-over .it.cafe :is(.face.furn, .face.tableTop, .face.seat).top { fill: var(--struct-top); }
-:root[data-corten="on"] .cam-over .it.cafe :is(.face.furn, .face.tableTop, .face.seat).side { fill: var(--struct-lit); }
-:root[data-corten="on"] .cam-over .it.cafe :is(.face.furn, .face.tableTop, .face.seat).front { fill: var(--struct-shade); }
-
-/* wood on the office furniture */
-.vw-a { stop-color: #d8b98f; } .vw-b { stop-color: #c39a6b; } .vw-c { stop-color: #a77b52; } .vw-d { stop-color: #8a6142; }
-:root[data-clay="on"] .cam-over :is(.face.furn:not(.seat), .face.tableTop, .face.fixture.counter).top { fill: url(#vol-wood); }
-:root[data-clay="on"] .cam-over :is(.face.furn:not(.seat), .face.tableTop, .face.fixture.counter):is(.side, .front) { fill: url(#vol-wood-side); }
-/* chairs in a soft graphite upholstery against the wood, so every workstation reads at a glance */
-:root[data-clay="on"] .cam-over .face.seat.furn { fill: #6b6e73; }
-:root[data-clay="on"] .cam-over .face.seat.furn.side { fill: #55585d; }
-:root[data-clay="on"] .cam-over .face.seat.furn.top { fill: #7d8085; }
-/* …the occupied desks and their name bubbles take the wood's tones instead of the blueprint blue: a walnut edge
-   on the desk top and the bubble, the name in dark walnut on warm white */
-:root[data-clay="on"] .cam-over .it.live .face.deskTop { stroke: #8a6142; }
-:root[data-clay="on"] .cam-over .face.furn { stroke: rgba(90, 60, 35, .28); }
-:root[data-clay="on"] .callout-pill { fill: #fbf7f1; stroke: #a77b52; }
-:root[data-clay="on"] .callout-name { fill: #4a3424; }
-/* the WeCafe's tables, stools and chairs (Unit D's café, not office furniture) stay white clay */
-:root[data-clay="on"] .cam-over .it.cafe :is(.face.furn, .face.tableTop, .face.seat).top { fill: var(--furn-top); }
-:root[data-clay="on"] .cam-over .it.cafe :is(.face.furn, .face.tableTop, .face.seat).side { fill: var(--furn-side); }
-:root[data-clay="on"] .cam-over .it.cafe :is(.face.furn, .face.tableTop, .face.seat).front { fill: var(--furn); }
-:root[data-clay="on"] .cam-over .it.cafe :is(.face.furn, .face.seat) { stroke: rgba(0, 0, 0, .12); }
-/* the desks themselves stay white clay in both material styles (the model and Corten & terracotta), so the
-   workstations read as clean white desks with their chairs and screens; the other furniture keeps the style's
-   wood or terracotta */
-:root:is([data-clay="on"], [data-corten="on"]) .cam-over .it:has(.face.deskTop) .face.furn:not(.seat).top { fill: #fafafa; }
-:root:is([data-clay="on"], [data-corten="on"]) .cam-over .it:has(.face.deskTop) .face.furn:not(.seat).side { fill: #e6e6e6; }
-:root:is([data-clay="on"], [data-corten="on"]) .cam-over .it:has(.face.deskTop) .face.furn:not(.seat).front { fill: #eeeeee; }
-
-/* the screens and the plain glass go matte with the rest */
-:root[data-clay="on"] .glass.monitor { fill: #e6e8ea; stroke: #c4c6c9; filter: none; }
-:root[data-clay="on"] .glass.monitor ~ .scr-accent, :root[data-clay="on"] .monitor-ray { display: none; }
 
 /* the hamburger menus open the same way, out of their button at the bottom right */
 .menu-pop { animation: dock-menu-in .18s cubic-bezier(.34, 1.56, .64, 1); transform-origin: calc(100% - 20px) 100%; }
@@ -397,14 +350,10 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 }
 
 /* the material styles at night (dark theme): the same ideas in the dark — the model as graphite clay with pale
-   hairlines, Corten & terracotta on a charcoal shell; the wood, Corten, terracotta and greenery keep their tones,
-   a step deeper; the white desks become pale grey */
+   hairlines, Corten & terracotta on a charcoal shell; the Corten and greenery keep their tones, a step deeper */
 :root:not([data-theme="light"])[data-clay="on"], :root:not([data-theme="light"])[data-clay="on"] .office-lit {
   --struct-top: #3b3e43; --struct-lit: #34373c; --struct-shade: #2b2e32; --struct-cap: #45494f; --struct-glass: #2a2e33;
   --deck: #2f3236; --body: #2b2d31; --recess: #25272b; --glass: #2a2d31;
-  --furn-top: #3b3e43; --furn: #303337; --furn-side: #2a2c30; --desk-top: #3b3e43;
-  --chair: #303337; --chair-side: #2a2c30; --chair-back-top: #3b3e43; --chair-top: #44474c;
-  --furn-edge: rgba(255, 255, 255, .12);
   --paving: #2a2c30; --asphalt: #222427; --concrete: #34363a; --concrete-lit: #3a3c40; --concrete-ramp: #303236; --lawn: #2c2f33;
   --struct-line: rgba(255, 255, 255, .13); --line: #4a4e55; --detail: #34373c; --car-edge: rgba(255, 255, 255, .12);
   --shadow: #000000; --ao-a: .5;
@@ -414,13 +363,5 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
   --deck: #2e2f33; --body: #2a2b2e;
   --lawn: #1b4332; --paving: #2b2a2c; --concrete: #363230; --concrete-lit: #3c3734;
   --struct-line: rgba(220, 150, 110, .22); --line: #5a4a42; --detail: #3a3330; --car-edge: rgba(220, 150, 110, .2);
-  --furn-edge: rgba(220, 150, 110, .25); --shadow: #000000;
+  --shadow: #000000;
 }
-:root:not([data-theme="light"]):is([data-clay="on"], [data-corten="on"]) .cam-over .it:has(.face.deskTop) .face.furn:not(.seat).top { fill: #8d9096; }
-:root:not([data-theme="light"]):is([data-clay="on"], [data-corten="on"]) .cam-over .it:has(.face.deskTop) .face.furn:not(.seat).side { fill: #6c6f75; }
-:root:not([data-theme="light"]):is([data-clay="on"], [data-corten="on"]) .cam-over .it:has(.face.deskTop) .face.furn:not(.seat).front { fill: #7a7d83; }
-:root:not([data-theme="light"])[data-clay="on"] .callout-pill { fill: #2b2620; stroke: #c39a6b; }
-:root:not([data-theme="light"])[data-clay="on"] .callout-name { fill: #f1e4d4; }
-:root:not([data-theme="light"])[data-corten="on"] .callout-pill { fill: #2b221d; stroke: #c8673f; }
-:root:not([data-theme="light"])[data-corten="on"] .callout-name { fill: #f4e2d6; }
-:root:not([data-theme="light"])[data-clay="on"] .glass.monitor { fill: #3a3d42; stroke: #55595f; }

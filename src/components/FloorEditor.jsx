@@ -7,7 +7,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { CELL, CUT_H } from '../iso/units.js';
 import { cellRect, centerGrab, collides, footprint, normRot, rotateItem, snapOrigin, validate, worldToCell, onPlate } from '../iso/grid.js';
 import { depthSort } from '../iso/depth.js';
-import { planFrame, itemNode, renderCell, renderFoot, renderItem, renderPlate, renderZoneTag, renderShadows, renderScene, renderDeskCallouts, edgeItems, cafeIds, tipData } from '../iso/render.js';
+import { planFrame, itemNode, renderCell, renderFoot, renderItem, renderPlate, renderZoneTag, renderShadows, renderScene, renderDeskCallouts, edgeItems, cafeIds, tipData, glassBackdrops } from '../iso/render.js';
 import { isLive, describe, defaults, LAYER, CORE } from '../model/catalog.js';
 import { PLANS, UNITS, stats, floorPlan, coreItems, toFloor } from '../model/floors.js';
 import { exportPng } from '../lib/exportPng.js';
@@ -409,6 +409,8 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   }, [items, edges, ghost, selected, lifted, core, neighbours]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const shadows = useMemo(() => renderShadows(K, plan, items, edges), [K, plan, items, edges]);
+  // frosted glass walls: what stands behind each one, blurred, drawn just under it (glassBackdrops)
+  const frost = useMemo(() => glassBackdrops(K, solidNodes, (it) => htmlOf(K, it, cutH), cutH), [K, solidNodes, cutH]);
 
   // the employees' names, floating above their desks (renderDeskCallouts), over everything
   const callouts = useMemo(() => renderDeskCallouts(K, items), [K, items]);
@@ -531,7 +533,10 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
             {floorNodes.map((it) => <ItemG key={it.id} K={K} item={it} cls={clsOf(it)} cut={cutH} />)}
             <Html html={shadows} className="shell-shadows" />
             <Html html={feet} data-noexport="" />
-            {solidNodes.map((n) => <ItemG key={n.ghost ? 'ghost' : n.faded ? `f:${n.it.id}` : n.it.id} K={K} item={n.it} cls={n.cls} cut={cutH} ghost={n.ghost} faded={n.faded} unit={n.unit} />)}
+            {solidNodes.map((n) => {
+              const key = n.ghost ? 'ghost' : n.faded ? `f:${n.it.id}` : n.it.id, back = !n.ghost && frost.get(n.it.id);
+              return [back && <Html key={`fb:${key}`} html={back} />, <ItemG key={key} K={K} item={n.it} cls={n.cls} cut={cutH} ghost={n.ghost} faded={n.faded} unit={n.unit} />];
+            })}
             <g className="door-swing" ref={doorsRef} pointerEvents="none" data-noexport="" />
             <Html html={tags} className="zone-tags" />
             <Html html={callouts} className="desk-callouts" />

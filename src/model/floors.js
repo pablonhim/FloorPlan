@@ -270,6 +270,14 @@ function moveSeeded(items, id, pick) {
   return out;
 }
 
+/** Saved items matching `pick` replaced by the seed's (by type: the saved ones go, the seed's come in
+ *  where they fit). */
+function resetSeeded(items, id, pick) {
+  let out = items.filter((it) => !pick(it));
+  for (const it of seedPlan(id).filter(pick)) if (!validate(out, it, PLANS[id])) out = [...out, it];
+  return out;
+}
+
 /** Seed items matching `pick` that a saved plan lacks (by id), added where they still fit. */
 function addSeeded(items, id, pick) {
   const have = new Set(items.map((it) => it.id));
@@ -285,11 +293,13 @@ export function load() {
       // v2 → v3: desk rows were packed (no gaps between neighbouring desks); saved plans get it once
       // v3 → v4: two massage chairs each in the 4th-floor men's and women's massage rooms
       // v4 → v5: three server racks in the 2D server room; v5 → v6: the racks moved to the room's middle
+      // v6 → v7: the 4D WeCafe's tables all one size (9 × 2 cells), its tables and stools re-laid once
       const fix = (items, id) => {
         const packed = raw.v >= 3 ? items : packDeskRows(items, PLANS[id]);
         const chairs = raw.v >= 4 ? packed : addSeeded(packed, id, (it) => it.type === 'massageChair');
         const racks = raw.v >= 5 ? chairs : addSeeded(chairs, id, (it) => it.type === 'serverRack');
-        return raw.v >= 6 ? racks : moveSeeded(racks, id, (it) => it.type === 'serverRack');
+        const moved = raw.v >= 6 ? racks : moveSeeded(racks, id, (it) => it.type === 'serverRack');
+        return raw.v >= 7 || id !== '4D' ? moved : resetSeeded(moved, id, (it) => it.type === 'table' || it.type === 'stool');
       };
       return Object.fromEntries(Object.keys(PLANS).map((id) => [id, Array.isArray(raw.plans[id]) ? fix(sanitize(raw.plans[id], PLANS[id]), id) : seedPlan(id)]));
     }
@@ -299,7 +309,7 @@ export function load() {
 
 export function save(plans) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ v: 6, savedAt: new Date().toISOString(), plans }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ v: 7, savedAt: new Date().toISOString(), plans }));
     return true;
   } catch {
     return false;

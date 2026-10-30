@@ -302,8 +302,7 @@ const VIP_WALL = { x: VIP_E.out[1] + 1, t: 1.5, h: 8, y0: VIP_N.out[0] - 2.5, y1
 /**
  * External public restroom: a compact single-storey block (6.4 × 6 m) on the paved platform west of the
  * P↑OUT ramp, between the VIP turning area and the shared loop. White podium finish, flat roof with a
- * parapet line, and a single entrance door on the face toward the P↑OUT ramp, under a
- * "공용 화장실 · PUBLIC RESTROOM" sign band.
+ * parapet line, and a single entrance door on the face toward the P↑OUT ramp, under a blank sign band.
  */
 const PUBLIC_WC = { x: 4, y: TURN_Y + 38, w: 32, d: 30, h: 17 };   // clear of the (wider) exit ramp
 function publicWC() {
@@ -319,11 +318,10 @@ function publicWC() {
   s += `<g class="pwc">`;
   s += box(b.x, b.y, PZ, b.w, b.d, b.h, 0, 'struct');
   s += `<g transform="${TOP(b.x, b.y, z1)}"><rect class="detail" x="1.2" y="1.2" width="${b.w - 2.4}" height="${b.d - 2.4}"/></g>`;
-  // one entrance, on the east (+x) face: it faces the P↑OUT parking exit ramp, with the sign above it
+  // one entrance, on the east (+x) face: it faces the P↑OUT parking exit ramp, with the sign band above it
   const dw = 7, dx = (b.d - dw) / 2;
   s += `<g transform="${SIDE(b.x + b.w, b.y + b.d, z1)}">` +
     `<rect class="face recess" x="2.5" y="1" width="${b.d - 5}" height="3" rx=".5"/>` +
-    `<text class="pwc-sign" x="${b.d / 2}" y="3.1" font-size="1.9" text-anchor="middle" letter-spacing=".3">공용 화장실 · PUBLIC RESTROOM</text>` +
     `<text class="pwc-glyph" x="${b.d / 2}" y="${b.h - 12.4}" font-size="2.6" text-anchor="middle">♀ ♂</text>` +
     `<rect class="face recess" x="${dx - 0.6}" y="${b.h - 11.6}" width="${dw + 1.2}" height="11.6"/>` +
     `<rect class="pwc-doorway" x="${dx}" y="${b.h - 11}" width="${dw}" height="11"/>` +     // the dark opening, seen while the door is open
@@ -347,12 +345,10 @@ function publicWC() {
 const VIP_WALL_W = { x: VIPZ.x0 - 2.5, y0: VIP_WALL.y0, y1: PLATE.y1 - PLATE_R - 0.6 };
 const VIP_CUT = 22;   // the VIP route's outer north-east corner is cut at 45° (4.4 m), road and wall alike
 const VIP_WALL_N = { x0: VIP_WALL_W.x, x1: VIP_WALL.x + VIP_WALL.t - VIP_CUT, y: VIP_WALL.y0 };
-/** A straight wall from (ax, ay) to (bx, by), thickness t to its left, height h: its faces that turn to
- *  the viewer and its top (for the diagonal corner piece). */
-function wallSeg(ax, ay, bx, by, t, h) {
-  const L = Math.hypot(bx - ax, by - ay), nx = ((by - ay) / L) * t, ny = (-(bx - ax) / L) * t;
-  const foot = [[ax, ay], [bx, by], [bx + nx, by + ny], [ax + nx, ay + ny]];
-  const c = [(ax + bx + nx) / 2, (ay + by + ny) / 2];
+/** A wall on a convex footprint (metres, [[x, y], …]), height h: its faces that turn to the viewer and
+ *  its top (for the diagonal corner piece). */
+function wallPoly(foot, h) {
+  const c = [foot.reduce((a, p) => a + p[0], 0) / foot.length, foot.reduce((a, p) => a + p[1], 0) / foot.length];
   let s = '';
   foot.forEach((p, i) => {
     const q = foot[(i + 1) % 4], ex = q[0] - p[0], ey = q[1] - p[1];
@@ -371,7 +367,12 @@ function vipWallBack() {
   return `<g class="ao" filter="url(#ao)">${ao(n.x0, n.y - 1, n.x1, n.y + w.t + 1)}</g>` +
     K.box(ww.x, ww.y0, PZ, w.t, ww.y1 - ww.y0, w.h, 0, 'struct') +   // west run (further back on screen: drawn first)
     K.box(n.x0, n.y, PZ, n.x1 - n.x0, w.t, w.h, 0, 'struct') +       // north run
-    wallSeg(w.x + w.t, n.y + VIP_CUT, n.x1, n.y, w.t * 2.5, w.h);     // the cut corner: a broader, thicker piece (thickness inward)
+    vipCorner();
+}
+/** The cut corner: a 45° run as thick as the side runs, mitred into the east and north runs' inner faces. */
+function vipCorner() {
+  const w = VIP_WALL, n = VIP_WALL_N, x1 = w.x + w.t, yc = n.y + VIP_CUT, m = w.t * (Math.SQRT2 - 1);
+  return wallPoly([[x1, yc], [n.x1, n.y], [n.x1 - m, n.y + w.t], [w.x, yc + m]], w.h);
 }
 /** The building's north-east corner (metres): where its east face begins. */
 const FOOTPRINT_NE = FOOTPRINT.reduce((best, p) => (p[0] - p[1] > best[0] - best[1] ? p : best));
@@ -933,7 +934,7 @@ function fitRoute(path, extra = []) {
  *  floor. The floor view takes over from there (route to KOSIGN's entrance). */
 /**
  * The east lift pair, reused from the floor plans: two of the plans' elevators exactly as drawn there
- * (90 × 78 plan units each, cut at the plans' height, sill, doors and ▲▼ indicator in front) side by side,
+ * (90 × 78 plan units each, cut at the plans' height, doors and ▲▼ indicator in front) side by side,
  * scaled evenly to the building (plan unit = 2 cm, tower unit = 20 cm) and centred in the east core with
  * the sills at its front. The visitor's (west) car rides.
  */

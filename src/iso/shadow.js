@@ -14,7 +14,7 @@
 export const SUN = { dx: 0, dy: 0.85 };
 
 /** Andrew's monotone chain convex hull. */
-function hull(pts) {
+export function hull(pts) {
   const p = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
   const lower = [], upper = [];

@@ -5,7 +5,7 @@ import { footprint } from './grid.js';
 import { renderParts } from './parts.js';
 import { partsFor, SIZES, zoneTag, LAYER, isLive, tipFor, TIP_LANGS, NEUTRAL_TYPES } from '../model/catalog.js';
 import { depthSort } from './depth.js';
-import { shadowLayer, rectsPath } from './shadow.js';
+import { shadowLayer, rectsPath, hull } from './shadow.js';
 import { roomDoorIds } from './doorSwing.js';
 
 const TW = TILE * CELL; // one tile in world units
@@ -59,6 +59,35 @@ export function itemNode(item) {
   return { x0, y0, x1: x0 + f.w * CELL, y1: y0 + f.d * CELL, z0: 0, z1: SIZES[item.type].h || 0.5 };
 }
 
+/**
+ * Frosted glass walls: what stands behind each glass wall (`glass` items; not the storage rooms' own frosted
+ * glass) is seen blurred through it. For each, the pieces drawn before it (depth-sorted `nodes`, each
+ * { it, cls }) whose drawing overlaps its outline on screen are drawn again blurred over a plain backdrop,
+ * clipped to that outline, just under the pane. `html(it)` gives an item's drawing. Map: glass id → svg.
+ */
+export function glassBackdrops(K, nodes, html, cut = Infinity) {
+  const scr = (n) => {
+    const z1 = Math.min(n.z1, cut), pts = [];
+    for (const x of [n.x0, n.x1]) for (const y of [n.y0, n.y1]) for (const z of [n.z0, z1]) pts.push(K.P(x, y, z));
+    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    return { pts, x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+  };
+  const boxes = nodes.map(scr), out = new Map();
+  nodes.forEach((n, i) => {
+    if (n.it.type !== 'glass' || n.ghost) return;
+    const g = boxes[i], behind = [];
+    for (let j = 0; j < i; j++) {
+      const b = boxes[j];
+      if (!nodes[j].ghost && nodes[j].it.type !== 'glass' && b.x0 < g.x1 && g.x0 < b.x1 && b.y0 < g.y1 && g.y0 < b.y1) behind.push(nodes[j]);
+    }
+    const d = 'M' + hull(g.pts).map((p) => p.map((v) => v.toFixed(2)).join(' ')).join('L') + 'Z', id = `glb-${n.it.id}`;
+    out.set(n.it.id, `<g class="glass-behind"><defs><clipPath id="${id}"><path d="${d}"/></clipPath></defs>` +
+      `<g clip-path="url(#${id})"><path class="glass-backdrop" d="${d}"/><g filter="url(#frost-blur)">` +
+      behind.map((b) => `<g class="${b.cls || 'it'}">${html(b.it)}</g>`).join('') + `</g></g></g>`);
+  });
+  return out;
+}
+
 export function renderItem(K, item, cut = Infinity) {
   const { W0, D0, parts } = partsFor(item);
   return renderParts(K, parts, { W0, D0, rot: item.rot, ox: item.gx * CELL, oy: item.gy * CELL, z0: 0, cut });
@@ -94,25 +123,36 @@ export function tipData(item) {
  * screen space (text stays upright and level), back to front so nearer pills overlap farther ones; meant for
  * a layer over the whole scene.
  */
-const CALLOUT = { z: 38, rise: 6, fs: 10, padX: 6, h: 15, notch: 4.5, notchW: 3.5 };
+const CALLOUT = { z: 38, rise: 6, fs: 10, padX: 6, h: 31, r: 6, pic: 13, padT: 3, notch: 4.5, notchW: 3.5 };
 const textW = (s, fs) => [...s].reduce((w, c) => w + (/[\u1100-\uffff]/.test(c) ? 1.02 : 0.6) * fs, 0);
-/** A pill w × h whose bottom edge sits at y = bottom, centred on x, with a sharp notch of depth `nd` and
- *  half-width `nw` hanging from its bottom centre (a speech bubble's tail). */
-const bubble = (x, bottom, w, h, nd, nw) => {
-  const r = h / 2, x0 = x - w / 2 + r, x1 = x + w / 2 - r, y0 = bottom - h, f = (n) => n.toFixed(1);
-  return `M${f(x0)} ${f(y0)}H${f(x1)}A${r} ${r} 0 0 1 ${f(x1)} ${f(bottom)}H${f(x + nw)}L${f(x)} ${f(bottom + nd)}` +
-    `L${f(x - nw)} ${f(bottom)}H${f(x0)}A${r} ${r} 0 0 1 ${f(x0)} ${f(y0)}Z`;
+/** A rounded box w × h (corner radius r) whose bottom edge sits at y = bottom, centred on x, with a sharp
+ *  notch of depth `nd` and half-width `nw` hanging from its bottom centre (a speech bubble's tail). */
+const bubble = (x, bottom, w, h, r, nd, nw) => {
+  const x0 = x - w / 2, x1 = x + w / 2, y0 = bottom - h, f = (n) => n.toFixed(1);
+  return `M${f(x0 + r)} ${f(y0)}H${f(x1 - r)}A${r} ${r} 0 0 1 ${f(x1)} ${f(y0 + r)}V${f(bottom - r)}A${r} ${r} 0 0 1 ${f(x1 - r)} ${f(bottom)}` +
+    `H${f(x + nw)}L${f(x)} ${f(bottom + nd)}L${f(x - nw)} ${f(bottom)}H${f(x0 + r)}A${r} ${r} 0 0 1 ${f(x0)} ${f(bottom - r)}` +
+    `V${f(y0 + r)}A${r} ${r} 0 0 1 ${f(x0 + r)} ${f(y0)}Z`;
+};
+/** A simple profile picture: a person's head and shoulders in a disc of diameter d centred on (x, y). */
+const avatar = (x, y, d) => {
+  const r = d / 2, f = (n) => n.toFixed(1);
+  return `<circle class="callout-pic" cx="${f(x)}" cy="${f(y)}" r="${f(r)}"/>` +
+    `<circle class="callout-pic-fig" cx="${f(x)}" cy="${f(y - r * 0.2)}" r="${f(r * 0.36)}"/>` +
+    `<path class="callout-pic-fig" d="M${f(x - r * 0.66)} ${f(y + r * 0.72)}A${f(r * 0.66)} ${f(r * 0.52)} 0 0 1 ${f(x + r * 0.66)} ${f(y + r * 0.72)}` +
+    `A${f(r)} ${f(r)} 0 0 1 ${f(x - r * 0.66)} ${f(y + r * 0.72)}Z"/>`;
 };
 export function renderDeskCallouts(K, items) {
-  const { z, rise, fs, padX, h, notch, notchW } = CALLOUT;
+  const { z, rise, fs, padX, h, r, pic, padT, notch, notchW } = CALLOUT;
   return items.filter((it) => it.type === 'desk' && (it.name || '').trim())
     .map((it) => { const f = footprint(it); return { it, cx: (it.gx + f.w / 2) * CELL, cy: (it.gy + f.d / 2) * CELL }; })
     .sort((a, b) => a.cx + a.cy - (b.cx + b.cy))
     .map(({ it, cx, cy }) => {
-      const name = it.name.trim(), [ax, ay] = K.P(cx, cy, z), top = ay - rise, w = textW(name, fs) + 2 * padX;
+      // the profile picture on top, the name under it
+      const name = it.name.trim(), [ax, ay] = K.P(cx, cy, z), top = ay - rise, w = Math.max(textW(name, fs), pic) + 2 * padX;
       return `<g class="desk-callout" data-for="${esc(it.id)}">` +
-        `<path class="callout-pill" d="${bubble(ax, top, w, h, notch, notchW)}"/>` +
-        `<text class="callout-name" x="${ax.toFixed(1)}" y="${(top - h / 2 + fs * 0.36).toFixed(1)}" font-size="${fs}" text-anchor="middle">${esc(name)}</text></g>`;
+        `<path class="callout-pill" d="${bubble(ax, top, w, h, r, notch, notchW)}"/>` +
+        avatar(ax, top - h + padT + pic / 2, pic) +
+        `<text class="callout-name" x="${ax.toFixed(1)}" y="${(top - 4.4).toFixed(1)}" font-size="${fs}" text-anchor="middle">${esc(name)}</text></g>`;
     }).join('');
 }
 
@@ -175,8 +215,9 @@ export function renderShadows(K, plan, items, edges = edgeItems(plan)) {
   const clip = rectsPath(K, runs(plan.mask).map((r) => ({ x0: r.tx0 * TW, y0: r.ty * TW, x1: r.tx1 * TW, y1: (r.ty + 1) * TW })), 0);
   const caster = (it, h) => ({ ...itemNode(it), h });
   const shellTypes = new Set(['wall', 'pillar', 'elevator', 'wc', 'restroom', 'cabinet', 'storeroom']);
-  const shell = [...items.filter((it) => shellTypes.has(it.type)), ...edges].map((it) => caster(it, itemNode(it).z1));
-  return shadowLayer(K, shell, { clipId, clip });
+  // a soft shadow: about three quarters of the wall's height long, light at the base and melting into the floor
+  const shell = [...items.filter((it) => shellTypes.has(it.type)), ...edges].map((it) => caster(it, itemNode(it).z1 * 0.75));
+  return shadowLayer(K, shell, { clipId, clip, darkness: 0.28, spread: [0.8, 5], cls: 'plan-shadow' });
 }
 
 /**
@@ -196,8 +237,9 @@ export function renderScene(K, plan, items, { bare = false } = {}) {
     .sort((a, b) => (a.type === b.type ? area(b) - area(a) : a.type === 'zone' ? -1 : 1));
   let s = (bare ? '' : renderPlate(K, plan)) + floor.map((it) => g(it)).join('');
   if (!bare) s += renderShadows(K, plan, items.filter((it) => !it.faded), edges);
-  s += depthSort([...items.filter((it) => LAYER[it.type] !== 'floor'), ...edges].map((it) => ({ ...itemNode(it), it })))
-    .map((n) => g(n.it, n.it.id.startsWith('edge-') ? ' edge' : '')).join('');
+  const solid = depthSort([...items.filter((it) => LAYER[it.type] !== 'floor'), ...edges].map((it) => ({ ...itemNode(it), it })));
+  const frost = glassBackdrops(K, solid.map((n) => ({ ...n, cls: `it${n.it.faded ? ' faded' : ''}${cafe.has(n.it.id) ? ' cafe' : ''}` })), (it) => renderItem(K, it));
+  s += solid.map((n) => (frost.get(n.it.id) || '') + g(n.it, n.it.id.startsWith('edge-') ? ' edge' : '')).join('');
   s += floor.filter((it) => it.type === 'zone').map((it) => `<g class="tag${isLive(it) ? ' live' : ''}">${renderZoneTag(K, it)}</g>`).join('');
   if (!bare) s += `<g class="desk-callouts">${renderDeskCallouts(K, items.filter((it) => !it.faded))}</g>`;
   return s;
