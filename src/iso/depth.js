@@ -15,6 +15,16 @@ const key = (n) => n.x0 + n.y0 + n.z0 * 1e-3;
 /** A node's layer (its item's `layer`, set with Bring forward / Send backward): 0 unless set. */
 const layerOf = (n) => n.layer ?? n.it?.layer ?? 0;
 
+/** Do two boxes share volume (a joint: a wall into a pillar, glass into a wall, an L corner)? */
+export const intersect3d = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1 && a.z0 < b.z1 && b.z0 < a.z1;
+/**
+ * At such a joint no back-to-front order is right, so the solid piece covers the end of the one running
+ * into it: door leaves and glass under walls, walls under pillars (a pillar's faces stay whole, a glass
+ * pane never tints over the wall it runs into). Equal ranks keep the stable order.
+ */
+const JOINT = { leaf: 0, glass: 1, partition: 2, wall: 3, pillar: 4 };
+const jointRank = (n) => (n.slot ? 0 : JOINT[n.it?.type] ?? 5);
+
 /**
  * Do the two boxes' screen hexagons overlap? A box projects to a hexagon whose sides run along the
  * screen images of the x, y and z axes, so two of them overlap exactly when their ranges overlap on
@@ -41,7 +51,8 @@ export function depthSort(nodes) {
       // geometry decides
       if (i === j || !overlapOnScreen(nodes[i], nodes[j])) continue;
       const li = layerOf(nodes[i]), lj = layerOf(nodes[j]);
-      if (li !== lj ? li < lj : behind(nodes[i], nodes[j]) && !behind(nodes[j], nodes[i])) {
+      const joint = li === lj && intersect3d(nodes[i], nodes[j]);
+      if (li !== lj ? li < lj : joint ? jointRank(nodes[i]) < jointRank(nodes[j]) : behind(nodes[i], nodes[j]) && !behind(nodes[j], nodes[i])) {
         out[i].push(j);
         indeg[j]++;
       }

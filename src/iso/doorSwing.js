@@ -32,7 +32,35 @@ export function entryDoors(items) {
   const meet = roomDoors(items), ids = new Set(meet.map((m) => m.id));
   const lines = items.filter((w) => w.type === 'glass' || w.type === 'wall').map((w) => cellRect(w));
   const toward = (d) => ents.reduce((a, z) => (!a || dist(d, z) < dist(d, a) ? z : a), null);
-  return [...[...best.values()].filter((d) => !ids.has(d.id)).map((d) => lineLeaf(d, lines, toward(d)) || d), ...meet];
+  return meetInMiddle([...[...best.values()].filter((d) => !ids.has(d.id)).map((d) => lineLeaf(d, lines, toward(d)) || d), ...meet]);
+}
+
+/**
+ * A double door's two leaves on one line can overlap (its door symbols are a few cells apart, each 4 wide):
+ * two translucent panes stacked read as a dark band. Where two leaves on the same line overlap, they are cut
+ * to meet in the middle of the overlap, a hair apart.
+ */
+function meetInMiddle(leaves) {
+  const span = (d) => {   // along the leaf's line: [lo, hi], the axis, the line's position
+    if (!d.H) return null;
+    const ax = d.shut[0] ? 0 : 1, a = d.H[ax], b = a + d.shut[ax] * d.len;
+    return { lo: Math.min(a, b), hi: Math.max(a, b), ax, at: d.H[1 - ax] };
+  };
+  const out = leaves.map((d) => ({ ...d }));
+  for (let i = 0; i < out.length; i++) for (let j = i + 1; j < out.length; j++) {
+    const A = span(out[i]), B = span(out[j]);
+    if (!A || !B || A.ax !== B.ax || Math.abs(A.at - B.at) > 1 || A.hi <= B.lo || B.hi <= A.lo) continue;
+    const [L, R] = A.lo <= B.lo ? [out[i], out[j]] : [out[j], out[i]], sl = span(L), sr = span(R);
+    const m = (Math.max(sl.lo, sr.lo) + Math.min(sl.hi, sr.hi)) / 2;
+    // trim each from its free end (a leaf hinged at its far end keeps its hinge and moves nothing else)
+    const trim = (d, s, keepLo) => {
+      const len = keepLo ? m - 0.5 - s.lo : s.hi - (m + 0.5);
+      if (d.shut[s.ax] < 0 === keepLo) d.H = d.H.map((v, k) => (k === s.ax ? (keepLo ? m - 0.5 : m + 0.5) : v));
+      d.len = Math.max(2, len);
+    };
+    trim(L, sl, true); trim(R, sr, false);
+  }
+  return out;
 }
 
 /**
@@ -182,7 +210,8 @@ export function leaf(K, d, phi) {
  */
 export function leafNode(d) {
   const { H, shut, len } = frameOf(d), T = [H[0] + shut[0] * len, H[1] + shut[1] * len];
-  return { x0: Math.min(H[0], T[0]) - 1, x1: Math.max(H[0], T[0]) + 1, y0: Math.min(H[1], T[1]) - 1, y1: Math.max(H[1], T[1]) + 1, z0: 0, z1: LEAF_H, door: d.id };
+  const px = Math.abs(shut[1]) * 0.5, py = Math.abs(shut[0]) * 0.5;   // half a unit thick, across the leaf only
+  return { x0: Math.min(H[0], T[0]) - px, x1: Math.max(H[0], T[0]) + px, y0: Math.min(H[1], T[1]) - py, y1: Math.max(H[1], T[1]) + py, z0: 0, z1: LEAF_H, door: d.id };
 }
 export const leafSlot = (id) => `<g class="door-slot" data-door="${id}"></g>`;
 
