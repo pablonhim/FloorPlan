@@ -112,7 +112,7 @@ export function FloorUnitButtons({ floor, unit = null, onFloor, onUnit, onHoverU
  * are none, the slot stays (the dock keeps its shape) but is greyed with a small "None" badge.
  * items: [{ id, label, sub? }]; onPick(item).
  */
-export function QuickJump({ label, icon: glyph, items, onPick, onHover }) {
+export function QuickJump({ label, icon: glyph, items, onPick, onHover, onHoverAll }) {
   const [open, setOpen] = useState(false);
   useOneOpen(open, () => setOpen(false));
   const box = useRef(null);
@@ -136,6 +136,7 @@ export function QuickJump({ label, icon: glyph, items, onPick, onHover }) {
       <button type="button" aria-haspopup={none ? undefined : 'menu'} aria-expanded={none ? undefined : open} aria-disabled={none}
         aria-label={none ? `${label}: none in this unit` : `${label} · ${items.length}`}
         onClick={() => !none && setOpen((o) => !o)}
+        onPointerEnter={() => onHoverAll?.(true)} onPointerLeave={() => onHoverAll?.(false)}
         className={`relative grid size-8 place-items-center rounded-full transition-colors ${none ? 'cursor-default text-ink opacity-45'
           : open ? 'bg-accent-dim text-accent' : 'text-ink-hi hover:bg-[color-mix(in_srgb,var(--ink)_12%,transparent)]'}`}>
         <span className="ico">{glyph}</span>

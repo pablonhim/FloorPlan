@@ -90,8 +90,18 @@ export function defaults(type) {
   return {};
 }
 
-/** A team leader's desk (팀장, by the name assigned to it): drawn in light wood (CSS .lead). */
-export const isLead = (item) => item.type === 'desk' && /팀장|team lead/i.test(item.name || '');
+/** The team leaders by name (the name alone, or followed by a title: "최기종 부대표"), besides anyone titled 팀장. */
+export const LEAD_NAMES = ['정인성', '처언', '최기종', '짠나', '돔', '라타', '쏘찌아', '분나', '뷔뚜', '쀠뚜', '싸카리', '볼레악', '라니'];
+/**
+ * A team leader's desk: drawn in light wood (CSS .lead). Set per desk in the inspector (item.lead: true / false);
+ * otherwise by the name assigned to it — a 팀장 (or team lead) title, or one of LEAD_NAMES.
+ */
+export const isLead = (item) => {
+  if (item.type !== 'desk') return false;
+  if (typeof item.lead === 'boolean') return item.lead;
+  const name = (item.name || '').trim();
+  return /팀장|team lead/i.test(name) || LEAD_NAMES.some((n) => name === n || name.startsWith(`${n} `));
+};
 /** The lead desk's classes: `lead` and the way its grain runs on the worktop (along its length). */
 export const leadCls = (item) => (isLead(item) ? ` lead ${(item.rot || 0) % 180 ? 'lead-y' : 'lead-x'}` : '');
 
@@ -234,7 +244,7 @@ function desk(item, W, D) {
   // beam is symmetric, so the mirroring of 180° / 270° desks does not change it); #ray-<rot> fades it
   const ray = (rot) => {
     const pw = W - EXT, pd = top, u = pw / 2;
-    const pts = [[u - 10, 6], [u + 10, 6], [u + 17, pd], [u - 17, pd]].map(([a, b]) => rotPoint(a, b, pw, pd, rot));
+    const pts = [[u - 13, 12.5], [u + 13, 12.5], [u + 19, pd], [u - 19, pd]].map(([a, b]) => rotPoint(a, b, pw, pd, rot));
     // each desk's beam breathes on its own (CSS beam-breathe), phase and pace seeded from its id — on the
     // shared ambient tick (see AMBIENT_TICK): a pace of 2·n ticks, n steps up and n down, and a phase of whole
     // ticks, so every beam on the floor changes on the same frames (a few repaints a second, not 60)

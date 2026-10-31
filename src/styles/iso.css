@@ -74,7 +74,10 @@
 /* ---- floor editor ---- */
 /* the object under the pointer (with its hover card, HoverTip) lights up; more so at night */
 .tip-hot { filter:brightness(1.12) saturate(1.15); }
-:root:not([data-theme="light"]) .tip-hot { filter:brightness(1.55) saturate(1.2); }
+:root:not([data-theme="light"]) .tip-hot { filter:brightness(1.2) saturate(1.1); }   /* at night: a subtle lift, not a flash */
+/* …everything but furniture (walls, the core's lifts, WCs and storerooms, the site's features …) only a touch */
+.tip-hot:not(:has(.face.furn)) { filter:brightness(1.04) saturate(1.05); }
+:root:not([data-theme="light"]) .tip-hot:not(:has(.face.furn)) { filter:brightness(1.14) saturate(1.06); }
 /* neighbouring units around the one being edited: at full strength, every piece in the building's own default
    finish — its three surface tones (top / east / a deeper south face) and its line — with the sky's cast (the
    --nb-* tones, index.css), in the light and the dark theme alike; no colour, no shadows, so the unit being edited
@@ -207,7 +210,7 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
    faint wash of the sky's light (index.css); a plain back; no blue light ray */
 :root:root .glass.monitor { fill:#16191e; fill-opacity:1; stroke:var(--struct-line); stroke-opacity:.4; stroke-width:.6;
   filter:drop-shadow(0 0 1.2px rgb(205 225 255 / .75)) drop-shadow(0 0 3px rgb(170 200 255 / .35)); }
-:root:root:not([data-theme="light"]) .glass.monitor { filter:drop-shadow(0 0 1.5px rgb(205 225 255 / .9)) drop-shadow(0 0 5px rgb(150 190 255 / .55)); }
+:root:root:not([data-theme="light"]) .glass.monitor { fill:#16191e; stroke:var(--struct-line); filter:none; }   /* at night: a plain dark screen, no glow */
 :root:root .glass.monitor ~ .scr-accent { fill:var(--struct-top); opacity:.35; }
 :root:root .monitor-back { fill:color-mix(in srgb, var(--accent) 70%, #000); stroke:var(--accent-hi); stroke-opacity:.6; }   /* the back in the monitor's darker blue */
 :root:root :is(.monitor-ray, .monitor-halo) { display:none; }
@@ -436,6 +439,21 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
    pillar, desk and partition, without an outline: the floor view tints its area in the scene's floor layer
    (.unit-floor-hi in renderScene's .floor-hi slot); the unit editor tints that unit's slab (own or neighbour) */
 .unit-floor-hi { fill:var(--accent); fill-opacity:.12; stroke:none; pointer-events:none; }
+/* the floor view, hovering a unit's button in the dock: the other units (and the core round them) fade back
+   as a line drawing at full strength — every surface above the floor blank, every edge a light grey line, no shadows, no glass
+   blur; the floor and the room areas keep their colour; the hovered unit as it is */
+:is(.floor-ov[data-dock-unit="A"] .it:not(.u-A, .faded), .floor-ov[data-dock-unit="B"] .it:not(.u-B, .faded),
+    .floor-ov[data-dock-unit="C"] .it:not(.u-C, .faded), .floor-ov[data-dock-unit="D"] .it:not(.u-D, .faded),
+    .floor-ov[data-spot="meet"] .it:not(.faded), .floor-ov[data-spot="stair"] .it:not(.t-stair, .faded),
+    .floor-ov[data-spot="lift"] .it:not(.t-elevator, .faded), .floor-ov[data-spot="wcW"] .it:not(.t-wc.g-f, .faded),
+    .floor-ov[data-spot="wcM"] .it:not(.t-wc.g-m, .faded)) {
+  & :is(path, rect, circle, ellipse, polygon):not(.slab, .slab-grid, .zone, .zone-edge, .zone-badge, .zone-hatch, .tile-line, .floor-grid) {
+    fill:var(--panel) !important; fill-opacity:1 !important; filter:none !important;
+    stroke:color-mix(in srgb, var(--ink) 32%, var(--panel)) !important; stroke-opacity:1 !important; }
+  & :is(line, .mullion, .grain, .drawer-line) { stroke:color-mix(in srgb, var(--ink) 32%, var(--panel)) !important; stroke-opacity:1 !important; }
+  & :is(.glass-behind, .monitor-ray) { display:none; }
+}
+
 :is(.own-plate.hot, .nb.dock-hot) .face.slab.top { fill:color-mix(in srgb, var(--accent) 14%, var(--floor)) !important; }
 .unit-name { fill:var(--ink-hi); font-family:var(--font); font-weight:500; letter-spacing:4px; opacity:.75; paint-order:stroke; stroke:var(--panel); stroke-width:4px; }
 .unit-sub { fill:var(--ink); font-family:var(--font); paint-order:stroke; stroke:var(--panel); stroke-width:3px; }
@@ -598,14 +616,20 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
    shade. No colour: every paint is the building's own neutral finish (white by day, slate at night),
    with neutral grey glass and dark tyres */
 :root {
-  --car-body:#ffffff; --car-body-dk:#c9cdd2;
-  --glass-car:#aeb3b9; --glass-car-dk:#6f747a;
+  /* the body takes the building's own surface tones — so the sky's tint lights the cars as it does the
+     building — the shaded side deepening toward the building's shade */
+  --car-body:var(--struct-top); --car-body-dk:color-mix(in srgb, var(--struct-shade) 78%, var(--ink));
+  /* line-art glass, as in a presentation model: the windscreen and rear glass a pale tint of the body, the
+     side windows dark */
+  --glass-car:#e6e9ed; --glass-car-dk:#a9aeb5;
+  --glass-side:#3d4248; --glass-side-dk:#24272b;
   --tyre:#5a5d62; --tyre-dk:#2c2e32;
   --car-rim:#e3e5e8; --car-well:#3a3d42; --car-edge:rgba(20,22,26,.35);
 }
 :root:not([data-theme="light"]) {
-  --car-body:#5a616b; --car-body-dk:#2e3339;
-  --glass-car:#353b43; --glass-car-dk:#1a1e23;
+  --car-body:color-mix(in srgb, var(--struct-top) 80%, #fff); --car-body-dk:color-mix(in srgb, var(--struct-shade) 75%, #000);
+  --glass-car:#4a515a; --glass-car-dk:#262b31;
+  --glass-side:#1b1f24; --glass-side-dk:#0d0f12;
   --tyre:#2a2d31; --tyre-dk:#121417;
   --car-rim:#80878f; --car-well:#060708; --car-edge:rgba(175,185,200,.22);
 }
@@ -725,6 +749,19 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 .car-face, .car-tyre { stroke:var(--car-edge); stroke-width:.35; stroke-linejoin:round; vector-effect:non-scaling-stroke; }
 .car-rim { fill:var(--car-rim); stroke:var(--car-edge); stroke-width:.35; vector-effect:non-scaling-stroke; }
 .car-well { fill:var(--car-well); }
+/* the line-art details: alloy spokes and hub, the nose's recessed mesh grille and intakes, a side intake */
+.car-spoke { fill:none; stroke:var(--car-edge); stroke-width:.3; stroke-linecap:round; vector-effect:non-scaling-stroke; }
+/* the electric sports coupé (model ev): in the building's greyscale like every car (its trim a step deeper than
+   the body), five broad spokes, the LED bars (the tail one dark, no colour) */
+:root { --paint-slate:var(--car-body); --paint-slate-dk:var(--car-body-dk);
+  --car-trim:color-mix(in srgb, var(--car-body-dk) 70%, var(--car-body)); --car-trim-dk:var(--car-body-dk); }
+.car-spoke.broad { stroke:color-mix(in srgb, var(--car-rim) 85%, #fff); stroke-width:1.1; }
+.car-calliper { fill:var(--car-trim-dk); }
+.car-led { fill:#ffffff; stroke:none; filter:drop-shadow(0 0 .6px #fff); }
+.car-led.tail { fill:color-mix(in srgb, var(--car-body-dk) 60%, var(--car-well)); filter:none; }
+.car-hub { fill:color-mix(in srgb, var(--car-rim) 80%, var(--car-well)); stroke:var(--car-edge); stroke-width:.25; vector-effect:non-scaling-stroke; }
+.car-grille { fill:color-mix(in srgb, var(--car-well) 78%, var(--car-rim)); stroke:var(--car-edge); stroke-width:.3; vector-effect:non-scaling-stroke; }
+.car-intake { fill:color-mix(in srgb, var(--car-well) 85%, var(--car-rim)); stroke:var(--car-edge); stroke-width:.3; vector-effect:non-scaling-stroke; }
 .car-window { fill:color-mix(in srgb, var(--glass-car) 70%, var(--glass-car-dk)); stroke:var(--car-edge); stroke-width:.35; vector-effect:non-scaling-stroke; }
 .car-shadow { pointer-events:none; }
 .car-shadow .cast { fill:var(--shadow); opacity:.24; }
@@ -733,7 +770,7 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 .face.car { fill:var(--struct-lit); stroke:var(--struct-line); stroke-width:.6; }
 .face.car.front { fill:var(--struct-shade); }
 .face.car.cabin { fill:color-mix(in srgb, var(--struct-glass) 75%, var(--ink)); }
-.entry-glass { fill:var(--accent); stroke:var(--accent-hi); stroke-width:.6; vector-effect:non-scaling-stroke; }   /* lit like the rented floors' windows */
+.entry-glass { fill:color-mix(in srgb, var(--struct-glass) 80%, var(--ink)); stroke:var(--struct-line); stroke-width:.6; vector-effect:non-scaling-stroke; }   /* the same glass as the lobby's windows beside it */
 :root:not([data-theme="light"]) .entry-glass { fill:var(--night-light); stroke:var(--night-light-hi); }       /* warm lobby light at night */
 .entry-mullion { stroke:var(--struct-top); stroke-width:1.2; vector-effect:non-scaling-stroke; }
 .entry-handle { stroke:var(--ink-hi); stroke-width:1.4; vector-effect:non-scaling-stroke; }
@@ -757,8 +794,8 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 :root:not([data-theme="light"]) .twr.dusk .face.pwc-door { animation:win-on .9s linear 1.6s both; }
 @media (prefers-reduced-motion: reduce) { .twr.dusk .booth-glass, .twr.dusk .face.pwc-door { animation:none !important; } }
 /* pillar grid expressed on the façade */
-.face.struct.pilaster { fill:var(--struct-lit); }
-.face.struct.pilaster.front { fill:color-mix(in srgb, var(--struct-shade) 70%, var(--struct-lit)); }
+/* the pilasters take the façade's own tone (a fin on the east face as the east face, on the south as the south) */
+.face.struct.pilaster.side { fill:var(--struct-lit); }
 .twr .pn.on { fill:var(--accent); stroke:var(--accent-hi); }
 .twr .pn.on.hi { fill:var(--accent-hi); }
 .twr .pn.on.dim { opacity:.5; }
@@ -838,7 +875,7 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 .twr .beacon-halo { fill:var(--accent); opacity:.5; animation:tower-blink 1.4s steps(1) infinite; }
 .twr .mast { fill:none; stroke:var(--line); stroke-width:1.2; vector-effect:non-scaling-stroke; }
 .twr .lobby-glass { fill:var(--accent); stroke:var(--accent-hi); stroke-width:1; vector-effect:non-scaling-stroke; opacity:.85; }
-.twr .lobby-door { fill:var(--accent-hi); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+.twr .lobby-door { fill:color-mix(in srgb, var(--struct-glass) 80%, var(--ink)); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
 @keyframes tower-blink { 0% { opacity:1; } 45% { opacity:.08; } }
 @media (prefers-reduced-motion:reduce) {
   .twr .beacon, .twr .beacon-halo { animation:none; }
@@ -863,18 +900,33 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
    it blurs — a rounded-square profile picture, the name under it; hidden with the labels; on the floor overview
    only once zoomed in (.near) */
 .desk-callouts { pointer-events:none; }
-.desk-callout { overflow:visible; }
-.callout-card { box-sizing:border-box; width:100%; height:100%; border-radius:6px; overflow:hidden;
+/* a card can be hovered (it comes to the front of any it overlaps: lib/raiseOnHover) and lifts a little; a click
+   on it selects its desk */
+.desk-callout { overflow:visible; pointer-events:auto; cursor:pointer; }
+.callout-card { transition:box-shadow .18s ease; }
+:is(.desk-callout:hover, .desk-callout.lift) .callout-wrap { transform:translateY(-1.5px) scale(1.08); }
+:is(.desk-callout:hover, .desk-callout.lift) .callout-card { box-shadow:inset 0 0 0 1px rgb(255 255 255 / .7), 0 6px 16px rgb(20 30 50 / .22); }
+:root:not([data-theme="light"]) :is(.desk-callout:hover, .desk-callout.lift) .callout-card { box-shadow:inset 0 0 0 1px rgb(255 255 255 / .14), 0 6px 18px rgb(0 0 0 / .5); }
+/* …and over its card, the desk lights up as it does under the pointer (raiseOnHover) */
+.it.desk-hot { filter:brightness(1.12) saturate(1.15); transition:filter .18s ease; }
+:root:not([data-theme="light"]) .it.desk-hot { filter:brightness(1.2) saturate(1.1); }
+@media (prefers-reduced-motion: reduce) { .callout-wrap, .callout-card { transition:none; } }
+.callout-wrap { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; transform-origin:50% 100%; transition:transform .18s ease, filter .18s ease; }
+/* the notch under the card: the same frosted glass, cut to a soft curved drip (its shape: clip-path, inline) */
+.callout-notch { flex:none; margin-top:-.5px; background:rgb(255 255 255 / .5); -webkit-backdrop-filter:blur(3px) saturate(1.4); backdrop-filter:blur(3px) saturate(1.4); }
+:root:not([data-theme="light"]) .callout-notch { background:rgb(28 32 38 / .5); }
+.callout-card { flex:none; box-sizing:border-box; width:100%; border-radius:6px; overflow:hidden;
   display:flex; flex-direction:column; align-items:center;
   background:rgb(255 255 255 / .5); -webkit-backdrop-filter:blur(3px) saturate(1.4); backdrop-filter:blur(3px) saturate(1.4);
-  box-shadow:0 1px 3px rgb(20 30 50 / .12); }
-.callout-pic { flex:none; border-radius:5px; overflow:hidden; background:color-mix(in srgb, var(--accent) 16%, #ffffff); }
+  box-shadow:inset 0 0 0 1px rgb(255 255 255 / .7), 0 1px 3px rgb(20 30 50 / .12); }   /* a fine light edge */
+.callout-pic { flex:none; border-radius:5px; overflow:hidden; background:var(--pic-bg, color-mix(in srgb, var(--accent) 16%, #ffffff));
+  display:grid; place-items:center; line-height:1; font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif; }
 .callout-pic svg, .callout-pic img { display:block; width:100%; height:100%; object-fit:cover; }
 .callout-pic-fig { fill:color-mix(in srgb, var(--accent) 55%, #ffffff); }
 .callout-name { flex:none; max-width:100%; white-space:nowrap; overflow:hidden; text-align:center;
   color:#1f2933; font-family:var(--font); font-weight:600; }
-:root:not([data-theme="light"]) .callout-card { background:rgb(28 32 38 / .5); box-shadow:0 1px 4px rgb(0 0 0 / .35); }
-:root:not([data-theme="light"]) .callout-pic { background:color-mix(in srgb, var(--accent-hi) 18%, #1f2329); }
+:root:not([data-theme="light"]) .callout-card { background:rgb(28 32 38 / .5); box-shadow:inset 0 0 0 1px rgb(255 255 255 / .14), 0 1px 4px rgb(0 0 0 / .35); }
+:root:not([data-theme="light"]) .callout-pic { background:color-mix(in srgb, var(--pic-bg, #8fb3ff) 26%, #1f2329); }
 :root:not([data-theme="light"]) .callout-pic-fig { fill:color-mix(in srgb, var(--accent-hi) 70%, #1f2329); }
 :root:not([data-theme="light"]) .callout-name { color:#eef1f5; }
 [data-labels="off"] .desk-callouts { display:none; }

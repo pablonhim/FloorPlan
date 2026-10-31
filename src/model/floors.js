@@ -146,6 +146,7 @@ export function sanitize(raw, plan) {
     if (typeof r.locked === 'boolean') it.locked = r.locked;
     if (Number.isInteger(r.n)) it.n = r.n;
     if (r.flip === true) it.flip = true;
+    if (typeof r.lead === 'boolean' && r.type === 'desk') it.lead = r.lead;   // team leader (wood desk), set by hand
     if (Number.isInteger(r.layer) && r.layer !== 0) it.layer = Math.max(-9, Math.min(9, r.layer));   // drawing order override
     if (out.some((o) => o.id === it.id)) it.id = newId(it.type);
     if (!validate(out, it, plan)) out.push(it);

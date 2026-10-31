@@ -153,17 +153,17 @@ function arrow(x, y, dir) {
   return `<path class="road-arrow" transform="rotate(${rot} ${x} ${y})" d="M${x + 6} ${y - 1.1}h-8v-2.2l-4.5 3.3 4.5 3.3v-2.2h8z"/>`;
 }
 
-/** Cars in some regular bays (pointing north) and some VIP bays (nose-in, pointing east). */
-const PARKED = [0, 1, 3, 4, 6, 8];
+/** Cars in the front bays P3–P10 (backed in, noses out toward the loop and its exit) and some VIP bays. */
+const PARKED = [0, 3, 4, 5, 8];   // a row of three side by side (P4–P6), the rest standing apart (P1, P9)
 // 60° angled stalls: 2.5 m wide → 2.89 m along the kerb (pitch); the stall lines run back and west
 // by `run` over the 5 m depth, so west-bound cars swing straight in
 const STALLS = (() => { const pitch = 12.5 / Math.sin(Math.PI / 3), run = 25 / Math.tan(Math.PI / 3);
   return { pitch, run, x0: CX - (pitch * 10) / 2 + run / 2 }; })();
-const VIP_PARKED = [0, 1, 3, 5, 6, 8];
-const VIP_REVERSED = new Set([1, 5, 8]);   // backed in: these face the building (east) instead of the wall
+const VIP_PARKED = [0, 3, 4, 7, 9];   // a pair side by side (bays 4–5), the rest spaced out
+const VIP_REVERSED = new Set([4, 9]);   // backed in: these face the building (east) instead of the wall
 // who is parked where: low-poly models (iso/vehicles.js) and paints, by bay
-const VIP_FLEET = [['taycan', 'black'], ['cybertruck', 'steel'], ['model3', 'white'], ['ferrari', 'red'], ['p911', 'silver'], ['modelY', 'blue']];
-const BAY_FLEET = [['model3', 'red'], ['byd', 'blue'], ['modelY', 'white'], ['p911', 'grey'], ['byd', 'white'], ['model3', 'black']];
+const VIP_FLEET = [['ev', 'slate'], ['supercar', 'white'], ['cybertruck', 'steel'], ['p911', 'silver'], ['taycan', 'grey']];
+const BAY_FLEET = [['supercar', 'white'], ['ev', 'slate'], ['taycan', 'grey'], ['modelY', 'white'], ['model3', 'white']];
 const CAR_M = M * 0.92;   // cars a touch under true scale, so the longest (Cybertruck) clears a 5 m bay
 /** VIP cars sit behind the tower (west side), nose-in pointing east: drawn before it. */
 const vipCars = (arrived = new Map(), gone = new Set()) => VEHICLE_DEFS + parked([...VIP_PARKED.map((i, k) => [i, VIP_FLEET[k % VIP_FLEET.length]]), ...arrived]
@@ -180,11 +180,11 @@ function parked(list) {
 function cars(away = new Set()) {
   const { pitch, run, x0 } = STALLS, b0 = YARD.bays[0], b1 = YARD.bays[1];
   const len = Math.hypot(run, b1 - b0), ux = -run / len, uy = (b1 - b0) / len; // stall axis, kerb → back
-  // driven in forwards: the nose points to the back of the stall
+  // backed in: the nose points out of the stall, diagonally toward the loop and the exit
   return parked(PARKED.flatMap((i, k) => {
     if (away.has(i)) return [];   // driven off by a scene (see the scene paths below)
     const [model, paint] = BAY_FLEET[k % BAY_FLEET.length];
-    return [{ model, paint, cx: x0 + (i + 0.5) * pitch - run / 2, cy: (b0 + b1) / 2, ux, uy, z: PZ, m: CAR_M }];
+    return [{ model, paint, cx: x0 + (i + 0.5) * pitch - run / 2, cy: (b0 + b1) / 2, ux: -ux, uy: -uy, z: PZ, m: CAR_M }];
   }));
 }
 
@@ -747,8 +747,10 @@ export function buildSvg({ occ, cursor, away, vipArrived, vipGone, plans }) {
       });
       s += `</g></g>`;
     }
-    s += `<rect class="bld-grain" width="${f.len}" height="${H}"${mask}/>`;   // a faint concrete grain over the face
+    // the pilasters on the pillar grid, in the façade's own finish (its tone and the sky's cast), then the faint
+    // concrete grain over the whole face, fins included, so no fin reads as a plain white strip
     for (const u of f.us) s += `<rect class="face struct pilaster ${side}" x="${(u - 1.6).toFixed(2)}" y="0" width="3.2" height="${H}"/>`;
+    s += `<rect class="bld-grain" width="${f.len}" height="${H}"${mask}/>`;
     svg += s + `</g>`;
   }
 
@@ -828,8 +830,10 @@ export function parkInPath(i) {
   const cx = x0 + (i + 0.5) * pitch - run / 2, cy = (b0 + b1) / 2;
   const R = RAMPS[0], plate = { clip: 'twr-clip', speed: CAR_SPEED };
   return [
-    cubicLeg([cx, cy], [cx - ux * 12, cy - uy * 12], [cx + 4, ROAD_Y], [cx + 14, ROAD_Y], { reverse: true, speed: 18, ease: true }),
-    leg([cx + 14, ROAD_Y], [['L', EXIT_X + 9, ROAD_Y], ['Q', EXIT_X, ROAD_Y, EXIT_X, YARD.road[1]], ['L', EXIT_X, OFF]], plate),
+    // backed in, so it pulls out forwards, nose first, out of the stall and swings left onto the loop,
+    // ending already heading west with the traffic — no turn on the spot
+    cubicLeg([cx, cy], [cx - ux * 14, cy - uy * 14], [cx + 10, ROAD_Y], [cx - 6, ROAD_Y], { speed: 18, ease: true }),
+    leg([cx - 6, ROAD_Y], [['L', EXIT_X + 9, ROAD_Y], ['Q', EXIT_X, ROAD_Y, EXIT_X, YARD.road[1]], ['L', EXIT_X, OFF]], plate),
     leg([ENTRY_X, OFF], [['L', ENTRY_X, YARD.road[1]], ['Q', ENTRY_X, ROAD_Y, ENTRY_X - 9, ROAD_Y], ['L', IN_C + 9, ROAD_Y],
       ['Q', IN_C, ROAD_Y, IN_C, R.y1], ['L', IN_C, R.y1 - 14]], { ...plate, z: rampZ(R) }),
     // down the ramp into B1 (clipped to the ramp opening): it simply drives in and is gone
@@ -917,7 +921,7 @@ export function vipLeavePath(i, facingBuilding = false) {
   ];
 }
 
-const VIP_FREE = [9, 7, 4, 2];   // empty VIP bays, filled in this order
+const VIP_FREE = [8, 6, 5, 2, 1];   // empty VIP bays, filled in this order
 const VIP_GUESTS = [['p911', 'silver'], ['ferrari', 'red'], ['cybertruck', 'steel'], ['taycan', 'black']];
 
 /** Bird's-eye site plan for the mini-map (world plan units, north up): plate, roads, bays, ramps,

@@ -135,35 +135,47 @@ export function tipData(item) {
  * screen space (text stays upright and level), back to front so nearer pills overlap farther ones; meant for
  * a layer over the whole scene.
  */
-// The desks' name cards: a frosted card floating just above the monitor (everything behind it blurs: an HTML
+// The desks' name cards: a frosted card floating just above the chair (everything behind it blurs: an HTML
 // card in a foreignObject, with backdrop-filter), no border; a rounded-square profile picture with the name
 // under it. Every card is the same width, wrapped tight round the picture; a long name shrinks to fit.
-const CALLOUT = { rise: 3, pad: 3, pic: 24, gap: 2, fs: 7.5, nameH: 9 };
+const CALLOUT = { rise: 2, pad: 3.6, pic: 32, gap: 2.4, fs: 9.5, nameH: 11, notch: 5, notchW: 12 };
 const textW = (s, fs) => [...s].reduce((w, c) => w + (/[\u1100-\uffff]/.test(c) ? 1.02 : 0.6) * fs, 0);
-/** The profile picture: a placeholder head and shoulders for now (a real photo will go in its place). */
-const PIC = '<svg viewBox="0 0 30 30" preserveAspectRatio="xMidYMid slice"><circle class="callout-pic-fig" cx="15" cy="12" r="5.6"/>' +
-  '<path class="callout-pic-fig" d="M4.5 31a10.5 9 0 0 1 21 0Z"/></svg>';
-/** Where a desk's card floats: just above the top of its monitor (world point, rotation included). */
-function monitorTop(it) {
-  const { W0, D0, parts } = partsFor(it), p = parts.find((q) => /\bmonitor-body\b/.test(q.cls || ''));
-  if (!p) { const f = footprint(it); return [(it.gx + f.w / 2) * CELL, (it.gy + f.d / 2) * CELL, SIZES.desk.h]; }
-  const w = placeRect(p, W0, D0, it.rot, it.gx * CELL, it.gy * CELL);
-  return [w.x + w.w / 2, w.y + w.d / 2, p.z + p.h];
+/** Until real photos come, each person's profile picture is an animal — their own, picked by their name (a
+ *  stable hash, so it never changes between visits) — on a soft tint of its own. */
+const ANIMALS = ['🐶', '🐱', '🦊', '🐼', '🐨', '🐯', '🦁', '🐰', '🐻', '🐸', '🐵', '🐧', '🦉', '🐷', '🐮', '🐹', '🦄', '🐙', '🦒', '🐢', '🦔', '🐳', '🦦', '🐥'];
+const TINTS = ['#ffe7c2', '#d9ecff', '#e3f6d8', '#ffdfe6', '#ece2ff', '#fff3bf', '#d5f3ef', '#ffe1cc'];
+const animalOf = (name) => {
+  const h = [...name].reduce((a, c) => (a * 31 + c.codePointAt(0)) >>> 0, 17);
+  return { a: ANIMALS[h % ANIMALS.length], bg: TINTS[(h >>> 7) % TINTS.length] };
+};
+/** Where a desk's card floats: above its chair — over the seat's middle, just above the backrest's top (world
+ *  point, rotation included); a desk without a chair, above its own middle. */
+function chairTop(it) {
+  const { W0, D0, parts } = partsFor(it);
+  const seat = parts.find((q) => /\bseat\b/.test(q.cls || '') && /\bchair\b/.test(q.cls || '') && !/\bbackrest\b/.test(q.cls || ''));
+  const backs = parts.filter((q) => /\bbackrest\b/.test(q.cls || '') && /\bchair\b/.test(q.cls || ''));
+  if (!seat) { const f = footprint(it); return [(it.gx + f.w / 2) * CELL, (it.gy + f.d / 2) * CELL, SIZES.desk.h]; }
+  const w = placeRect(seat, W0, D0, it.rot, it.gx * CELL, it.gy * CELL);
+  return [w.x + w.w / 2, w.y + w.d / 2, Math.max(seat.z + seat.h, ...backs.map((b) => b.z + b.h))];
 }
 export function renderDeskCallouts(K, items) {
-  const { rise, pad, pic, gap, fs, nameH } = CALLOUT;
+  const { rise, pad, pic, gap, fs, nameH, notch, notchW } = CALLOUT;
   const W = pic + 2 * pad, H = pad + pic + gap + nameH + pad * 0.6;
+  // the notch: a soft, slightly curved drip under the card's middle, its tip just above the monitor
+  const tail = `path('M0 0C${(notchW * 0.28).toFixed(2)} 0 ${(notchW * 0.38).toFixed(2)} ${notch} ${(notchW / 2).toFixed(2)} ${notch}` +
+    `C${(notchW * 0.62).toFixed(2)} ${notch} ${(notchW * 0.72).toFixed(2)} 0 ${notchW} 0Z')`;
   return items.filter((it) => it.type === 'desk' && (it.name || '').trim())
-    .map((it) => ({ it, at: monitorTop(it) }))
+    .map((it) => ({ it, at: chairTop(it) }))
     .sort((a, b) => a.at[0] + a.at[1] - (b.at[0] + b.at[1]))
     .map(({ it, at }) => {
-      const name = it.name.trim(), [ax, ay] = K.P(...at), x = ax - W / 2, y = ay - rise - H;
+      const name = it.name.trim(), [ax, ay] = K.P(...at), x = ax - W / 2, y = ay - rise - notch - H;
       const size = Math.min(fs, (pic + pad) / Math.max(textW(name, 1), 1e-6));
-      return `<foreignObject class="desk-callout" data-for="${esc(it.id)}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${W}" height="${H.toFixed(1)}">` +
-        `<div xmlns="http://www.w3.org/1999/xhtml" class="callout-card" style="padding:${pad}px ${pad}px ${(pad * 0.6).toFixed(1)}px">` +
-        `<div class="callout-pic" style="width:${pic}px;height:${pic}px">${PIC}</div>` +
+      return `<foreignObject class="desk-callout" data-for="${esc(it.id)}" data-id="${esc(it.id)}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${W}" height="${(H + notch).toFixed(1)}">` +
+        `<div xmlns="http://www.w3.org/1999/xhtml" class="callout-wrap">` +
+        `<div class="callout-card" style="height:${H.toFixed(1)}px;padding:${pad}px ${pad}px ${(pad * 0.6).toFixed(1)}px">` +
+        `<div class="callout-pic" style="width:${pic}px;height:${pic}px;--pic-bg:${animalOf(name).bg};font-size:${(pic * 0.62).toFixed(1)}px">${animalOf(name).a}</div>` +
         `<div class="callout-name" style="margin-top:${gap}px;height:${nameH}px;line-height:${nameH}px;font-size:${size.toFixed(2)}px">${esc(name)}</div>` +
-        `</div></foreignObject>`;
+        `</div><div class="callout-notch" style="width:${notchW}px;height:${notch}px;clip-path:${tail}"></div></div></foreignObject>`;
     }).join('');
 }
 
@@ -243,7 +255,7 @@ export function renderScene(K, plan, items, { bare = false } = {}) {
   const cafe = cafeIds(items), swung = roomDoorIds(items);
   // items flagged `faded` (another unit's shell drawn round this one) are sorted in with the rest but drawn
   // faded, cast no shadow and are no targets (.it.faded)
-  const g = (it, extra = '') => `<g class="it${it.faded ? ' faded' : ''}${isLive(it) ? ' live' : ''}${leadCls(it)}${cafe.has(it.id) ? ' cafe' : ''}${swung.has(it.id) ? ' swung' : ''}${extra}"${extra ? '' : tipAttrs(it)}>${renderItem(K, it)}</g>`;
+  const g = (it, extra = '') => `<g class="it t-${it.type}${it.gender ? ` g-${it.gender}` : ''}${it.unit ? ` u-${it.unit}` : ''}${it.faded ? ' faded' : ''}${isLive(it) ? ' live' : ''}${leadCls(it)}${cafe.has(it.id) ? ' cafe' : ''}${swung.has(it.id) ? ' swung' : ''}${extra}"${it.type === 'desk' ? ` data-item="${esc(it.id)}"` : ''}${extra ? '' : tipAttrs(it)}>${renderItem(K, it)}</g>`;
   const floor = items.filter((it) => LAYER[it.type] === 'floor')
     .sort((a, b) => (a.layer || 0) - (b.layer || 0) || (a.type === b.type ? area(b) - area(a) : a.type === 'zone' ? -1 : 1));   // a layer (Bring forward / Send backward) first
   let s = (bare ? '' : renderPlate(K, plan)) + floor.map((it) => g(it)).join('');

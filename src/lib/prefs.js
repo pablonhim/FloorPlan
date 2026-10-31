@@ -1,15 +1,15 @@
 // View preferences from the dock's ⋯ menu (DockMenu): show the time-of-day
 // weather (sky and its light) and the floor grid. Remembered per viewer (localStorage) and written on the
-// root as data-weather / data-grid / data-corten, which index.css reads; nothing is redrawn. (corten: the Corten
-// & terracotta look, off by default. The architectural model's colours are the default look now: its old switch,
-// `clay`, is gone, and a remembered `clay` is dropped, so data-clay is never set.)
+// root as data-weather / data-grid, which index.css reads; nothing is redrawn. (The architectural model's
+// colours are the one look now: the old material-style switches, `clay` and `corten`, are gone, and remembered
+// values of them are dropped, so data-clay / data-corten are never set.)
 import { useCallback, useLayoutEffect, useState } from 'react';
 import { flushSync } from 'react-dom';
 
 const KEY = 'floorplan.view';
-const DEFAULTS = { weather: true, grid: true, corten: false };
-/** Material styles: at most one at a time. */
-const STYLES = ['corten'];
+const DEFAULTS = { weather: true, grid: true };
+/** Material styles: none any more (the architectural model's colours are the one look). */
+const STYLES = [];
 const read = () => {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
@@ -24,7 +24,7 @@ export function useViewPrefs() {
   useLayoutEffect(() => {
     const root = document.documentElement;
     for (const k of Object.keys(DEFAULTS)) root.dataset[k] = prefs[k] ? 'on' : 'off';
-    delete root.dataset.clay;   // the retired architectural-model switch
+    delete root.dataset.clay; delete root.dataset.corten;   // the retired material-style switches
     try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch { /* storage blocked */ }
   }, [prefs]);
   // the weather background changes the whole page (sky, light, wall colours, the time-of-day switch's stops):

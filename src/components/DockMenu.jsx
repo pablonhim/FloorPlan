@@ -1,7 +1,7 @@
 // The "More" button at the end of a view's bottom-left dock: one round button whose frosted menu opens
 // upward with the view's own actions (Export, Reset …) and the app's shared ones — History, and the Labels,
-// Show weather background, Show floor grid and Corten & terracotta switches (the architectural model's
-// colours are the default look now, so it has no switch of its own) — which come from DockMenuContext (App).
+// Show weather background and Show floor grid switches (the architectural model's colours are the one look
+// now: no material-style switches) — which come from DockMenuContext (App).
 // Closes on a choice, a click outside or Escape; ↑ ↓ move through it.
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -19,7 +19,6 @@ const I = {
   labels: icon(<path d="M3 4.5h10M8 4.5v8" />),
   weather: icon(<><circle cx="6" cy="6" r="2.5" /><path d="M5 13h6.5a2.5 2.5 0 0 0 0-5 3.5 3.5 0 0 0-6.6 1A2 2 0 0 0 5 13z" /></>),
   grid: icon(<path d="M2.5 5.5h11M2.5 10.5h11M5.5 2.5v11M10.5 2.5v11" />),
-  corten: icon(<><path d="M3 13V5.5L8 3l5 2.5V13" /><path d="M5.5 13V7M8 13V6M10.5 13V7" /></>),
 };
 
 /** items: the view's own actions, [{ label, onClick, icon?: 'export' | 'reset', danger? }]. */
@@ -84,7 +83,6 @@ export default function DockMenu({ items = [] }) {
                 ...(shared.prefs ? [
                   { label: 'Show weather background', icon: I.weather, on: shared.prefs.weather, set: (v) => shared.setPref('weather', v) },
                   { label: 'Show floor grid', icon: I.grid, on: shared.prefs.grid, set: (v) => shared.setPref('grid', v) },
-                  { label: 'Corten & terracotta', icon: I.corten, on: shared.prefs.corten, set: (v) => shared.setPref('corten', v) },
                 ] : []),
               ].map((r) => (
                 <button key={r.label} type="button" role="menuitemcheckbox" aria-checked={r.on} onClick={() => r.set(!r.on)}

@@ -14,9 +14,16 @@ import { SUN } from './shadow.js';
 const VIEW = [1, 1, 1];
 const LIGHT = (() => { const v = [0.62, -0.25, 0.74]; const n = Math.hypot(...v); return v.map((c) => c / n); })();
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const mean = (ps) => ps.reduce((a, p) => [a[0] + p[0] / ps.length, a[1] + p[1] / ps.length, a[2] + p[2] / ps.length], [0, 0, 0]);
+/** A polygon's normal by Newell's method: robust for many-sided, nearly collinear or slightly non-planar faces
+ *  (a body side with its finely sampled rounded corners), where the cross product of its first three corners
+ *  is not — it misjudged whole flanks as facing away, and they were dropped. */
+const newell = (pts) => {
+  const n = [0, 0, 0];
+  pts.forEach((a, i) => { const b = pts[(i + 1) % pts.length]; n[0] += (a[1] - b[1]) * (a[2] + b[2]); n[1] += (a[2] - b[2]) * (a[0] + b[0]); n[2] += (a[0] - b[0]) * (a[1] + b[1]); });
+  return n;
+};
 
 /**
  * Models. L, W in metres; r wheel radius; axles as fractions of L; lower / cabin: side profiles
@@ -44,13 +51,26 @@ export const MODELS = {
   ferrari: { name: 'Ferrari', L: 4.57, W: 1.96, r: 0.35, axles: [0.2, 0.78],
     lower: [[0.01, 0.26], [0, 0.62], [0.04, 0.76], [0.7, 0.72], [0.98, 0.44], [1, 0.34], [0.97, 0.24]], lowerTaper: 0.9,
     cabin: [[0.24, 0.74], [0.4, 1.17], [0.52, 1.19], [0.7, 0.73]], cabinTaper: 0.68, glass: [0, 2], sideGlass: true },
+  // a modern supercar (the reference's line-art coupé): a long low wedge nose, a short glasshouse set well
+  // back, a raked tail with a rear wing on two posts, a side intake ahead of the rear wheel
+  supercar: { name: 'Supercar', L: 4.6, W: 1.98, r: 0.35, axles: [0.19, 0.79],
+    lower: [[0, 0.26], [0, 0.68], [0.06, 0.84], [0.6, 0.8], [0.9, 0.56], [0.99, 0.42], [1, 0.32], [0.97, 0.22]], lowerTaper: 0.9,
+    cabin: [[0.2, 0.82], [0.4, 1.17], [0.55, 1.18], [0.69, 0.8]], cabinTaper: 0.64, glass: [0, 2], sideGlass: true,
+    wing: { u: [0, 0.1], z: 1.08, posts: [0.03, 0.07] }, intake: [0.27, 0.36] },
+  // the electric sports coupé (the isometric illustration, ev-sports-car.html): a long low wedge with the cabin
+  // well back, all its glass smoked; matte slate with burnt orange trim (sill blades, splitter, duck-tail lip,
+  // callipers), a full-width LED bar front and rear, five-spoke alloys
+  ev: { name: 'Electric sports coupé', L: 4.6, W: 1.96, r: 0.36, axles: [0.19, 0.79],
+    lower: [[0.02, 0.3], [0, 0.62], [0.08, 0.86], [0.66, 0.8], [0.93, 0.6], [1, 0.44], [1, 0.34], [0.97, 0.28]], lowerTaper: 0.9,
+    cabin: [[0.2, 0.84], [0.36, 1.2], [0.55, 1.22], [0.7, 0.81]], cabinTaper: 0.66, glass: [0, 1, 2], sideGlass: true,
+    smoked: true, trim: true, led: true, spokes: 5 },
   byd: { name: 'BYD e2', L: 4.26, W: 1.76, r: 0.32, axles: [0.19, 0.8],
     lower: [[0.02, 0.34], [0, 0.62], [0.02, 0.92], [0.8, 0.9], [0.98, 0.74], [1, 0.52], [0.98, 0.34]], lowerTaper: 0.95,
     cabin: [[0.01, 0.92], [0.05, 1.47], [0.58, 1.5], [0.8, 0.91]], cabinTaper: 0.78, glass: [0, 2], sideGlass: true },
 };
 
 /** Paints: CSS custom properties in iso.css (light and night variants), matte or metallic. */
-export const PAINTS = ['white', 'black', 'red', 'steel', 'blue', 'grey', 'silver'];
+export const PAINTS = ['white', 'black', 'red', 'steel', 'blue', 'grey', 'silver', 'slate'];
 
 /**
  * Draws one car (SVG string) for kernel K. (cx, cy): centre on the ground plane at height z, in world
@@ -90,7 +110,7 @@ export function vehicle(K, { model, cx, cy, ux, uy, z, m, paint, lights = false,
     });
     let s = '';
     for (const f of faces) {
-      let n = cross(sub(f.pts[1], f.pts[0]), sub(f.pts[2], f.pts[0]));
+      let n = newell(f.pts);
       if (dot(n, sub(mean(f.pts), c)) < 0) n = n.map((x) => -x);
       const len = Math.hypot(...n) || 1;
       n = n.map((x) => x / len);
@@ -103,6 +123,21 @@ export function vehicle(K, { model, cx, cy, ux, uy, z, m, paint, lights = false,
         : `<path class="car-face${seeThrough ? ' xray' : ''}" style="${fs}" d="${pathOf(f.pts)}"/>`;
     }
     return s;
+  };
+
+  /** A box in car-local metres·m (u0…u1 along, v0…v1 across, z0…z1 up), its visible faces shaded. */
+  const block = (u0, u1, v0, v1, z0, z1, cls, faceCls = 'car-seat') => {
+    const P = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+    const lo = P.map(([u, v]) => W3(u, v, z0)), hi = P.map(([u, v]) => W3(u, v, z1));
+    const faces = [hi, ...P.map((_, i) => { const j = (i + 1) % 4; return [hi[i], hi[j], lo[j], lo[i]]; })];
+    const c = mean([...lo, ...hi]);
+    return faces.map((pts) => {
+      let n = newell(pts);
+      if (dot(n, sub(mean(pts), c)) < 0) n = n.map((x) => -x);
+      const ln = Math.hypot(...n) || 1;
+      n = n.map((x) => x / ln);
+      return dot(n, VIEW) > 1e-4 ? `<path class="${faceCls}" style="${fillStyle(n, cls)}" d="${pathOf(pts)}"/>` : '';
+    }).join('');
   };
 
   // which side faces the viewer: +v side's outward normal is (-uy, ux, 0)
@@ -122,13 +157,28 @@ export function vehicle(K, { model, cx, cy, ux, uy, z, m, paint, lights = false,
     const faces = [{ pts: outer, rim: true }, { pts: inner.slice().reverse() }];
     ring.forEach((_, i) => { const j = (i + 1) % 8; faces.push({ pts: [outer[i], outer[j], inner[j], inner[i]] }); });
     for (const f of faces) {
-      let n = cross(sub(f.pts[1], f.pts[0]), sub(f.pts[2], f.pts[0]));
+      let n = newell(f.pts);
       if (dot(n, sub(mean(f.pts), c)) < 0) n = n.map((x) => -x);
       const len = Math.hypot(...n) || 1;
       n = n.map((x) => x / len);
       if (dot(n, VIEW) <= 1e-4) continue;
       s += `<path class="car-tyre" style="${fillStyle(n, 'tyre')}" d="${pathOf(f.pts)}"/>`;
-      if (f.rim) s += `<path class="car-rim" d="${pathOf(oct(r * 0.62, u, r).map(([uu, hh]) => W3(uu, vOut + side * 0.01 * m, hh)))}"/>`;
+      if (f.rim) {
+        // the alloy: a rim disc with ten slim spokes (five doubled) from the hub to the rim, and a hub cap
+        const vR = vOut + side * 0.01 * m, rr = r * 0.62;
+        s += `<path class="car-rim" d="${pathOf(oct(rr, u, r).map(([uu, hh]) => W3(uu, vR, hh)))}"/>`;
+        const nS = md.spokes || 10;
+        s += `<path class="car-spoke${md.spokes ? ' broad' : ''}" d="${[...Array(nS)].map((_, k) => {
+          const a = md.spokes ? (k * 2 * Math.PI) / nS + 0.3 : (k * Math.PI) / 5 + (k % 2 ? 0.16 : 0), [x0, y0] = K.P(...W3(u + rr * 0.24 * Math.cos(a), vR, r + rr * 0.24 * Math.sin(a)));
+          const [x1, y1] = K.P(...W3(u + rr * 0.94 * Math.cos(a), vR, r + rr * 0.94 * Math.sin(a)));
+          return `M${x0.toFixed(2)} ${y0.toFixed(2)}L${x1.toFixed(2)} ${y1.toFixed(2)}`;
+        }).join('')}"/>`;
+        s += `<path class="car-hub" d="${pathOf(oct(rr * 0.22, u, r).map(([uu, hh]) => W3(uu, vR + side * 0.005 * m, hh)))}"/>`;
+        if (md.trim) {   // a burnt orange brake calliper peeking above the hub
+          const cal = [[0.55, -0.2], [0.55, 0.25], [0.82, 0.25], [0.82, -0.2]].map(([t, da]) => W3(u + r * t * Math.cos(Math.PI / 2 + da), vR - side * 0.004 * m, r + r * t * Math.sin(Math.PI / 2 + da)));
+          s += `<path class="car-calliper" d="${pathOf(cal)}"/>`;
+        }
+      }
     }
     return s;
   };
@@ -166,23 +216,14 @@ export function vehicle(K, { model, cx, cy, ux, uy, z, m, paint, lights = false,
   const lowerPts = md.lower.map(([f, h]) => [f * L, h]);
   s += slab(lowerPts, hw0, md.lowerTaper, () => paintVar);
   const cabinPts = md.cabin.map(([f, h]) => [f * L, h]);
+  if (md.trim) {   // the duck-tail lip, on the rear deck's edge
+    const deck = md.lower.filter(([f]) => f < 0.15).reduce((a, [, h]) => Math.max(a, h), 0) * m;
+    s += block(0.035 * L, 0.07 * L, -hw0 * 0.78, hw0 * 0.78, deck - 0.02 * m, deck + 0.03 * m, 'car-trim', 'car-face');
+  }
   if (interior) {
     // seen through: two front seats, a rear bench and the steering wheel, under a see-through cabin
     const belt = Math.min(...md.cabin.map((p) => p[1])) * m, cu = md.cabin.map((p) => p[0] * L);
     const c0 = Math.min(...cu), c1 = Math.max(...cu), span = c1 - c0;
-    const block = (u0, u1, v0, v1, z0, z1, cls) => {
-      const P = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
-      const lo = P.map(([u, v]) => W3(u, v, z0)), hi = P.map(([u, v]) => W3(u, v, z1));
-      const faces = [hi, ...P.map((_, i) => { const j = (i + 1) % 4; return [hi[i], hi[j], lo[j], lo[i]]; })];
-      const c = mean([...lo, ...hi]);
-      return faces.map((pts) => {
-        let n = cross(sub(pts[1], pts[0]), sub(pts[2], pts[0]));
-        if (dot(n, sub(mean(pts), c)) < 0) n = n.map((x) => -x);
-        const ln = Math.hypot(...n) || 1;
-        n = n.map((x) => x / ln);
-        return dot(n, VIEW) > 1e-4 ? `<path class="car-seat" style="${fillStyle(n, cls)}" d="${pathOf(pts)}"/>` : '';
-      }).join('');
-    };
     const sw = hw0 * 0.38, seatZ = belt - 0.38 * m;
     const front = c0 + span * 0.52, rear = c0 + span * 0.18;
     // painted back (low u + v) to front
@@ -196,7 +237,9 @@ export function vehicle(K, { model, cx, cy, ux, uy, z, m, paint, lights = false,
     seeThrough = true;
   }
   const hwCabin = hw0 * md.lowerTaper * 0.97;
-  s += slab(cabinPts, hwCabin, md.cabinTaper, (f) => (f.kind === 'side' ? (md.sideGlass ? 'glass-car' : paintVar) : md.glass.includes(f.edge) ? 'glass-car' : paintVar));
+  // the side windows dark, the windscreen and rear glass a pale tint (line-art glass)
+  const topGlass = md.smoked ? 'glass-side' : 'glass-car';
+  s += slab(cabinPts, hwCabin, md.cabinTaper, (f) => (f.kind === 'side' ? (md.sideGlass ? 'glass-side' : paintVar) : md.glass.includes(f.edge) ? topGlass : paintVar));
   seeThrough = false;
   if (md.win) {
     // explicit side window on the near cabin side (Cybertruck): placed on the tapered side plane
@@ -215,6 +258,48 @@ export function vehicle(K, { model, cx, cy, ux, uy, z, m, paint, lights = false,
     return `<path class="car-well" d="${pathOf(pts)}"/>`;
   }).join('');
   s += near.map(wheel).join('');
+  // a supercar's side intake: a dark recess on the near flank, just ahead of the rear wheel
+  if (md.intake) {
+    const [a, b] = md.intake.map((f) => f * L), zt = 0.68 * m, zb = 0.36 * m;
+    s += `<path class="car-intake" d="${pathOf([[a, zt], [b, zt * 0.96], [b, zb], [a + 0.12 * m, zb]].map(([uu, hh]) => W3(uu, nearSign * (hwLow(hh / m) + 0.006 * m), hh)))}"/>`;
+  }
+  // the front's recessed grille and intakes, on the nose when it faces the viewer: a dark mesh band between
+  // two side intakes, low on the bumper
+  if (md.trim) {
+    // the near sill blade between the wheel arches, in burnt orange
+    const a0 = md.axles[0] * L + 0.45 * m, a1 = md.axles[1] * L - 0.45 * m;
+    s += block(a0, a1, nearSign > 0 ? hw0 * 0.97 : -hw0 * 1.01, nearSign > 0 ? hw0 * 1.01 : -hw0 * 0.97, 0.28 * m, 0.33 * m, 'car-trim', 'car-face');
+  }
+  if (md.led) {
+    // the full-width LED light bars on whichever end faces the viewer: white across the nose (with a dark
+    // intake under it and the orange splitter below), red across the tail
+    if (ux + uy > 0) {
+      const u = L + 0.008 * m;
+      const band = (v0, v1, z0, z1) => pathOf([[v0, z1], [v1, z1], [v1, z0], [v0, z0]].map(([v, hh]) => W3(u, v, hh * m)));
+      s += `<path class="car-grille" d="${band(-hw0 * 0.6, hw0 * 0.6, 0.34, 0.44)}"/><path class="car-led" d="${band(-hw0 * 0.78, hw0 * 0.78, 0.5, 0.535)}"/>`;
+      s += block(0.98 * L, 1.02 * L, -hw0 * 0.86, hw0 * 0.86, 0.26 * m, 0.3 * m, 'car-trim', 'car-face');
+    } else {
+      const u = -0.008 * m;
+      s += `<path class="car-led tail" d="${pathOf([[-hw0 * 0.8, 0.69], [hw0 * 0.8, 0.69], [hw0 * 0.8, 0.66], [-hw0 * 0.8, 0.66]].map(([v, hh]) => W3(u, v, hh * m)))}"/>`;
+    }
+  } else if (ux + uy <= 0) {
+    // the tail, when it faces the viewer: a pair of dark tail-lamp bars high on the rear face, so the back of
+    // the car always reads as the back
+    const tz = md.lower.filter(([f]) => f < 0.1).reduce((a, [, h]) => Math.max(a, h), 0) * m * 0.86, u = -0.012 * m;
+    const bar = (v0, v1) => pathOf([[v0, tz + 0.05 * m], [v1, tz + 0.05 * m], [v1, tz - 0.04 * m], [v0, tz - 0.04 * m]].map(([v, hh]) => W3(u, v, hh)));
+    s += `<path class="car-led tail" d="${bar(-hw0 * 0.86, -hw0 * 0.42)}${bar(hw0 * 0.42, hw0 * 0.86)}"/>`;
+  }
+  if (!md.led && ux + uy > 0) {
+    const fz = Math.max(...md.lower.filter(([f]) => f > 0.9).map(([, h]) => h)) * m, u = L + 0.012 * m;
+    const band = (v0, v1, z0, z1) => pathOf([[v0, z1], [v1, z1], [v1, z0], [v0, z0]].map(([v, hh]) => W3(u, v, hh)));
+    s += `<path class="car-grille" d="${band(-hw0 * 0.42, hw0 * 0.42, fz * 0.5, fz * 0.74)}${band(-hw0 * 0.86, -hw0 * 0.56, fz * 0.46, fz * 0.7)}${band(hw0 * 0.56, hw0 * 0.86, fz * 0.46, fz * 0.7)}"/>`;
+  }
+  // a rear wing on two posts (supercar), drawn last: it stands above the tail
+  if (md.wing) {
+    const { u: [w0, w1], z: wz, posts } = md.wing, top = md.lower.filter(([f]) => f < 0.15).reduce((a, [, h]) => Math.max(a, h), 0) * m;
+    for (const v of [-1, 1]) for (const pu of [posts[0]]) s += block(pu * L, (pu + 0.03) * L, v * hw0 * 0.55 - 0.04 * m, v * hw0 * 0.55 + 0.04 * m, top, wz * m, paintVar, 'car-face');
+    s += block(w0 * L, w1 * L, -hw0 * 0.96, hw0 * 0.96, wz * m, (wz + 0.06) * m, paintVar, 'car-face');
+  }
   // lamps on the end faces that face the viewer: head lamps at the front, tail lamps at the rear
   if (lights) {
     const lampZ = Math.max(...md.lower.filter(([f]) => f > 0.9).map(([, h]) => h)) * m * 0.82;

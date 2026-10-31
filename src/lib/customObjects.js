@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { SIZES } from '../model/catalog.js';
 
 const KEY = 'floorplan.customObjects';
-const KEEP = ['type', 'rot', 'w', 'd', 'name', 'team', 'note', 'kind', 'label', 'en', 'on', 'flip', 'gender', 'doorSide', 'layer'];
+const KEEP = ['type', 'rot', 'w', 'd', 'name', 'team', 'note', 'kind', 'label', 'en', 'on', 'flip', 'gender', 'doorSide', 'layer', 'lead'];
 
 function read() {
   try {

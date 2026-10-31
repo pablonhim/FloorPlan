@@ -8,11 +8,13 @@ import { esc } from '../iso/kernel.js';
 import { floorPlan, toFloor, coreItems, stats, RENTED, PLANS, CORE, shellUnits } from '../model/floors.js';
 import { elevatorParts } from '../model/catalog.js';
 import { renderParts } from '../iso/parts.js';
+import { footprint } from '../iso/grid.js';
 import { person } from '../iso/scenes.js';
 import { exportPng } from '../lib/exportPng.js';
 import IsoDefs from './IsoDefs.jsx';
 import { focusBox, useSvgCamera } from '../lib/svgCamera.js';
 import { keep } from '../lib/keep.js';
+import { useRaiseOnHover } from '../lib/raiseOnHover.js';
 import { ghostBuilding, frameOf } from '../iso/ghost.js';
 import { reportDepth, usePlanZoom } from '../lib/planZoom.js';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
@@ -103,7 +105,18 @@ function unitOverlay(K, u, s) {
 const TOOL = {
   back: icon(<path d="M10 3 5 8l5 5" />),   // chevron left: back to the building
   meet: icon(<><rect x="4" y="5.5" width="8" height="5" rx="1" /><path d="M5.5 3.5h1M9.5 3.5h1M5.5 12.5h1M9.5 12.5h1" /></>), // table + chairs
+  stair: icon(<path d="M2.5 13.5h3v-3h3v-3h3v-3h2" />),                                                               // a flight of steps
+  lift: icon(<><rect x="3.5" y="2.5" width="9" height="11" rx="1" /><path d="M6.3 6.8 8 5.1l1.7 1.7M6.3 9.2 8 10.9l1.7-1.7" /></>), // car with ▲▼
+  wcW: icon(<><circle cx="8" cy="3.4" r="1.5" /><path d="M8 5.6 5.6 10.6h4.8zM7 10.6v3M9 10.6v3" /></>),             // a woman: dress
+  wcM: icon(<><circle cx="8" cy="3.4" r="1.5" /><path d="M6.2 5.8h3.6v4.4H6.2zM7 10.2v3.3M9 10.2v3.3" /></>),         // a man
 };
+/** The dock's place buttons after Meeting rooms: what each stands for, and its name. */
+const SPOTS = [
+  { key: 'stair', label: 'Stairs', one: 'staircase', many: 'staircases' },
+  { key: 'lift', label: 'Elevators', one: 'elevator', many: 'elevators' },
+  { key: 'wcW', label: "Women's WC", one: "women's restroom", many: "women's restrooms" },
+  { key: 'wcM', label: "Men's WC", one: "men's restroom", many: "men's restrooms" },
+];
 
 /** Zoom range: view width as a share of the fitted width (closest, farthest). */
 const ZOOM = { min: 0.15, max: 1.5 };
@@ -148,7 +161,8 @@ function floorStatic(floor) {
 function floorScene(floor, plans) {
   const { plan, K, shellItems } = floorStatic(floor);
   return keep(`floor-scene:${floor}`, plan.units.map((u) => plans[u.id]), () => {
-    const floorItems = [...plan.units.flatMap((u) => toFloor(plans[u.id], u.ox, u.oy)), ...coreItems()];
+    // each unit's items keep their unit (class u-<unit>): hovering a unit's dock button eases the others back
+    const floorItems = [...plan.units.flatMap((u) => toFloor(plans[u.id], u.ox, u.oy).map((it) => ({ ...it, unit: u.unit }))), ...coreItems()];
     // full-floor view: every unit plus the building core (corridor, elevators, WCs) for circulation
     return { floorItems, scene: renderScene(K, plan, [...floorItems, ...shellItems]) };
   });
@@ -165,6 +179,7 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
   const [unitsOpen, setUnitsOpen] = useState(false);   // the units menu (bottom right), closed on arrival
   const [msg, setMsg] = useState('');
   const svgRef = useRef(null);
+  useRaiseOnHover(svgRef);   // overlapping desk name cards: the hovered one comes to the front
   // the camera: moves are CSS transforms, the viewBox (cam.vb) is written once a move settles (svgCamera)
   // the zoom rail's depth, and the desk name callouts shown only once zoomed in past the fitted view a little
   const depth = reportDepth(K, ZOOM.min, ZOOM.max);
@@ -191,12 +206,13 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
   // the scene's floor layer (renderScene's .floor-hi slot), under every wall, pillar, desk and partition, with
   // no outline
   const areas = useMemo(() => Object.fromEntries(plan.units.map((u) => [u.unit, unitAreaD(K, u)])), [K, plan]);
-  useEffect(() => {
-    const slot = svgRef.current?.querySelector('.floor-hi');
-    if (slot) slot.innerHTML = hoverUnit && areas[hoverUnit] ? `<path class="unit-floor-hi" d="${areas[hoverUnit]}"/>` : '';
-  }, [hoverUnit, areas, scene]);
   // feature overlays: the meeting-room highlight (and, arriving from "Go to KOSIGN", the route to KOSIGN)
   const [showMeet, setShowMeet] = useState(false);
+  const [dockUnit, setDockUnit] = useState(null);   // the unit whose dock button is hovered: the others turn to lines
+  // the dock's place buttons — meeting rooms, stairs, elevators, the women's and men's WCs: the one hovered
+  // lights up its places' floors (spotHover); a click shows (spotOn) its places' glowing highlight
+  const [spotHover, setSpotHover] = useState(null);
+  const [spotOn, setSpotOn] = useState(null);
   // opened from the building: the camera starts on the whole ghosted building and glides down into this
   // floor while the ghost fades in (CSS .ghost-bld); otherwise (another floor, back from a unit, a search,
   // the KOSIGN route) it opens fitted
@@ -218,6 +234,28 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     }
   }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
   const rooms = useMemo(() => meetingRooms(floorItems), [floorItems]);
+  // the places each dock button stands for, as cell rectangles
+  const spots = useMemo(() => {
+    const rect = (it) => { const f = footprint(it); return { gx: it.gx, gy: it.gy, w: f.w, d: f.d }; };
+    return {
+      meet: rooms,
+      stair: floorItems.filter((i) => i.type === 'stair').map(rect),
+      lift: floorItems.filter((i) => i.type === 'elevator').map(rect),
+      wcW: floorItems.filter((i) => i.type === 'wc' && i.gender !== 'm').map(rect),
+      wcM: floorItems.filter((i) => i.type === 'wc' && i.gender === 'm').map(rect),
+    };
+  }, [floorItems, rooms]);
+  useEffect(() => {
+    const slot = svgRef.current?.querySelector('.floor-hi');
+    if (!slot) return;
+    // …and a place button's places' floors, the same way, while that button is hovered
+    const roomsD = spotHover ? spots[spotHover].map((r) => {
+      const x0 = r.gx * CELL, y0 = r.gy * CELL, x1 = (r.gx + r.w) * CELL, y1 = (r.gy + r.d) * CELL;
+      return K.path([[x0, y0, 0], [x1, y0, 0], [x1, y1, 0], [x0, y1, 0]]) + 'Z';
+    }).join('') : '';
+    slot.innerHTML = (hoverUnit && areas[hoverUnit] ? `<path class="unit-floor-hi" d="${areas[hoverUnit]}"/>` : '') +
+      (roomsD ? `<path class="unit-floor-hi" d="${roomsD}"/>` : '');
+  }, [hoverUnit, areas, scene, spotHover, spots, K]);
   // arriving from "Go to KOSIGN": the route from the east lifts to KOSIGN's entrance, walked by a guide
   const kosign = useMemo(() => (guide ? routeToKosign(plan, floorItems, edgeItems(plan)) : null), [guide, plan, floorItems]);
   // welcome: the entrance doors swing as upright leaves when the floor opens
@@ -259,10 +297,10 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     id = requestAnimationFrame(step);
     return () => cancelAnimationFrame(id);
   }, [arrival, K, kosign]);
-  const features = useMemo(() => (showMeet ? meetingOverlay(K, rooms) : '') +
+  const features = useMemo(() => (showMeet ? meetingOverlay(K, rooms) : '') + (spotOn ? meetingOverlay(K, spots[spotOn]) : '') +
     (focus ? meetingOverlay(K, [focus]) : '') +   // the search result, lit as the meeting rooms are
     // arriving by lift, the visitor (drawn per frame) stands at the route's start instead of a walking dot
-    (kosign ? routeOverlay(K, kosign) + (arrival ? '' : guideWalker(K, kosign)) : ''), [K, showMeet, rooms, kosign, arrival, focus]);
+    (kosign ? routeOverlay(K, kosign) + (arrival ? '' : guideWalker(K, kosign)) : ''), [K, showMeet, rooms, spotOn, spots, kosign, arrival, focus]);
 
   const toSvg = useCallback((e) => cam.toSvg(e.clientX, e.clientY), [cam.toSvg]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -311,10 +349,21 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     <ViewTools>
       <SceneButton place="above-start" compact docked label="Building" tip="Back to the whole building" onClick={onBack}>{TOOL.back}</SceneButton>
       <Divider />
-      <FloorUnitButtons floor={floor} onFloor={onFloor} onUnit={onUnit} onHoverUnit={setHoverUnit} />
+      <FloorUnitButtons floor={floor} onFloor={onFloor} onUnit={onUnit} onHoverUnit={(u) => { setHoverUnit(u); setDockUnit(u); }} />
       <Divider />
       <SceneButton place="above" compact docked label={showMeet ? 'Hide rooms' : 'Meeting rooms'} active={showMeet} onClick={() => setShowMeet((v) => !v)}
+        onPointerEnter={() => setSpotHover('meet')} onPointerLeave={() => setSpotHover(null)}
         tip={rooms.length ? `Light up the ${rooms.length} meeting rooms on this floor` : 'No meeting rooms on this floor'}>{TOOL.meet}</SceneButton>
+      {/* stairs, elevators and the restrooms, the same way: hover lights their floors, a click their glow */}
+      {SPOTS.map(({ key, label, one, many }) => {
+        const n = spots[key].length;
+        return (
+          <SceneButton key={key} place="above" compact docked label={spotOn === key ? `Hide ${label.toLowerCase()}` : label} active={spotOn === key}
+            onClick={() => setSpotOn((v) => (v === key ? null : key))}
+            onPointerEnter={() => setSpotHover(key)} onPointerLeave={() => setSpotHover(null)}
+            tip={n ? `Light up the ${n === 1 ? one : `${n} ${many}`} on this floor` : `No ${many} on this floor`}>{TOOL[key]}</SceneButton>
+        );
+      })}
       <Divider />
       <DockMenu items={[{ label: 'Export PNG', icon: 'export', onClick: exportFloor }]} />
     </ViewTools>
@@ -326,7 +375,7 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
         <div ref={stageRef} className="relative flex-1 min-h-0 overflow-hidden stage-glow">
           <svg
             ref={svgRef}
-            className="floor-ov office-lit cam-over select-none touch-none"
+            className="floor-ov office-lit cam-over select-none touch-none" data-dock-unit={dockUnit || undefined} data-spot={spotHover || undefined}
             viewBox={cam.box}
             role="img"
             aria-label={`Isometric plan of floor ${floor} with units ${plan.units.map((u) => u.unit).join(' and ')}. Click a unit to open it.`}

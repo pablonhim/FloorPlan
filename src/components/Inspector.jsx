@@ -2,7 +2,7 @@
 // editing actions and shortcuts live on the bottom bar).
 import { useEffect, useState } from 'react';
 import { baseSize, footprint } from '../iso/grid.js';
-import { SIZES, ZONE_KINDS, PALETTE } from '../model/catalog.js';
+import { SIZES, ZONE_KINDS, PALETTE, isLead } from '../model/catalog.js';
 import Switch, { ICONS } from './Switch.jsx';
 
 const inputCls = 'w-full rounded-md border border-edge bg-recess px-2 py-1.5 text-[12px] text-ink-hi outline-none focus:border-accent placeholder:text-ink/60';
@@ -120,6 +120,8 @@ export default function Inspector({ plan, item, items, patch, resize, select, cu
               <Field label="Team" value={item.team} onCommit={(v) => patch({ team: v })} placeholder="—" list="teams" />
               <Field label="Desk code" value={item.label} onCommit={(v) => patch({ label: v })} placeholder="2C-01" />
               <Field label="Note" value={item.note} onCommit={(v) => patch({ note: v })} placeholder="e.g. 원격 PC" />
+              <Switch checked={isLead(item)} onChange={(lead) => patch({ lead })} label="Team leader" icon={ICONS.inUse}
+                title={isLead(item) ? 'Team leader: the desk is drawn in light wood' : 'Not a team leader'} />
               {item.name ? <Btn onClick={() => patch({ name: '', team: '' })}>Unassign seat</Btn> : null}
             </>
           )}

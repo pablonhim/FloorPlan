@@ -26,6 +26,7 @@ import { ViewTools, Divider, FloorUnitButtons, QuickJump, StatusLine, sentence }
 import DockMenu from './DockMenu.jsx';
 import MenuPanel from './MenuPanel.jsx';
 import { useOneOpen } from '../lib/oneOpen.js';
+import { useRaiseOnHover } from '../lib/raiseOnHover.js';
 
 /** Each item's drawing, made once and kept (by item: an edited item is a new object; a unit's items are
  *  only ever drawn in that unit's frame). Filled ahead of time while the app is idle (prewarmUnits). */
@@ -143,6 +144,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const VB0 = useMemo(() => ({ x: 0, y: 0, w: K.W, h: K.H }), [K]);
   const edges = keep(`unit-edges:${pid}`, [], () => edgeItems(plan));
   const svgRef = useRef(null);
+  useRaiseOnHover(svgRef);   // overlapping desk name cards: the hovered one comes to the front
   const stageRef = useRef(null);
   const [tip, tipMove, tipHide] = useHoverTip(stageRef);
   // welcome: the unit's entrance doors swing as upright leaves when the unit opens
@@ -465,7 +467,8 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     .map((it) => `<g class="tag${isLive(it) ? ' live' : ''}">${renderZoneTag(K, it)}</g>`).join(''), [floorNodes, K]);
 
   const [hoverUnit, setHoverUnit] = useState(null);
-  const [dockUnit, setDockUnit] = useState(null);   // the unit whose button in the dock is hovered: its floor lights up
+  const [dockUnit, setDockUnit] = useState(null);
+  const [jumpGroup, setJumpGroup] = useState(null);   // a quick-jump icon hovered: its places' floors light up   // the unit whose button in the dock is hovered: its floor lights up
   const gliding = useRef(false);
   const glide = (unit) => {
     const nb = neighbours.find((n) => n.unit === unit);
@@ -482,8 +485,25 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     <g key={`${part}-${n.unit}`} data-unit={n.unit} data-noexport="" className={`nb${hoverUnit === n.unit ? ' hot' : ''}${dockUnit === n.unit ? ' dock-hot' : ''}`} dangerouslySetInnerHTML={{ __html: n[part] }} />
   );
 
+  // the dock's quick jumps: only this unit's own places — its teams (department areas), its team leaders'
+  // desks and its meeting rooms; a kind the unit has none of keeps its slot with a "None" badge
+  const jumps = useMemo(() => {
+    const at = (it) => ({ id: it.id, it });
+    const seats = (z) => {   // the desks in a zone (by their centre) and how many are taken
+      const f = footprint(z), ds = items.filter((d) => d.type === 'desk' && d.gx + 2 >= z.gx && d.gx + 2 < z.gx + f.w && d.gy + 2 >= z.gy && d.gy + 2 < z.gy + f.d);
+      return ds.length ? `${ds.filter((d) => d.name).length}/${ds.length} seats` : '';
+    };
+    return {
+      teams: items.filter((z) => z.type === 'zone' && ['dept', 'ceo'].includes(z.kind || 'dept'))
+        .map((z) => ({ ...at(z), label: z.label || 'Team', sub: [z.en, seats(z)].filter(Boolean).join(' · ') })),
+      leads: items.filter(isLead).map((d) => ({ ...at(d), label: d.name, sub: [d.team, d.label].filter(Boolean).join(' · ') })),
+      rooms: items.filter((z) => z.type === 'zone' && z.kind === 'meeting')
+        .map((z) => ({ ...at(z), label: z.label || 'Meeting room', sub: [z.en, z.on ? 'In use' : 'Free'].filter(Boolean).join(' · ') })),
+    };
+  }, [items]);
   const hovered = !ghost && !placing && hoverId && hoverId !== selected ? items.find((i) => i.id === hoverId) : null;
-  const feet = (hovered ? renderFoot(K, hovered, 'foot hover') : '') +
+  const feet = (jumpGroup ? jumps[jumpGroup].map((j) => renderFoot(K, j.it, 'foot hover')).join('') : '') +
+    (hovered ? renderFoot(K, hovered, 'foot hover') : '') +
     (sel && !lifted ? renderFoot(K, sel, 'foot sel') : '') +
     (ghost ? renderFoot(K, ghost.item, `foot${ghost.ok ? '' : ' bad'}`) : '') +
     (hover && !ghost && !hovered ? renderCell(K, hover.cx, hover.cy) : '');
@@ -503,22 +523,6 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   // navigation as one row of round buttons at the bottom left of the drawing (as on the floor
   // view): back to the floor, the floors with this floor's units (this one ringed; another glides over
   // to it), and fit
-  // the dock's quick jumps: only this unit's own places — its teams (department areas), its team leaders'
-  // desks and its meeting rooms; a kind the unit has none of keeps its slot with a "None" badge
-  const jumps = useMemo(() => {
-    const at = (it) => ({ id: it.id, it });
-    const seats = (z) => {   // the desks in a zone (by their centre) and how many are taken
-      const f = footprint(z), ds = items.filter((d) => d.type === 'desk' && d.gx + 2 >= z.gx && d.gx + 2 < z.gx + f.w && d.gy + 2 >= z.gy && d.gy + 2 < z.gy + f.d);
-      return ds.length ? `${ds.filter((d) => d.name).length}/${ds.length} seats` : '';
-    };
-    return {
-      teams: items.filter((z) => z.type === 'zone' && ['dept', 'ceo'].includes(z.kind || 'dept'))
-        .map((z) => ({ ...at(z), label: z.label || 'Team', sub: [z.en, seats(z)].filter(Boolean).join(' · ') })),
-      leads: items.filter(isLead).map((d) => ({ ...at(d), label: d.name, sub: [d.team, d.label].filter(Boolean).join(' · ') })),
-      rooms: items.filter((z) => z.type === 'zone' && z.kind === 'meeting')
-        .map((z) => ({ ...at(z), label: z.label || 'Meeting room', sub: [z.en, z.on ? 'In use' : 'Free'].filter(Boolean).join(' · ') })),
-    };
-  }, [items]);
   const jumpTo = (j) => {
     const f = footprint(j.it);
     setSelected(j.id); setMsg('');
@@ -560,9 +564,9 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
         onUnit={(f, u) => glide(u)} />
       <Divider />
       {/* this unit's own places only: its teams, team leaders and meeting rooms */}
-      <QuickJump label="Teams" icon={JUMP_ICON.teams} items={jumps.teams} onPick={jumpTo} onHover={(j) => setHoverId(j?.id || null)} />
-      <QuickJump label="Team leaders" icon={JUMP_ICON.leads} items={jumps.leads} onPick={jumpTo} onHover={(j) => setHoverId(j?.id || null)} />
-      <QuickJump label="Meeting rooms" icon={JUMP_ICON.rooms} items={jumps.rooms} onPick={jumpTo} onHover={(j) => setHoverId(j?.id || null)} />
+      <QuickJump label="Teams" icon={JUMP_ICON.teams} items={jumps.teams} onPick={jumpTo} onHover={(j) => setHoverId(j?.id || null)} onHoverAll={(on) => setJumpGroup(on ? 'teams' : null)} />
+      <QuickJump label="Team leaders" icon={JUMP_ICON.leads} items={jumps.leads} onPick={jumpTo} onHover={(j) => setHoverId(j?.id || null)} onHoverAll={(on) => setJumpGroup(on ? 'leads' : null)} />
+      <QuickJump label="Meeting rooms" icon={JUMP_ICON.rooms} items={jumps.rooms} onPick={jumpTo} onHover={(j) => setHoverId(j?.id || null)} onHoverAll={(on) => setJumpGroup(on ? 'rooms' : null)} />
       <Divider />
       <DockMenu items={[
         { label: 'Export PNG', icon: 'export', onClick: exportPlan },
