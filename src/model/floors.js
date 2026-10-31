@@ -146,6 +146,7 @@ export function sanitize(raw, plan) {
     if (typeof r.locked === 'boolean') it.locked = r.locked;
     if (Number.isInteger(r.n)) it.n = r.n;
     if (r.flip === true) it.flip = true;
+    if (Number.isInteger(r.layer) && r.layer !== 0) it.layer = Math.max(-9, Math.min(9, r.layer));   // drawing order override
     if (out.some((o) => o.id === it.id)) it.id = newId(it.type);
     if (!validate(out, it, plan)) out.push(it);
   }
@@ -356,6 +357,7 @@ function entryFor(a, before, after) {
         const label = cur.label || 'desk';
         return { id: a.id, text: a.patch.name ? `Assigned ${label} to ${a.patch.name}${cur.name ? ` (was ${cur.name})` : ''}` : `Unassigned ${label} (was ${cur.name})` };
       }
+      if (Object.keys(a.patch).join() === 'layer') return { id: a.id, text: `${(a.patch.layer || 0) > (cur?.layer || 0) ? 'Brought forward' : 'Sent backward'} ${what(next)}` };
       const keys = Object.keys(a.patch).filter((k) => !['id', 'type', 'gx', 'gy', 'rot', 'w', 'd'].includes(k));
       return keys.length ? { id: a.id, text: `Edited ${what(next)} · ${keys.join(', ')}` } : null;
     }

@@ -8,7 +8,9 @@ import { depthSort } from '../iso/depth.js';
 import { renderParts } from '../iso/parts.js';
 import { elevatorParts } from '../model/catalog.js';
 import { shadowLayer, roundedRectPath } from '../iso/shadow.js';
-import { RENTED, TOTAL_FLOORS, UNITS, PLANS, planId, stats } from '../model/floors.js';
+import { RENTED, TOTAL_FLOORS, UNITS, PLANS, UNIT_AT, planId, stats } from '../model/floors.js';
+import { itemNode } from '../iso/render.js';
+import { CELL } from '../iso/units.js';
 import { FOOTPRINT, EXTENT, PILLARS, LIFTS, facades, strips } from '../model/building.js';
 import IsoDefs from './IsoDefs.jsx';
 import SceneButton, { icon } from './SceneButton.jsx';
@@ -631,7 +633,49 @@ function paneOrder(floor) {
   return { rank, variant };
 }
 
-export function buildSvg({ occ, cursor, away, vipArrived, vipGone }) {
+/**
+ * The rented floors' interiors, seen softly through their frosted windows: for each, a backdrop filling the
+ * storey (its far walls), the floor slab, then the live layout's walls, glass, partitions, pillars and
+ * furniture as plain blocks, depth-sorted — all blurred (CSS .twr-int), drawn before the façades so only the
+ * windows show them. A plan cell is 20 cm, one tower unit: the plans' grid starts on the west wall line
+ * (0.6 m) at the north façade.
+ */
+const INT_H = { wall: FH - 2, glass: FH - 2, partition: 6, pillar: FH - 2, cabinet: 9, storeroom: FH - 2, serverRack: 9,
+  desk: 3.8, table: 3.8, roundTable: 3.8, meetingTable: 3.8, counter: 5.4, drawer: 3, massageChair: 5, elevator: FH - 2, wc: FH - 2 };
+function interiors(plans) {
+  if (!plans) return '';
+  const { box, path } = K, S = 0.1, X0 = wx(0.6), Y0 = wy(0);   // plan units (2 cm) → tower units (20 cm)
+  let s = '';
+  for (const f of RENTED) {
+    const z = PZ + f * FH, ring = (zz) => FOOTPRINT.map(([x, y]) => [wx(x), wy(y), zz]);
+    const pts = [...ring(z), ...ring(z + FH)].map(([x, y, zz]) => K.P(x, y, zz));
+    const hull = (() => {   // the storey's outline on screen (convex hull of the footprint at floor and ceiling)
+      const q = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]), cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+      const lo = [], up = [];
+      for (const r of q) { while (lo.length > 1 && cr(lo.at(-2), lo.at(-1), r) <= 0) lo.pop(); lo.push(r); }
+      for (const r of q.reverse()) { while (up.length > 1 && cr(up.at(-2), up.at(-1), r) <= 0) up.pop(); up.push(r); }
+      return lo.slice(0, -1).concat(up.slice(0, -1));
+    })();
+    s += `<g class="twr-int" data-f="${f}"><path class="twr-int-back" d="M${hull.map((p) => p.map((v) => v.toFixed(1)).join(' ')).join('L')}Z"/>`;
+    s += `<path class="face top twr-int-floor" d="${path(ring(z + 0.2))}Z"/>`;
+    const boxes = [];
+    for (const u of UNITS[f]) {
+      const [ox, oy] = UNIT_AT[u];
+      for (const it of plans[planId(f, u)] || []) {
+        const h = INT_H[it.type];
+        if (!h) continue;
+        const n = itemNode(it);
+        const x0 = X0 + (n.x0 + ox * CELL) * S, y0 = Y0 + (n.y0 + oy * CELL) * S, x1 = X0 + (n.x1 + ox * CELL) * S, y1 = Y0 + (n.y1 + oy * CELL) * S;
+        boxes.push({ x0, y0, x1, y1, z0: z, z1: z + h, cls: `twr-int-${['wall', 'glass', 'partition', 'pillar', 'storeroom', 'elevator', 'wc'].includes(it.type) ? 'struct' : 'furn'}${it.type === 'glass' ? ' glassy' : ''}` });
+      }
+    }
+    for (const b of depthSort(boxes)) s += box(b.x0, b.y0, b.z0, b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0, 0, b.cls);
+    s += `</g>`;
+  }
+  return s;
+}
+
+export function buildSvg({ occ, cursor, away, vipArrived, vipGone, plans }) {
   const { P, TOP, FRONT, SIDE, box, path } = K;
   const panes = Object.fromEntries(Array.from({ length: NF }, (_, i) => [i, paneOrder(i)]));
   const lit = (i) => {
@@ -671,11 +715,19 @@ export function buildSvg({ occ, cursor, away, vipArrived, vipGone }) {
   svg += tipG('Public restroom', '공용 화장실', publicWC());
 
   svg += `<g class="bld">`; // the building itself: façades, roof and roof furniture (x-rayed on demand)
+  svg += interiors(plans);   // floors 2 and 4 inside, seen through their frosted windows
   // ---- façades, back to front: wall, per-floor bands with windows, pilasters on the pillar grid ----
-  for (const f of ORDERED) {
+  for (const [fi, f] of ORDERED.entries()) {
     const t = f.front ? FRONT(wx(f.x0), wy(f.y), ZTOP) : SIDE(wx(f.x), wy(f.y1), ZTOP);
     const side = f.front ? 'front' : 'side';
-    let s = `<g transform="${t}"><rect class="face struct ${side}" width="${f.len}" height="${H}"/>`;
+    // the rented floors' windows are real openings (their frosted panes let the floor inside show,
+    // interiors()): the wall, the floor bands and the grain are masked out there
+    const mid = `fac-${fi}`, holes = plans ? RENTED.map((i) => f.slots.map((sl) =>
+      `<rect x="${sl.x.toFixed(2)}" y="${H - (i + 1) * FH + 2.6}" width="${sl.w.toFixed(2)}" height="${FH - 5.2}"/>`).join('')).join('') : '';
+    const mask = holes ? ` mask="url(#${mid})"` : '';
+    let s = `<g transform="${t}">` + (holes ? `<mask id="${mid}" maskUnits="userSpaceOnUse" x="-10" y="-10" width="${f.len + 20}" height="${H + 20}">` +
+      `<rect x="-10" y="-10" width="${f.len + 20}" height="${H + 20}" fill="#fff"/><g fill="#000">${holes}</g></mask>` : '') +
+      `<rect class="face struct ${side}" width="${f.len}" height="${H}"${mask}/>`;
     const base = FACES.slice(0, FACES.indexOf(f)).reduce((a, g) => a + g.slots.length, 0); // slot index offset
     for (let i = 0; i < NF; i++) {   // floor i (G = 0) is storey i + 1 from the ground
       const v = H - (i + 1) * FH;
@@ -683,7 +735,7 @@ export function buildSvg({ occ, cursor, away, vipArrived, vipGone }) {
       const n = lit(i);
       // the bloom halo only on rented floors: on the others it is never visible, and every blur filter
       // costs a repaint whenever the view moves
-      s += `<g class="${flCls(i)}" data-f="${i}"><rect class="face band struct ${side}" y="${v}" width="${f.len}" height="${FH}"/>` +
+      s += `<g class="${flCls(i)}" data-f="${i}"><rect class="face band struct ${side}" y="${v}" width="${f.len}" height="${FH}"${RENTED.includes(i) ? mask : ''}/>` +
         // the rented floors and the lobby (lit all night) bloom at night
         (RENTED.includes(i) || i === 0 ? `<rect class="halo" x="-3" y="${v - 2}" width="${f.len + 6}" height="${FH + 4}" filter="url(#bloom)"/>` : '');
       s += `<line class="detail" x1="0" y1="${v + FH - 1.4}" x2="${f.len}" y2="${v + FH - 1.4}"/><g class="win">`;
@@ -695,7 +747,7 @@ export function buildSvg({ occ, cursor, away, vipArrived, vipGone }) {
       });
       s += `</g></g>`;
     }
-    s += `<rect class="bld-grain" width="${f.len}" height="${H}"/>`;   // a faint concrete grain over the face
+    s += `<rect class="bld-grain" width="${f.len}" height="${H}"${mask}/>`;   // a faint concrete grain over the face
     for (const u of f.us) s += `<rect class="face struct pilaster ${side}" x="${(u - 1.6).toFixed(2)}" y="0" width="3.2" height="${H}"/>`;
     svg += s + `</g>`;
   }
@@ -1259,7 +1311,7 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
   const vipPending = useRef(new Set());                             // bays claimed by a car still driving there
   // the scene string does not depend on the hovered floor: hovering just moves the .cursor class
   // (rebuilding and re-parsing ~2,000 elements per hover was the main source of hover lag)
-  const svg = useMemo(() => buildSvg({ occ: occupancy, cursor: null, away, vipArrived, vipGone }), [occupancy, away, vipArrived, vipGone]);
+  const svg = useMemo(() => buildSvg({ occ: occupancy, cursor: null, away, vipArrived, vipGone, plans }), [occupancy, away, vipArrived, vipGone, plans]);
   useLayoutEffect(() => {
     const el = holder.current;
     if (!el) return;

@@ -12,6 +12,8 @@ export function behind(a, b) {
 }
 
 const key = (n) => n.x0 + n.y0 + n.z0 * 1e-3;
+/** A node's layer (its item's `layer`, set with Bring forward / Send backward): 0 unless set. */
+const layerOf = (n) => n.layer ?? n.it?.layer ?? 0;
 
 /**
  * Do the two boxes' screen hexagons overlap? A box projects to a hexagon whose sides run along the
@@ -35,7 +37,11 @@ export function depthSort(nodes) {
     for (let j = 0; j < n; j++) {
       // only boxes that cover each other on screen need an order; constraining the rest as well can
       // close a loop (desk leg < desk top < monitor < leg) and drop the sort to its rough fallback
-      if (i !== j && behind(nodes[i], nodes[j]) && !behind(nodes[j], nodes[i]) && overlapOnScreen(nodes[i], nodes[j])) {
+      // where two pieces cover each other, a higher layer always goes on top; on the same layer the
+      // geometry decides
+      if (i === j || !overlapOnScreen(nodes[i], nodes[j])) continue;
+      const li = layerOf(nodes[i]), lj = layerOf(nodes[j]);
+      if (li !== lj ? li < lj : behind(nodes[i], nodes[j]) && !behind(nodes[j], nodes[i])) {
         out[i].push(j);
         indeg[j]++;
       }

@@ -171,7 +171,10 @@ function officeChair(x, y, W, D, facing, live) {
     { x: c - f / 2, y: m - f / 2, z: 0, w: f, d: f, h: 1, r: f / 2, cls: 'furn chair-base' },          // round foot
     { x: c - 0.8, y: m - 0.8, z: 1, w: 1.6, d: 1.6, h: 17, cls: 'furn chair-base' },                   // column
     { x: 1, y: 1, z: 18, w: W - 2, d: D - 3, h: 4, r: Math.min(W, D) / 4, cls: `seat furn chair${L}` }, // seat
-    { x: W * 0.09, y: D - 2.6, z: 22, w: W * 0.82, d: 1.6, h: 17, r: 0.8, cls: `seat backrest furn chair shell${L}` },  // backrest: one panel
+    // the backrest: one panel, as two thin layers — the sitter's side (shell-in) and the back (shell-out) — so
+    // each can be shaded on its own whichever way the chair is turned
+    { x: W * 0.09, y: D - 2.6, z: 22, w: W * 0.82, d: 0.8, h: 17, r: 0.4, cls: `seat backrest furn chair shell shell-in${L}` },
+    { x: W * 0.09, y: D - 1.8, z: 22, w: W * 0.82, d: 0.8, h: 17, r: 0.4, cls: `seat backrest furn chair shell shell-out${L}` },
   ];
   const turn = ({ x: px, y: py, w, d, ...p }) => (
     facing === '+y' ? { ...p, x: px, y: D - py - d, w, d }

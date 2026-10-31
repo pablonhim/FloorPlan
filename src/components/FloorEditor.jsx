@@ -12,7 +12,7 @@ import { isLive, describe, defaults, LAYER, CORE } from '../model/catalog.js';
 import { PLANS, UNITS, stats, floorPlan, coreItems, toFloor } from '../model/floors.js';
 import { exportPng } from '../lib/exportPng.js';
 import IsoDefs from './IsoDefs.jsx';
-import { entryDoors, roomDoorIds, useDoorSwing } from '../iso/doorSwing.js';
+import { entryDoors, roomDoorIds, useDoorSwing, leafNode } from '../iso/doorSwing.js';
 import { focusBox, overlaps, useSvgCamera } from '../lib/svgCamera.js';
 import { reportDepth, usePlanZoom } from '../lib/planZoom.js';
 import { keep } from '../lib/keep.js';
@@ -46,6 +46,9 @@ const ItemG = memo(function ItemG({ K, item, cls, cut, ghost, faded, unit }) {
     ? <g className={cls} data-noexport={ghost ? '' : undefined} dangerouslySetInnerHTML={{ __html: html }} />
     : <g data-id={item.id} className={cls} {...tip} dangerouslySetInnerHTML={{ __html: html }} />;
 });
+
+/** The pieces whose drawing order can be changed (Bring forward / Send backward). */
+const LAYERED = new Set(['wall', 'pillar', 'glass', 'partition', 'door']);
 
 const Html = ({ html, ...rest }) => <g {...rest} dangerouslySetInnerHTML={{ __html: html }} />;
 
@@ -338,12 +341,22 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     else { dispatch({ type: 'rotate', plan: pid, id: sel.id }); setMsg(`rotated to ${next.rot}°`); }
   }, [placing, sel, check, plan, pid, dispatch, ghostAt, placeGhost]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // drawing order for walls and pillars (z-index): a layer above or below the rest where they overlap; a
+  // visual setting only, so it works on locked pieces too
+  const layer = useCallback((dir) => {
+    if (!sel || !LAYERED.has(sel.type)) return;
+    const next = Math.max(-9, Math.min(9, (sel.layer || 0) + dir));
+    if (next === (sel.layer || 0)) return;
+    dispatch({ type: 'patch', plan: pid, id: sel.id, patch: { layer: next } });
+    setMsg(`${dir > 0 ? 'brought forward' : 'sent backward'} · layer ${next}`);
+  }, [sel, pid, dispatch]);
+
   const remove = useCallback(() => {
     if (!sel || guard(sel)) return;
     dispatch({ type: 'remove', plan: pid, id: sel.id });
     setMsg(`deleted ${describe(sel)}`);
     setSelected(null);
-  }, [sel, pid, dispatch]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sel, pid, dispatch]);
 
   const nudge = useCallback((dx, dy) => {
     if (!sel || guard(sel)) return;
@@ -368,6 +381,8 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
       const k = e.key;
       if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'z') { dispatch({ type: 'undo' }); setMsg('undo'); }
       else if (k === 'r' || k === 'R') rotate();
+      else if (k === ']') layer(1);
+      else if (k === '[') layer(-1);
       else if (k === 'Delete' || k === 'Backspace') remove();
       else if (k === 'Escape') {
         if (drag.current) { drag.current = null; setGhost(null); }
@@ -383,7 +398,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [rotate, remove, nudge, placing, dispatch, active]);
+  }, [rotate, remove, layer, nudge, placing, dispatch, active]);
 
   // ---------- scene ----------
   const plate = unitPlate(pid);
@@ -398,19 +413,20 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
 
   // floor layer (zones, then door swings) lies under everything; the rest is depth-sorted
   const floorNodes = useMemo(() => items.filter((it) => LAYER[it.type] === 'floor')
-    .sort((a, b) => (a.type === b.type ? area(b) - area(a) : a.type === 'zone' ? -1 : 1)), [items]);
+    .sort((a, b) => (a.layer || 0) - (b.layer || 0) || (a.type === b.type ? area(b) - area(a) : a.type === 'zone' ? -1 : 1)), [items]);
   const solidNodes = useMemo(() => {
     const list = [...items.filter((it) => LAYER[it.type] !== 'floor'), ...edges]
       .map((it) => ({ ...itemNode(it), it, cls: it.id.startsWith('edge-') ? 'it edge' : clsOf(it) }));
     for (const it of core?.solid || []) list.push({ ...itemNode(it), it, faded: true, cls: 'it core-faded' });
     for (const n of neighbours) for (const it of n.near) list.push({ ...itemNode(it), it, faded: true, unit: n.unit, cls: 'it nbi' });
     if (ghost) list.push({ ...itemNode(ghost.item), it: ghost.item, ghost: true, cls: `it ghost${isLive(ghost.item) ? ' live' : ''}${ghost.ok ? '' : ' bad'}` });
+    for (const d of swingDoors) list.push({ ...leafNode(d), slot: d.id });   // the swinging door leaves' slots
     return depthSort(list);
-  }, [items, edges, ghost, selected, lifted, core, neighbours]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [items, edges, ghost, selected, lifted, core, neighbours, swingDoors]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const shadows = useMemo(() => renderShadows(K, plan, items, edges), [K, plan, items, edges]);
   // frosted glass walls: what stands behind each one, blurred, drawn just under it (glassBackdrops)
-  const frost = useMemo(() => glassBackdrops(K, solidNodes, (it) => htmlOf(K, it, cutH), cutH), [K, solidNodes, cutH]);
+  const frost = useMemo(() => glassBackdrops(K, solidNodes.filter((n) => !n.slot), (it) => htmlOf(K, it, cutH), cutH), [K, solidNodes, cutH]);
 
   // the employees' names, floating above their desks (renderDeskCallouts), over everything
   const callouts = useMemo(() => renderDeskCallouts(K, items), [K, items]);
@@ -465,6 +481,12 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
           <span className="pop-in"><SceneButton place="above" tall label="Rotate" tip="Turn the selected item (or the one being placed) · R" onClick={rotate}>
             {icon(<><path d="M13 8a5 5 0 1 1-1.5-3.6" /><path d="M13 2.5V5h-2.5" /></>)}</SceneButton></span>
         )}
+        {sel && LAYERED.has(sel.type) && (<>
+          <span className="pop-in"><SceneButton place="above" tall label="Bring forward" tip={`Draw it over what it overlaps · ]${sel.layer ? ` · layer ${sel.layer}` : ''}`} onClick={() => layer(1)}>
+            {icon(<><rect x="5.5" y="2.5" width="8" height="8" rx="1" /><path d="M2.5 6v6.5a1 1 0 0 0 1 1H10" /></>)}</SceneButton></span>
+          <span className="pop-in"><SceneButton place="above" tall label="Send backward" tip={`Draw it under what it overlaps · [${sel.layer ? ` · layer ${sel.layer}` : ''}`} onClick={() => layer(-1)}>
+            {icon(<><rect x="2.5" y="5.5" width="8" height="8" rx="1" /><path d="M5.5 2.5h7a1 1 0 0 1 1 1v7" strokeDasharray="1.6 1.4" /></>)}</SceneButton></span>
+        </>)}
         {sel && !sel.locked && (
           <span className="pop-in"><SceneButton place="above" tall label="Delete" tip="Remove the selected item · Delete" onClick={remove}>
             {icon(<><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" /><path d="M7 7v4M9 7v4" /></>)}</SceneButton></span>
@@ -534,6 +556,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
             <Html html={shadows} className="shell-shadows" />
             <Html html={feet} data-noexport="" />
             {solidNodes.map((n) => {
+              if (n.slot) return <g key={`slot:${n.slot}`} className="door-slot" data-door={n.slot} pointerEvents="none" data-noexport="" />;
               const key = n.ghost ? 'ghost' : n.faded ? `f:${n.it.id}` : n.it.id, back = !n.ghost && frost.get(n.it.id);
               return [back && <Html key={`fb:${key}`} html={back} />, <ItemG key={key} K={K} item={n.it} cls={n.cls} cut={cutH} ghost={n.ghost} faded={n.faded} unit={n.unit} />];
             })}

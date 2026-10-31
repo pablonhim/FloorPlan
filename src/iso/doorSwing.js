@@ -30,7 +30,44 @@ export function entryDoors(items) {
     if (d.type === 'door' && !String(d.id).startsWith('core') && servers.some((z) => touches(d, z))) best.set(`server:${d.id}`, d);
   }
   const meet = roomDoors(items), ids = new Set(meet.map((m) => m.id));
-  return [...[...best.values()].filter((d) => !ids.has(d.id)), ...meet];
+  const lines = items.filter((w) => w.type === 'glass' || w.type === 'wall').map((w) => cellRect(w));
+  const toward = (d) => ents.reduce((a, z) => (!a || dist(d, z) < dist(d, a) ? z : a), null);
+  return [...[...best.values()].filter((d) => !ids.has(d.id)).map((d) => lineLeaf(d, lines, toward(d)) || d), ...meet];
+}
+
+/**
+ * An entrance (or server-room) door as a leaf lying in the wall / glass line it sits in — the imported doors
+ * are all stored at 0°, so their rotation does not say which way the wall runs: the nearest run through the
+ * door's 4 × 4 cells does. The leaf spans the door's own part of the opening in that line (a double door's
+ * two leaves meet in the middle), hinged at its start (its end when flipped), and swings toward the entrance
+ * zone `to` (else into the unit, +y / +x). Null when no wall runs by it (the door's own rotation is used).
+ */
+function lineLeaf(d, lines, to) {
+  const cx = d.gx + 2, cy = d.gy + 2;
+  const runs = (vert) => lines.filter((r) => (vert
+    ? r.y1 - r.y0 >= r.x1 - r.x0 && Math.abs((r.x0 + r.x1) / 2 - cx) <= 3 && r.y0 <= d.gy + 8 && r.y1 >= d.gy - 4
+    : r.x1 - r.x0 >= r.y1 - r.y0 && Math.abs((r.y0 + r.y1) / 2 - cy) <= 3 && r.x0 <= d.gx + 8 && r.x1 >= d.gx - 4));
+  const off = (vert) => Math.min(Infinity, ...runs(vert).map((r) => Math.abs((vert ? (r.x0 + r.x1) / 2 - cx : (r.y0 + r.y1) / 2 - cy))));
+  const vert = off(true) < off(false);
+  const rs = runs(vert);
+  if (!rs.length) return null;
+  const mid = (r) => (vert ? (r.x0 + r.x1) / 2 : (r.y0 + r.y1) / 2);
+  const line = mid(rs.reduce((a, b) => (Math.abs(mid(b) - (vert ? cx : cy)) < Math.abs(mid(a) - (vert ? cx : cy)) ? b : a)));
+  const onLine = rs.filter((r) => Math.abs(mid(r) - line) <= 1).map((r) => (vert ? [r.y0, r.y1] : [r.x0, r.x1]));
+  const s0 = vert ? d.gy : d.gx, free = (c) => !onLine.some(([c0, c1]) => c0 <= c && c < c1);
+  // the door's own cells of the opening (a double door's leaves each take their half)
+  let g0 = s0, g1 = s0 + 4;
+  while (g0 < g1 && !free(g0)) g0++;
+  while (g1 > g0 && !free(g1 - 1)) g1--;
+  if (g1 - g0 < 2) { g0 = s0; g1 = s0 + 4; }
+  const len = (g1 - g0) * CELL - 2, a = d.flip ? g1 * CELL - 1 : g0 * CELL + 1, along = d.flip ? -1 : 1;
+  const side = to ? Math.sign((vert ? to.gx + to.w / 2 : to.gy + to.d / 2) - line) || 1 : 1;
+  return {
+    id: d.id, len,
+    H: vert ? [line * CELL, a] : [a, line * CELL],
+    shut: vert ? [0, along] : [along, 0],
+    open: vert ? [side, 0] : [0, side],
+  };
 }
 
 /**
@@ -111,30 +148,43 @@ export function roomDoors(items) {
   return out;
 }
 
-/** Ids of the doors that roomDoors draws as swinging leaves (their flat floor symbol is hidden). */
-export const roomDoorIds = (items) => new Set(roomDoors(items).map((m) => m.id));
+/** Ids of the doors drawn as standing glass leaves (entryDoors: entrances, the server room, meeting rooms and
+ *  offices); their flat floor symbol is hidden. */
+export const roomDoorIds = (items) => new Set(entryDoors(items).map((m) => m.id));
 
 /**
  * The upright leaf of door `d` (a 4 × 4-cell door part, hinge at its local (2, 2), shut along local +x,
  * open along local +y; turned by d.rot about its centre) at swing phase phi (0 shut, 1 fully open,
  * negative: past the frame the other way).
  */
-function leaf(K, d, phi) {
-  let H, shut, open, len;
-  if (d.H) ({ H, shut, open, len } = d);   // a room leaf descriptor (roomDoors)
-  else {
-    const S = 4 * CELL, cx = d.gx * CELL + S / 2, cy = d.gy * CELL + S / 2, a = ((d.rot || 0) * Math.PI) / 180;
-    const rot = ([x, y]) => [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)];
-    // a mirrored leaf (d.flip, the right leaf of a double door) hinges at the other end and shuts the other way
-    const [hx, hy] = rot([d.flip ? S / 2 - 2 : 2 - S / 2, 2 - S / 2]);
-    shut = rot([d.flip ? -1 : 1, 0]); open = rot([0, 1]); len = S - 4; H = [cx + hx, cy + hy];
-  }
+function frameOf(d) {
+  if (d.H) return d;   // a leaf descriptor (roomDoors, lineLeaf)
+  const S = 4 * CELL, cx = d.gx * CELL + S / 2, cy = d.gy * CELL + S / 2, a = ((d.rot || 0) * Math.PI) / 180;
+  const rot = ([x, y]) => [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)];
+  // a mirrored leaf (d.flip, the right leaf of a double door) hinges at the other end and shuts the other way
+  const [hx, hy] = rot([d.flip ? S / 2 - 2 : 2 - S / 2, 2 - S / 2]);
+  return { id: d.id, shut: rot([d.flip ? -1 : 1, 0]), open: rot([0, 1]), len: S - 4, H: [cx + hx, cy + hy] };
+}
+const LEAF_H = WALL_H * 0.85;
+export function leaf(K, d, phi) {
+  const { H, shut, open, len } = frameOf(d);
   const t = (phi * Math.PI) / 2;
   const dir = [shut[0] * Math.cos(t) + open[0] * Math.sin(t), shut[1] * Math.cos(t) + open[1] * Math.sin(t)];
-  const T = [H[0] + dir[0] * len, H[1] + dir[1] * len], h = WALL_H * 0.85;
-  return `<path class="door-panel" d="${K.path([[H[0], H[1], 0], [T[0], T[1], 0], [T[0], T[1], h], [H[0], H[1], h]])}Z"/>` +
-    `<path class="door-panel-edge" d="${K.path([[T[0], T[1], 0], [T[0], T[1], h]])}"/>`;
+  const T = [H[0] + dir[0] * len, H[1] + dir[1] * len];
+  // one pane, outlined in the glass's own line (no dark edge stroke down its free side)
+  return `<path class="door-panel" d="${K.path([[H[0], H[1], 0], [T[0], T[1], 0], [T[0], T[1], LEAF_H], [H[0], H[1], LEAF_H]])}Z"/>`;
 }
+
+/**
+ * Where a swinging leaf sits in the depth order: a thin box along its shut line (world units, a depth-sort
+ * node). The views draw an empty slot <g data-door="id"> at that place among the solids, and the swing
+ * writes each leaf into its slot, so walls and furniture in front of a door still cover it.
+ */
+export function leafNode(d) {
+  const { H, shut, len } = frameOf(d), T = [H[0] + shut[0] * len, H[1] + shut[1] * len];
+  return { x0: Math.min(H[0], T[0]) - 1, x1: Math.max(H[0], T[0]) + 1, y0: Math.min(H[1], T[1]) - 1, y1: Math.max(H[1], T[1]) + 1, z0: 0, z1: LEAF_H, door: d.id };
+}
+export const leafSlot = (id) => `<g class="door-slot" data-door="${id}"></g>`;
 
 // swing profile over the animation: open, back past the frame, settle shut
 const KEYS = [[0, 0], [0.38, 0.85], [0.66, -0.18], [0.84, 0.06], [1, 0]];
@@ -147,12 +197,23 @@ function phase(k) {
   return 0;
 }
 
-/** Plays the swing into the <g> behind `ref` whenever `key` changes (e.g. the floor or unit shown). */
+/**
+ * Plays the swing whenever `key` changes (e.g. the floor or unit shown): each leaf is written into its slot
+ * among the solids (leafSlot) inside the svg behind `ref`; a leaf without a slot goes into `ref` itself.
+ */
 export function useDoorSwing(ref, K, doors, key, ms = 1300) {
   useEffect(() => {
     const g = ref.current;
     if (!g || !doors.length) { if (g) g.innerHTML = ''; return undefined; }
-    const draw = (phi) => { g.innerHTML = doors.map((d) => leaf(K, d, phi)).join(''); };
+    const svg = g.ownerSVGElement || g;
+    const draw = (phi) => {
+      let loose = '';
+      for (const d of doors) {
+        const slot = svg.querySelector(`.door-slot[data-door="${CSS.escape(d.id)}"]`), html = leaf(K, d, phi);
+        if (slot) slot.innerHTML = html; else loose += html;
+      }
+      g.innerHTML = loose;
+    };
     if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) { draw(0); return undefined; }
     let id = 0;
     const t0 = performance.now() + 250;
@@ -164,4 +225,16 @@ export function useDoorSwing(ref, K, doors, key, ms = 1300) {
     id = requestAnimationFrame(step);
     return () => cancelAnimationFrame(id);
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  // an edit redraws the scene (and its empty slots) without a new swing: put the leaves back, shut
+  useEffect(() => {
+    const g = ref.current;
+    if (!g) return;
+    const svg = g.ownerSVGElement || g;
+    let loose = '';
+    for (const d of doors) {
+      const slot = svg.querySelector(`.door-slot[data-door="${CSS.escape(d.id)}"]`);
+      if (slot) { if (!slot.firstChild) slot.innerHTML = leaf(K, d, 0); } else loose += leaf(K, d, 0);
+    }
+    if (loose && !g.firstChild) g.innerHTML = loose;
+  }); // eslint-disable-line react-hooks/exhaustive-deps
 }

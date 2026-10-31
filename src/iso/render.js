@@ -6,7 +6,7 @@ import { renderParts, placeRect } from './parts.js';
 import { partsFor, SIZES, zoneTag, LAYER, isLive, tipFor, TIP_LANGS, NEUTRAL_TYPES } from '../model/catalog.js';
 import { depthSort } from './depth.js';
 import { shadowLayer, rectsPath, hull } from './shadow.js';
-import { roomDoorIds } from './doorSwing.js';
+import { roomDoorIds, entryDoors, leafNode, leafSlot } from './doorSwing.js';
 
 const TW = TILE * CELL; // one tile in world units
 
@@ -245,12 +245,15 @@ export function renderScene(K, plan, items, { bare = false } = {}) {
   // faded, cast no shadow and are no targets (.it.faded)
   const g = (it, extra = '') => `<g class="it${it.faded ? ' faded' : ''}${isLive(it) ? ' live' : ''}${cafe.has(it.id) ? ' cafe' : ''}${swung.has(it.id) ? ' swung' : ''}${extra}"${extra ? '' : tipAttrs(it)}>${renderItem(K, it)}</g>`;
   const floor = items.filter((it) => LAYER[it.type] === 'floor')
-    .sort((a, b) => (a.type === b.type ? area(b) - area(a) : a.type === 'zone' ? -1 : 1));
+    .sort((a, b) => (a.layer || 0) - (b.layer || 0) || (a.type === b.type ? area(b) - area(a) : a.type === 'zone' ? -1 : 1));   // a layer (Bring forward / Send backward) first
   let s = (bare ? '' : renderPlate(K, plan)) + floor.map((it) => g(it)).join('');
   if (!bare) s += renderShadows(K, plan, items.filter((it) => !it.faded), edges);
-  const solid = depthSort([...items.filter((it) => LAYER[it.type] !== 'floor'), ...edges].map((it) => ({ ...itemNode(it), it })));
-  const frost = glassBackdrops(K, solid.map((n) => ({ ...n, cls: `it${n.it.faded ? ' faded' : ''}${cafe.has(n.it.id) ? ' cafe' : ''}` })), (it) => renderItem(K, it));
-  s += solid.map((n) => (frost.get(n.it.id) || '') + g(n.it, n.it.id.startsWith('edge-') ? ' edge' : '')).join('');
+  // the swinging door leaves' slots (doorSwing) take their place among the solids
+  const slots = bare ? [] : entryDoors(items.filter((it) => !it.faded)).map((d) => ({ ...leafNode(d), slot: d.id }));
+  const solid = depthSort([...items.filter((it) => LAYER[it.type] !== 'floor'), ...edges].map((it) => ({ ...itemNode(it), it })).concat(slots));
+  const solids = solid.filter((n) => !n.slot);
+  const frost = glassBackdrops(K, solids.map((n) => ({ ...n, cls: `it${n.it.faded ? ' faded' : ''}${cafe.has(n.it.id) ? ' cafe' : ''}` })), (it) => renderItem(K, it));
+  s += solid.map((n) => (n.slot ? leafSlot(n.slot) : (frost.get(n.it.id) || '') + g(n.it, n.it.id.startsWith('edge-') ? ' edge' : ''))).join('');
   s += floor.filter((it) => it.type === 'zone').map((it) => `<g class="tag${isLive(it) ? ' live' : ''}">${renderZoneTag(K, it)}</g>`).join('');
   if (!bare) s += `<g class="desk-callouts">${renderDeskCallouts(K, items.filter((it) => !it.faded))}</g>`;
   return s;

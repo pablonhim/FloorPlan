@@ -107,6 +107,12 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 .paver-joint { stroke: color-mix(in srgb, var(--line) 55%, var(--paving)); }
 :root:not([data-theme="light"]) .vip-bay { stroke: color-mix(in srgb, var(--line) 85%, transparent); }
 .door-leaf, .door-panel-edge, .entry-handle { stroke: color-mix(in srgb, var(--line) 55%, var(--ink-hi)); }
+/* the glass — glass walls (their panes and mullions) and the unit entrance's glass door leaves — lined in the
+   glass's own blue rather than grey */
+:root { --glass-line: color-mix(in srgb, var(--accent) 55%, var(--struct-shade)); }
+:root:not([data-theme="light"]) { --glass-line: color-mix(in srgb, var(--accent-hi) 60%, var(--struct-shade)); }
+.it .face.pane, .door-panel { stroke: var(--glass-line) !important; stroke-opacity: .85 !important; }
+.it:has(.face.pane) .mullion { stroke: var(--glass-line); stroke-opacity: .7; }
 
 /* time of day on the drawing's faces, by the way each one faces (kernel.box tags them): east faces (.side, +x,
    lower right on screen) and south faces (.front, +y, lower left) take the low sun differently. Morning:
@@ -149,17 +155,17 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
    character. Morning: soft gold on the tops and the east faces; evening: amber on the tops and the south faces
    (the sun is in the south-west); night: a deep cool blue on the tops and east faces. The Corten fins and the
    floors' hover tint keep their own fills. */
-:root[data-sky="morning"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap), :root[data-sky="morning"] .cam-over .it:not(.sel) :is(.face.furn, .face.tableTop).top { fill: color-mix(in srgb, var(--struct-top) 91%, #ffdc8f); }
+:root[data-sky="morning"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap), :root[data-sky="morning"] .cam-over .it.it :is(.face.furn, .face.tableTop).top { fill: color-mix(in srgb, var(--struct-top) 91%, #ffdc8f); }
 :root[data-sky="morning"] .cam-over .face.slab.top { fill: color-mix(in srgb, var(--floor) 94%, #ffdc8f); }
-:root[data-sky="morning"] .cam-over :is(.face.struct, .face.slab, .face.fixture).side:not(.pilaster, .band), :root[data-sky="morning"] .cam-over .it:not(.sel) :is(.face.furn, .face.tableTop).side { fill: color-mix(in srgb, var(--struct-lit) 90%, #ffd27a); }
+:root[data-sky="morning"] .cam-over :is(.face.struct, .face.slab, .face.fixture).side:not(.pilaster, .band), :root[data-sky="morning"] .cam-over .it.it :is(.face.furn, .face.tableTop).side { fill: color-mix(in srgb, var(--struct-lit) 90%, #ffd27a); }
 :root[data-sky="morning"] .twr .fl:not(:hover, .cursor) .face.band.side { fill: color-mix(in srgb, var(--struct-lit) 90%, #ffd27a); }
-:root[data-sky="evening"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap), :root[data-sky="evening"] .cam-over .it:not(.sel) :is(.face.furn, .face.tableTop).top { fill: color-mix(in srgb, var(--struct-top) 89%, #ffb77a); }
+:root[data-sky="evening"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap), :root[data-sky="evening"] .cam-over .it.it :is(.face.furn, .face.tableTop).top { fill: color-mix(in srgb, var(--struct-top) 89%, #ffb77a); }
 :root[data-sky="evening"] .cam-over .face.slab.top { fill: color-mix(in srgb, var(--floor) 93%, #ffb77a); }
-:root[data-sky="evening"] .cam-over :is(.face.struct, .face.slab, .face.fixture).front:not(.pilaster, .band), :root[data-sky="evening"] .cam-over .it:not(.sel) :is(.face.furn, .face.tableTop).front { fill: color-mix(in srgb, var(--struct-shade) 87%, #ffa560); }
+:root[data-sky="evening"] .cam-over :is(.face.struct, .face.slab, .face.fixture).front:not(.pilaster, .band), :root[data-sky="evening"] .cam-over .it.it :is(.face.furn, .face.tableTop).front { fill: color-mix(in srgb, var(--struct-shade) 87%, #ffa560); }
 :root[data-sky="evening"] .twr .fl:not(:hover, .cursor) .face.band.front { fill: color-mix(in srgb, var(--struct-shade) 87%, #ffa560); }
-:root[data-sky="night"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap), :root[data-sky="night"] .cam-over .it:not(.sel) :is(.face.furn, .face.tableTop).top { fill: color-mix(in srgb, var(--struct-top) 86%, #4f72b8); }
+:root[data-sky="night"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap), :root[data-sky="night"] .cam-over .it.it :is(.face.furn, .face.tableTop).top { fill: color-mix(in srgb, var(--struct-top) 86%, #4f72b8); }
 :root[data-sky="night"] .cam-over .face.slab.top { fill: color-mix(in srgb, var(--floor) 90%, #4f72b8); }
-:root[data-sky="night"] .cam-over :is(.face.struct, .face.slab, .face.fixture).side:not(.pilaster, .band), :root[data-sky="night"] .cam-over .it:not(.sel) :is(.face.furn, .face.tableTop).side { fill: color-mix(in srgb, var(--struct-lit) 88%, #3e5c9a); }
+:root[data-sky="night"] .cam-over :is(.face.struct, .face.slab, .face.fixture).side:not(.pilaster, .band), :root[data-sky="night"] .cam-over .it.it :is(.face.furn, .face.tableTop).side { fill: color-mix(in srgb, var(--struct-lit) 88%, #3e5c9a); }
 :root[data-sky="night"] .twr .fl:not(:hover, .cursor) .face.band.side { fill: color-mix(in srgb, var(--struct-lit) 88%, #3e5c9a); }
 /* the neighbouring units' building finish (iso.css --nb-*) takes the sky's cast like the building's own */
 :root[data-sky="morning"], :root[data-sky="morning"] .office-lit {
