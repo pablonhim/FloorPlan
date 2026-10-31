@@ -73,7 +73,8 @@ const liftOpenAt = (t) => {
     : 1 - ease((t - LIFT_T.close[0]) / (LIFT_T.close[1] - LIFT_T.close[0]));
 };
 
-function unitOverlay(K, u, s) {
+/** A unit's floor area on the floor plan, as one path (its tile runs). */
+function unitAreaD(K, u) {
   let d = '';
   u.mask.forEach((row, ty) => {
     let start = -1;
@@ -87,6 +88,11 @@ function unitOverlay(K, u, s) {
       }
     }
   });
+  return d;
+}
+
+function unitOverlay(K, u, s) {
+  const d = unitAreaD(K, u);
   const cx = (u.ox + u.cols / 2) * CELL, cy = (u.oy + u.rows * 0.5) * CELL;
   return `<g class="unit-hit" data-unit="${u.unit}"><path class="unit-area" d="${d}"/>` +
     `<g transform="${K.TOP(cx, cy, 0)}"><text class="unit-name" x="0" y="0" font-size="34" text-anchor="middle">UNIT ${u.unit}</text>` +
@@ -181,6 +187,14 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
 
   const unitStats = useMemo(() => Object.fromEntries(plan.units.map((u) => [u.unit, stats(plans[u.id])])), [plan, plans]);
   const overlay = useMemo(() => plan.units.map((u) => unitOverlay(K, u, unitStats[u.unit])).join(''), [K, plan, unitStats]);
+  // the hovered unit (on the floor, or its button in the dock) lights up on the floor only: its area tinted in
+  // the scene's floor layer (renderScene's .floor-hi slot), under every wall, pillar, desk and partition, with
+  // no outline
+  const areas = useMemo(() => Object.fromEntries(plan.units.map((u) => [u.unit, unitAreaD(K, u)])), [K, plan]);
+  useEffect(() => {
+    const slot = svgRef.current?.querySelector('.floor-hi');
+    if (slot) slot.innerHTML = hoverUnit && areas[hoverUnit] ? `<path class="unit-floor-hi" d="${areas[hoverUnit]}"/>` : '';
+  }, [hoverUnit, areas, scene]);
   // feature overlays: the meeting-room highlight (and, arriving from "Go to KOSIGN", the route to KOSIGN)
   const [showMeet, setShowMeet] = useState(false);
   // opened from the building: the camera starts on the whole ghosted building and glides down into this
@@ -297,7 +311,7 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     <ViewTools>
       <SceneButton place="above-start" compact docked label="Building" tip="Back to the whole building" onClick={onBack}>{TOOL.back}</SceneButton>
       <Divider />
-      <FloorUnitButtons floor={floor} onFloor={onFloor} onUnit={onUnit} />
+      <FloorUnitButtons floor={floor} onFloor={onFloor} onUnit={onUnit} onHoverUnit={setHoverUnit} />
       <Divider />
       <SceneButton place="above" compact docked label={showMeet ? 'Hide rooms' : 'Meeting rooms'} active={showMeet} onClick={() => setShowMeet((v) => !v)}
         tip={rooms.length ? `Light up the ${rooms.length} meeting rooms on this floor` : 'No meeting rooms on this floor'}>{TOOL.meet}</SceneButton>
@@ -356,6 +370,7 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
             return (
               <button key={u.unit} type="button" onClick={() => onUnit(floor, u.unit)}
                 onPointerEnter={() => setHoverUnit(u.unit)} onPointerLeave={() => setHoverUnit(null)}
+                onFocus={() => setHoverUnit(u.unit)} onBlur={() => setHoverUnit(null)}
                 className={`text-left rounded-md border px-2 py-1 transition-colors ${hoverUnit === u.unit ? 'border-accent bg-accent-dim' : 'border-transparent hover:bg-accent-dim'}`}>
                 <div className="flex items-baseline justify-between">
                   <span className="text-[13px] leading-5 text-ink-hi">Unit {u.unit}</span>

@@ -84,15 +84,18 @@
   --nb-front:color-mix(in srgb, var(--struct-shade) 94%, var(--ink)); --nb-glass:var(--struct-glass); }
 .nb { cursor:pointer; }
 /* …a little faded; the hovered one comes up to full strength (still in the building's finish) */
-:is(.nb:not(.core), .it.nbi) { opacity:.55; transition:opacity .2s ease; }
+:is(.nb:not(.core), .it.nbi, .it.nbc) { opacity:.55; transition:opacity .2s ease; }
 :is(.nb.hot, svg[data-hot="A"] .nbi[data-unit="A"], svg[data-hot="B"] .nbi[data-unit="B"], svg[data-hot="C"] .nbi[data-unit="C"], svg[data-hot="D"] .nbi[data-unit="D"]) { opacity:1; }
-:is(.nb:not(.core), .it.nbi) {
+:is(.nb:not(.core), .it.nbi, .it.nbc) {
   & :is(path, rect, circle, ellipse, polygon):not(.slab, .slab-grid, .zone-hatch, .tile-line, .floor-grid, .zone, .zone-edge, .zone-badge, .door-arc) {
     fill:var(--nb-side) !important; fill-opacity:1 !important; filter:none !important;
     stroke:var(--struct-line) !important; stroke-opacity:.6 !important; }
   & .face:not(.slab, .zone, .top, .side) { fill:var(--nb-front) !important; }
   & .face.top:not(.slab, .zone) { fill:var(--nb-top) !important; }
   & :is(.glass, .face.pane, .face.frost-glass) { fill:var(--nb-glass) !important; fill-opacity:.85 !important; }
+  /* the glass's own blue (outline, mullions, door leaves) goes too: everything in the building's line */
+  & :is(.face.pane, .face.frost-glass, .door-panel) { stroke:var(--struct-line) !important; stroke-opacity:.6 !important; }
+  & :is(line, .mullion, .frost-mullion) { stroke:var(--struct-line) !important; stroke-opacity:.6 !important; }
   & :is(.cast-shadow, .ao, .shadow-slice, .monitor-ray, .glass-behind) { display:none; }
 }
 .nb .it { cursor:pointer; }
@@ -208,14 +211,18 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 :root:root .glass.monitor ~ .scr-accent { fill:var(--struct-top); opacity:.35; }
 :root:root .monitor-back { fill:color-mix(in srgb, var(--accent) 70%, #000); stroke:var(--accent-hi); stroke-opacity:.6; }   /* the back in the monitor's darker blue */
 :root:root :is(.monitor-ray, .monitor-halo) { display:none; }
-.door-arc { fill:var(--accent-dim); stroke:none; opacity:.8; }
-.door-leaf { stroke:var(--ink-hi); stroke-width:1.6; vector-effect:non-scaling-stroke; }
+/* the doors' flat floor symbol (the blue swing wedge and its dark leaf line) is not drawn: a door shows as its
+   standing glass leaf where it has one (doorSwing), otherwise only its footprint when hovered or selected */
+.door-arc, .door-leaf { display:none; }
+/* …but the Objects panel's door thumbnail keeps it, so the door can be found */
+svg:not(.cam-over) .door-arc { display:inline; fill:var(--accent-dim); stroke:none; opacity:.8; }
+svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-width:1.6; vector-effect:non-scaling-stroke; }
 /* a meeting-room / executive-office door drawn as an upright swinging leaf (doorSwing.roomDoors): its flat symbol, stored
    at 0° across the wall, is hidden (still there to pick the door in the editor) */
 .it.swung .door-arc, .it.swung .door-leaf { opacity:0; }
 
 /* zones: rooms and departments, flat on the floor */
-.face.zone { fill:color-mix(in srgb, var(--deck) 55%, transparent); stroke:none; }
+.face.zone { fill:transparent; stroke:none; }   /* a plain room shows the floor itself (its slab, with the sky's tint), never a white coat over it */
 /* zones have no dashed border; only enclosed rooms (meeting, CEO, server) keep a fine solid edge */
 .zone-edge { fill:none; stroke:none; }
 .zone-meeting .zone-edge, .zone-ceo .zone-edge, .zone-server .zone-edge { stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
@@ -226,7 +233,9 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 .zone-badge { fill:var(--recess); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
 .zone-badge-n { fill:var(--ink-hi); font-family:var(--font); }
 .face.zone.live { fill:var(--accent-dim); }
-.it.live.zone-meeting .zone-edge, .it.live .zone-meeting .zone-edge, .it.live .zone-server .zone-edge { stroke:var(--accent); }
+/* a selected room: only its floor tint (.foot.sel, under the walls), no outline round it; a room in use keeps
+   its plain edge, never a blue one */
+.it.sel .zone-edge { stroke:none !important; }
 .zone-tags { pointer-events:none; }
 .zone-label, .zone-sub, .zone-status, .zone-badge-n { paint-order:stroke; stroke:var(--panel); stroke-width:3px; stroke-linejoin:round; }
 .tag.live .zone-label, .tag.live .zone-status { fill:var(--accent-hi); }
@@ -244,7 +253,7 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 .glass-backdrop { fill:var(--floor); }
 /* the plans' floor: the deck's white (--floor, worked out on the slab itself so it follows every theme's /
    style's deck; the sky's cast is mixed into it in index.css) */
-:is(.face.slab, .glass-backdrop) { --floor:var(--deck); }
+:is(.face.slab, .glass-backdrop, .face.zone-core) { --floor:var(--deck); }
 .face.tile { fill:var(--recess); }
 /* sanitary fixtures (toilets, urinals) and basins in the core WCs */
 /* sanitary fittings (toilets, urinals, basin counters, stall partitions): the building's neutral white /
@@ -269,8 +278,9 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 :root:not([data-theme="light"]) .wc-lamp { fill:var(--night-light-hi); stroke:none; filter:url(#soft); }
 :root:not([data-theme="light"]) .wc-beam { display:inline; mix-blend-mode:screen; }
 .basin { fill:color-mix(in srgb, var(--struct-shade) 60%, var(--struct-glass)); stroke:var(--struct-line); stroke-width:.6; vector-effect:non-scaling-stroke; }
-/* building-core zones (corridor, lift lobby, WCs): quiet neutral floor */
-.face.zone.zone-core { fill:color-mix(in srgb, var(--struct-shade) 35%, transparent); }
+/* building-core zones (corridor, lift lobby, WCs, stairwells): painted as the floor itself (--floor, with the
+   sky's tint in index.css) — the unit editor draws them without a slab under them — never a grey of their own */
+.face.zone.zone-core { fill:var(--floor); }
 .face.carpet { fill:var(--deck); }
 .tile-line { opacity:.6; }
 
@@ -350,11 +360,29 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 .it.it:has(.face.deskTop) .face.furn:not(.chair, .chair-base) { stroke-opacity:.55; }
 .it.it:has(.face.deskTop) .face.furn:not(.chair, .chair-base).side { fill:color-mix(in srgb, var(--struct-lit) 78%, var(--ink)); }
 .it.it:has(.face.deskTop) .face.furn:not(.chair, .chair-base).front { fill:color-mix(in srgb, var(--struct-shade) 64%, var(--ink)); }
-/* …but the desks' legs bright: barely shaded, with a slightly firmer line, so the frames read light under the
-   worktop */
-.it.it:has(.face.deskTop) .face.furn.desk-leg { stroke-opacity:.8; }
-.it.it:has(.face.deskTop) .face.furn.desk-leg.side { fill:color-mix(in srgb, var(--struct-lit) 96%, var(--ink)); }
-.it.it:has(.face.deskTop) .face.furn.desk-leg.front { fill:color-mix(in srgb, var(--struct-shade) 90%, var(--ink)); }
+/* the desks' light order: the worktop and extension tops brightest, the boards' outer edges medium (above),
+   the leg panels under them the deepest — a deep blue shadow (flat tones: a gradient is a shared paint
+   server, which goes blank when the first copy in the page is in a hidden view); the east face a step
+   lighter than the south */
+:root:root .it.it:has(.face.deskTop) .face.furn.desk-leg { stroke:color-mix(in srgb, var(--accent) 40%, #06102a); stroke-opacity:.7; }
+:root:root .it.it:has(.face.deskTop) .face.furn.desk-leg.side { fill:color-mix(in srgb, var(--accent) 50%, #091733); }
+:root:root .it.it:has(.face.deskTop) .face.furn.desk-leg.front { fill:color-mix(in srgb, var(--accent) 40%, #071229); }
+:root:root .it.it:has(.face.deskTop) .face.furn.desk-leg.top { fill:color-mix(in srgb, var(--accent) 50%, #08142c); }
+/* a team leader's desk (팀장; catalog isLead): light birch wood — flat wood tones in the light order (the top
+   lightest, the board edges medium, the leg panels under it the deepest) with the grain drawn as real lines on
+   each face (catalog grain: along the worktop's length on top, horizontal on the sides) — and a soft warm edge.
+   Its chair stays as every desk chair; every other desk keeps the blue; the monitor stays as it is. */
+.grain { fill:none; stroke:#9c7444; stroke-opacity:.34; stroke-width:.3; stroke-linecap:round; pointer-events:none; }
+.grain.fine { stroke-opacity:.2; stroke-width:.2; }
+:root:not([data-theme="light"]) .grain { stroke:#4e3720; stroke-opacity:.45; }
+:root { --wood-top:#ead6b2; --wood-side:#d9bf95; --wood-front:#c7a77b; --wood-leg-side:#b99467; --wood-leg-front:#a27c51; }
+:root:not([data-theme="light"]) { --wood-top:#b8996b; --wood-side:#a2845a; --wood-front:#8f734c; --wood-leg-side:#7d6241; --wood-leg-front:#6a5236; }
+:root:root:root:root:root .it.it.lead .face.furn:is(.deskTop, .deskExt, .desk-leg) { stroke:#8a6a43 !important; stroke-opacity:.45 !important; }
+:root:root:root:root:root .it.it.lead .face.furn:is(.deskTop, .deskExt, .desk-leg).top { fill:var(--wood-top) !important; }
+:root:root:root:root:root .it.it.lead .face.furn:is(.deskTop, .deskExt).side { fill:var(--wood-side) !important; }
+:root:root:root:root:root .it.it.lead .face.furn:is(.deskTop, .deskExt):not(.top, .side) { fill:var(--wood-front) !important; }
+:root:root:root:root:root .it.it.lead .face.furn.desk-leg.side { fill:var(--wood-leg-side) !important; }
+:root:root:root:root:root .it.it.lead .face.furn.desk-leg:not(.top, .side) { fill:var(--wood-leg-front) !important; }
 /* the desks' chairs drawn exactly like the WeCafe's stools: the furniture's building finish throughout (the
    graphite foot and column and the darker desk shading are for other pieces, below / above) */
 /* server racks: charcoal cabinets, the status LEDs blink forever (each its own rate / phase, set inline);
@@ -404,8 +432,11 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 /* floor overview: each unit is one clickable area; hover = background tint only */
 .unit-hit { cursor:pointer; }
 .unit-area { fill:var(--accent); fill-opacity:0; stroke:none; transition:fill-opacity .15s; }
-.units.hover-C [data-unit="C"] .unit-area, .units.hover-D [data-unit="D"] .unit-area,
-.units.hover-A [data-unit="A"] .unit-area, .units.hover-B [data-unit="B"] .unit-area { fill-opacity:.12; }
+/* the hovered unit (on the floor, or its button in the dock) lights up on the floor only, under every wall,
+   pillar, desk and partition, without an outline: the floor view tints its area in the scene's floor layer
+   (.unit-floor-hi in renderScene's .floor-hi slot); the unit editor tints that unit's slab (own or neighbour) */
+.unit-floor-hi { fill:var(--accent); fill-opacity:.12; stroke:none; pointer-events:none; }
+:is(.own-plate.hot, .nb.dock-hot) .face.slab.top { fill:color-mix(in srgb, var(--accent) 14%, var(--floor)) !important; }
 .unit-name { fill:var(--ink-hi); font-family:var(--font); font-weight:500; letter-spacing:4px; opacity:.75; paint-order:stroke; stroke:var(--panel); stroke-width:4px; }
 .unit-sub { fill:var(--ink); font-family:var(--font); paint-order:stroke; stroke:var(--panel); stroke-width:3px; }
 .foot.bad { fill:color-mix(in srgb, var(--warn) 18%, transparent); stroke:var(--warn); }
@@ -747,9 +778,13 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 .twr .fl.rent .pn.on { fill:color-mix(in srgb, var(--accent) 48%, #ffffff); fill-opacity:.66; stroke:none; }
 .twr .fl.rent .pn.on.hi { fill-opacity:.72; }
 .twr .fl.rent .win { filter:none; }
-:root:not([data-theme="light"]) .twr .fl.rent .pn { fill:color-mix(in srgb, var(--accent) 45%, #16243d); fill-opacity:.55; }
-:root:not([data-theme="light"]) .twr .fl.rent .pn.on { fill:color-mix(in srgb, var(--accent-hi) 55%, #1c3a66); fill-opacity:.6; }
-:root:not([data-theme="light"]) .twr .fl.rent .win { filter:url(#soft); }
+/* …at night, as before: the occupied windows burn the warm interior light and glow (#glow; the floor's halo
+   blooms round them, and at dusk they switch on one by one), still frosted and frameless so the lit floor shows
+   through; the empty ones a dim frosted dark glass */
+:root:not([data-theme="light"]) .twr .fl.rent .pn { fill:color-mix(in srgb, #9fb1c6 22%, var(--struct-glass)); fill-opacity:.55; }
+:root:not([data-theme="light"]) .twr .fl.rent .pn.on { fill:var(--night-light); fill-opacity:.82; }
+:root:not([data-theme="light"]) .twr .fl.rent .pn.on.hi { fill:var(--night-light-hi); fill-opacity:.9; }
+:root:not([data-theme="light"]) .twr .fl.rent .win { filter:url(#glow); }
 /* …and the interiors behind them: plain building tones, softly blurred (frosted), never a target */
 .twr-int { filter:url(#frost-soft); pointer-events:none; }
 .twr-int-back { fill:var(--struct-lit); }

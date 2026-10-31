@@ -156,15 +156,15 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
    (the sun is in the south-west); night: a deep cool blue on the tops and east faces. The Corten fins and the
    floors' hover tint keep their own fills. */
 :root[data-sky="morning"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap), :root[data-sky="morning"] .cam-over .it.it :is(.face.furn, .face.tableTop).top { fill: color-mix(in srgb, var(--struct-top) 91%, #ffdc8f); }
-:root[data-sky="morning"] .cam-over .face.slab.top { fill: color-mix(in srgb, var(--floor) 94%, #ffdc8f); }
+:root[data-sky="morning"] .cam-over :is(.face.slab.top, .glass-backdrop, .face.zone-core) { fill: color-mix(in srgb, var(--floor) 94%, #ffdc8f); }
 :root[data-sky="morning"] .cam-over :is(.face.struct, .face.slab, .face.fixture).side:not(.pilaster, .band), :root[data-sky="morning"] .cam-over .it.it :is(.face.furn, .face.tableTop).side { fill: color-mix(in srgb, var(--struct-lit) 90%, #ffd27a); }
 :root[data-sky="morning"] .twr .fl:not(:hover, .cursor) .face.band.side { fill: color-mix(in srgb, var(--struct-lit) 90%, #ffd27a); }
 :root[data-sky="evening"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap), :root[data-sky="evening"] .cam-over .it.it :is(.face.furn, .face.tableTop).top { fill: color-mix(in srgb, var(--struct-top) 89%, #ffb77a); }
-:root[data-sky="evening"] .cam-over .face.slab.top { fill: color-mix(in srgb, var(--floor) 93%, #ffb77a); }
+:root[data-sky="evening"] .cam-over :is(.face.slab.top, .glass-backdrop, .face.zone-core) { fill: color-mix(in srgb, var(--floor) 93%, #ffb77a); }
 :root[data-sky="evening"] .cam-over :is(.face.struct, .face.slab, .face.fixture).front:not(.pilaster, .band), :root[data-sky="evening"] .cam-over .it.it :is(.face.furn, .face.tableTop).front { fill: color-mix(in srgb, var(--struct-shade) 87%, #ffa560); }
 :root[data-sky="evening"] .twr .fl:not(:hover, .cursor) .face.band.front { fill: color-mix(in srgb, var(--struct-shade) 87%, #ffa560); }
 :root[data-sky="night"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap), :root[data-sky="night"] .cam-over .it.it :is(.face.furn, .face.tableTop).top { fill: color-mix(in srgb, var(--struct-top) 86%, #4f72b8); }
-:root[data-sky="night"] .cam-over .face.slab.top { fill: color-mix(in srgb, var(--floor) 90%, #4f72b8); }
+:root[data-sky="night"] .cam-over :is(.face.slab.top, .glass-backdrop, .face.zone-core) { fill: color-mix(in srgb, var(--floor) 90%, #4f72b8); }
 :root[data-sky="night"] .cam-over :is(.face.struct, .face.slab, .face.fixture).side:not(.pilaster, .band), :root[data-sky="night"] .cam-over .it.it :is(.face.furn, .face.tableTop).side { fill: color-mix(in srgb, var(--struct-lit) 88%, #3e5c9a); }
 :root[data-sky="night"] .twr .fl:not(:hover, .cursor) .face.band.side { fill: color-mix(in srgb, var(--struct-lit) 88%, #3e5c9a); }
 /* the neighbouring units' building finish (iso.css --nb-*) takes the sky's cast like the building's own */
@@ -182,13 +182,13 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 /* …and in the floor and unit views (.office-lit), a clearer cast on the floor, the walls and the pillars — their
    tops (the grey caps too), their sun-facing sides and, in the evening, their south faces — whatever the
    material style, so the plans take the time of day as the building does */
-:root:root[data-sky="morning"] .office-lit .face.slab.top { fill: color-mix(in srgb, var(--floor) 90%, #ffdc8f); }
+:root:root[data-sky="morning"] .office-lit :is(.face.slab.top, .glass-backdrop, .face.zone-core) { fill: color-mix(in srgb, var(--floor) 90%, #ffdc8f); }
 :root:root[data-sky="morning"] .office-lit .it :is(.face.wall, .face.pillar).top { fill: color-mix(in srgb, var(--struct-cap) 86%, #ffdc8f); }
 :root:root[data-sky="morning"] .office-lit .it :is(.face.wall, .face.pillar).side { fill: color-mix(in srgb, var(--struct-lit) 84%, #ffd27a); }
-:root:root[data-sky="evening"] .office-lit .face.slab.top { fill: color-mix(in srgb, var(--floor) 88%, #ffb77a); }
+:root:root[data-sky="evening"] .office-lit :is(.face.slab.top, .glass-backdrop, .face.zone-core) { fill: color-mix(in srgb, var(--floor) 88%, #ffb77a); }
 :root:root[data-sky="evening"] .office-lit .it :is(.face.wall, .face.pillar).top { fill: color-mix(in srgb, var(--struct-cap) 84%, #ffb77a); }
 :root:root[data-sky="evening"] .office-lit .it :is(.face.wall, .face.pillar):not(.top, .side) { fill: color-mix(in srgb, var(--struct-shade) 82%, #ffa560); }
-:root:root[data-sky="night"] .office-lit .face.slab.top { fill: color-mix(in srgb, var(--floor) 86%, #4f72b8); }
+:root:root[data-sky="night"] .office-lit :is(.face.slab.top, .glass-backdrop, .face.zone-core) { fill: color-mix(in srgb, var(--floor) 86%, #4f72b8); }
 :root:root[data-sky="night"] .office-lit .it :is(.face.wall, .face.pillar).top { fill: color-mix(in srgb, var(--struct-cap) 84%, #4f72b8); }
 :root:root[data-sky="night"] .office-lit .it :is(.face.wall, .face.pillar).side { fill: color-mix(in srgb, var(--struct-lit) 84%, #3e5c9a); }
 
@@ -233,6 +233,30 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
   100% { transform: scale(1, 1); }
 }
 @media (prefers-reduced-motion: reduce) { .tip-pop { animation: none; } }
+
+/* every dropdown menu (the floor picker, the dock's quick jumps and ⋯ menu, the search results): the dock's own
+   adaptive frost — a thin tint and a strong blur, so the sky and the drawing behind it show through and set its
+   colour (the time of day, the theme), with the same edge in the scene's line colour and the same soft halo
+   that keeps its text and icons legible on any backdrop — and its rows lit on hover with exactly the dock icons'
+   hover (a 12% ink wash, the same quick fade) */
+.menu-frost {
+  background: color-mix(in srgb, #ffffff 10%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  backdrop-filter: blur(22px) saturate(1.5);
+  border: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+  box-shadow: 0 2px 12px rgb(0 0 0 / .06);
+  text-shadow: 0 0 3px rgb(255 255 255 / .9);
+}
+.menu-frost svg { filter: drop-shadow(0 0 2px rgb(255 255 255 / .85)); }
+:root[data-sky="evening"] .menu-frost { background: color-mix(in srgb, #ffffff 22%, transparent); }
+:root:not([data-theme="light"]) .menu-frost {
+  background: color-mix(in srgb, #1c1e22 10%, transparent);
+  border-color: color-mix(in srgb, var(--line) 90%, transparent);
+  text-shadow: 0 0 3px rgb(0 0 0 / .85);
+}
+:root:not([data-theme="light"]) .menu-frost svg { filter: drop-shadow(0 0 2px rgb(0 0 0 / .8)); }
+.menu-item { transition: background-color .15s, color .15s; }
+.menu-item:hover, .menu-item:focus-visible, .menu-item[aria-selected="true"] { background: color-mix(in srgb, var(--ink) 12%, transparent); }
 
 /* the theme switch: a plain cross-fade of the whole page (started by setTheme in lib/theme.js) */
 ::view-transition-old(root),

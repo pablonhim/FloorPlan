@@ -16,13 +16,14 @@ const TIP_AT = {
 /** A 16 × 16 stroked icon in the current colour. */
 export const icon = (d) => <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>;
 
-export default function SceneButton({ label, tip, onClick, red = false, active, place = 'side', compact = false, tall = false, docked = false, disabled = false, children }) {
+export default function SceneButton({ label, tip, onClick, red = false, active, place = 'side', compact = false, tall = false, docked = false, disabled = false, onPointerEnter, onPointerLeave, children }) {
   // docked: one of the buttons inside a shared frosted dock (no frost of its own; a soft tint on hover / when on)
   const tone = red ? 'text-[#e5484d] hover:text-[#c9363b]'
     : active ? (docked ? 'bg-accent-dim text-accent' : 'text-accent ring-1 ring-accent')
     : docked ? 'text-ink-hi hover:bg-[color-mix(in_srgb,var(--ink)_12%,transparent)]' : 'text-ink-hi hover:text-accent';
   return (
-    <button type="button" onClick={onClick} aria-label={label} aria-description={tip || undefined} aria-pressed={active} disabled={disabled}
+    <button type="button" onClick={onClick} onPointerEnter={onPointerEnter} onPointerLeave={onPointerLeave} onFocus={onPointerEnter} onBlur={onPointerLeave}
+      aria-label={label} aria-description={tip || undefined} aria-pressed={active} disabled={disabled}
       className={`pop-ico group relative ${docked ? 'transition-colors' : 'frost-panel frost-edge frost-thin'} grid ${compact ? 'size-8' : tall ? 'size-10' : 'size-9'} place-items-center rounded-full ${tone} disabled:opacity-40 disabled:hover:text-ink-hi`}>
       <span className="ico">{children}</span>
       {/* the hint: just the button's short name, one line in a frosted pill (the longer `tip` is its

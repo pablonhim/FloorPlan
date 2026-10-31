@@ -90,6 +90,11 @@ export function defaults(type) {
   return {};
 }
 
+/** A team leader's desk (팀장, by the name assigned to it): drawn in light wood (CSS .lead). */
+export const isLead = (item) => item.type === 'desk' && /팀장|team lead/i.test(item.name || '');
+/** The lead desk's classes: `lead` and the way its grain runs on the worktop (along its length). */
+export const leadCls = (item) => (isLead(item) ? ` lead ${(item.rot || 0) % 180 ? 'lead-y' : 'lead-x'}` : '');
+
 /** Whether an item is "live" (gets the accent): what is lit in iso-glow terms. */
 export function isLive(item) {
   switch (item.type) {
@@ -189,8 +194,30 @@ function officeChair(x, y, W, D, facing, live) {
 /** Teams whose desks have no side extension table. */
 const NO_EXT_TEAMS = new Set(['GM']);
 
+/**
+ * Wood grain drawn as real lines on a face (a team leader's desk, CSS .lead): gently wavering hairlines
+ * running along `along` ('u' the face's local x, 'v' its local y) across a w × h face, about 1.7 apart, each
+ * with its own wave from `seed` — part of the drawing itself, so no shared pattern can go missing.
+ */
+function grain(w, h, along, seed) {
+  const L = along === 'u' ? w : h, X = along === 'u' ? h : w;
+  let s = '', k = seed >>> 0;
+  const rnd = () => ((k = (k * 1103515245 + 12345) >>> 0) / 2 ** 32);
+  for (let c = 0.9; c < X - 0.3; c += 1.5 + rnd() * 0.5) {
+    const a = (rnd() - 0.5) * 0.7, b = (rnd() - 0.5) * 0.7, q = (n) => n.toFixed(2);
+    const pt = (t, off) => (along === 'u' ? `${q(L * t)} ${q(c + off)}` : `${q(c + off)} ${q(L * t)}`);
+    s += `<path class="grain${rnd() < 0.35 ? ' fine' : ''}" d="M${pt(0, 0)}C${pt(0.3, a)} ${pt(0.55, b)} ${pt(0.75, a * 0.4)}S${pt(1, -b * 0.5)} ${pt(1, 0)}"/>`;
+  }
+  return s;
+}
+
 function desk(item, W, D) {
   const live = isLive(item);
+  const lead = isLead(item), seed = [...String(item.id || '')].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 11);
+  // a team leader's desk: grain along the worktop's length on top, horizontal on every side face
+  const topGrain = (w, d, rot = 0) => (lead ? grain(w, d, rot % 180 ? 'v' : 'u', seed) : '');
+  const sideGrain = (fw, h) => grain(fw, h, 'u', seed + Math.round(fw * 7 + h));
+  const woodFaces = lead ? { deco: { '+y': sideGrain, '-y': sideGrain, '+x': sideGrain, '-x': sideGrain } } : {};
   const name = (item.name || '').trim();
   const top = Math.round(D * 0.58);            // worktop depth; the rest is the chair zone
   // 25 cm extension table at the x = 0 end (the employee's left); none for the teams in NO_EXT_TEAMS
@@ -222,18 +249,18 @@ function desk(item, W, D) {
     // the worktop and flush with its ends — one under the extension's outer end, one under the seam (its face
     // continuing the seam line straight down), one at the far end — so nothing overhangs
     ...(EXT ? [
-      { x: 0, y: 0, z: 0, w: 2, d: top, h: 36, cls: 'furn desk-leg' },
-      { x: 0, y: 0, z: 36, w: EXT, d: top, h: 2, cls: 'deskExt furn' },
+      { x: 0, y: 0, z: 0, w: 2, d: top, h: 36, cls: 'furn desk-leg', ...woodFaces },
+      { x: 0, y: 0, z: 36, w: EXT, d: top, h: 2, cls: 'deskExt furn', ...woodFaces, top: topGrain },
     ] : []),
-    { x: EXT, y: 0, z: 0, w: 2, d: top, h: 36, cls: 'furn desk-leg' },                     // desk legs
-    { x: W - 2, y: 0, z: 0, w: 2, d: top, h: 36, cls: 'furn desk-leg' },
+    { x: EXT, y: 0, z: 0, w: 2, d: top, h: 36, cls: 'furn desk-leg', ...woodFaces },                     // desk legs
+    { x: W - 2, y: 0, z: 0, w: 2, d: top, h: 36, cls: 'furn desk-leg', ...woodFaces },
     {
-      x: EXT, y: 0, z: 36, w: W - EXT, d: top, h: 2, cls: live ? 'deskTop furn live' : 'deskTop furn',
+      x: EXT, y: 0, z: 36, w: W - EXT, d: top, h: 2, cls: live ? 'deskTop furn live' : 'deskTop furn', ...woodFaces,
       top: (w, d, rot = 0) => {
         // the employee's name floats above the desk in a callout (render.renderDeskCallouts); an unassigned
         // desk keeps its small note on the worktop
-        if (!name) return ray(rot) + `<text class="label desk-name" x="${w / 2}" y="${d / 2 + 2}" font-size="5" text-anchor="middle">${esc(item.note || '—')}</text>`;
-        return ray(rot);
+        if (!name) return topGrain(w, d, rot) + ray(rot) + `<text class="label desk-name" x="${w / 2}" y="${d / 2 + 2}" font-size="5" text-anchor="middle">${esc(item.note || '—')}</text>`;
+        return topGrain(w, d, rot) + ray(rot);
       },
     },
     // the monitor on its stand: a flat foot on the worktop, a neck rising at the back, and the screen
@@ -255,10 +282,14 @@ function desk(item, W, D) {
   ].map((p) => (flip ? { ...p, x: W - p.x - p.w } : p));
 }
 
-function drawer() {
+function drawer(item) {
+  // the team leader's drawer pedestal (팀장의 서랍) in the same light wood as the lead desk: the grain drawn as
+  // real lines (grain) on its faces and top, under the front's seam and handle
+  const seed = [...String(item?.id || 'drawer')].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 5);
+  const wood = (w, h) => grain(w, h, 'u', seed + Math.round(w * 3 + h));
   // two drawers: one seam across the middle, and a handle near the top
-  const face = (w, h) => `<line class="drawer-line" x1="2" y1="${h / 2}" x2="${w - 2}" y2="${h / 2}"/>` + `<rect class="drawer-line" x="${w / 2 - 3}" y="3" width="6" height="1.2"/>`;
-  return [{ x: 1, y: 1, z: 0, w: 18, d: 18, h: 30, cls: 'drawer furn', deco: { '+y': face, '+x': face } }];
+  const face = (w, h) => wood(w, h) + `<line class="drawer-line" x1="2" y1="${h / 2}" x2="${w - 2}" y2="${h / 2}"/>` + `<rect class="drawer-line" x="${w / 2 - 3}" y="3" width="6" height="1.2"/>`;
+  return [{ x: 1, y: 1, z: 0, w: 18, d: 18, h: 30, cls: 'drawer furn', deco: { '+y': face, '+x': face, '-y': wood, '-x': wood }, top: (w, d) => grain(w, d, 'u', seed) }];
 }
 
 const stool = () => seat(2, 2, false);

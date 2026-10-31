@@ -1,7 +1,7 @@
 // The "More" button at the end of a view's bottom-left dock: one round button whose frosted menu opens
 // upward with the view's own actions (Export, Reset …) and the app's shared ones — History, and the Labels,
-// Show weather background, Show floor grid, Architectural model and Corten &
-// terracotta switches — which come from DockMenuContext (App).
+// Show weather background, Show floor grid and Corten & terracotta switches (the architectural model's
+// colours are the default look now, so it has no switch of its own) — which come from DockMenuContext (App).
 // Closes on a choice, a click outside or Escape; ↑ ↓ move through it.
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -20,7 +20,6 @@ const I = {
   weather: icon(<><circle cx="6" cy="6" r="2.5" /><path d="M5 13h6.5a2.5 2.5 0 0 0 0-5 3.5 3.5 0 0 0-6.6 1A2 2 0 0 0 5 13z" /></>),
   grid: icon(<path d="M2.5 5.5h11M2.5 10.5h11M5.5 2.5v11M10.5 2.5v11" />),
   corten: icon(<><path d="M3 13V5.5L8 3l5 2.5V13" /><path d="M5.5 13V7M8 13V6M10.5 13V7" /></>),
-  clay: icon(<><path d="M2.5 11.5 8 14l5.5-2.5L8 9z" /><path d="M5 9.5V5l3-1.5L11 5v4.5" /></>),
 };
 
 /** items: the view's own actions, [{ label, onClick, icon?: 'export' | 'reset', danger? }]. */
@@ -53,7 +52,7 @@ export default function DockMenu({ items = [] }) {
     if (e.key === 'ArrowDown') { e.preventDefault(); els[(i + 1) % els.length]?.focus(); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); els[(i - 1 + els.length) % els.length]?.focus(); }
   };
-  const row = 'flex w-full items-center gap-2 whitespace-nowrap rounded-md px-2 py-1 text-left text-[12px] leading-4 outline-none hover:bg-accent-dim focus-visible:bg-accent-dim';
+  const row = 'menu-item flex w-full items-center gap-2 whitespace-nowrap rounded-md px-2 py-1 text-left text-[12px] leading-4 outline-none';
   const choose = (fn) => () => { setOpen(false); fn(); };
   return (
     <div ref={box} className="relative">
@@ -66,7 +65,7 @@ export default function DockMenu({ items = [] }) {
       </button>
       {open && at && createPortal(
         <div ref={menu} role="menu" aria-label="More" onKeyDown={onKey} style={{ left: at.left, bottom: at.bottom }}
-          className="frost-panel frost-edge frost-thin dock-menu fixed z-50 flex min-w-[210px] -translate-x-1/2 flex-col rounded-[10px] p-0.5">
+          className="menu-frost dock-menu fixed z-50 flex min-w-[210px] -translate-x-1/2 flex-col rounded-[10px] p-0.5">
           {items.map((it) => (
             <button key={it.label} type="button" role="menuitem" onClick={choose(it.onClick)}
               className={`${row} ${it.danger ? 'text-[#e5484d]' : 'text-ink-hi'}`}>
@@ -85,7 +84,6 @@ export default function DockMenu({ items = [] }) {
                 ...(shared.prefs ? [
                   { label: 'Show weather background', icon: I.weather, on: shared.prefs.weather, set: (v) => shared.setPref('weather', v) },
                   { label: 'Show floor grid', icon: I.grid, on: shared.prefs.grid, set: (v) => shared.setPref('grid', v) },
-                  { label: 'Architectural model', icon: I.clay, on: shared.prefs.clay, set: (v) => shared.setPref('clay', v) },
                   { label: 'Corten & terracotta', icon: I.corten, on: shared.prefs.corten, set: (v) => shared.setPref('corten', v) },
                 ] : []),
               ].map((r) => (

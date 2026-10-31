@@ -8,8 +8,8 @@ import { CELL, CUT_H } from '../iso/units.js';
 import { cellRect, centerGrab, collides, footprint, normRot, rotateItem, snapOrigin, validate, worldToCell, onPlate } from '../iso/grid.js';
 import { depthSort } from '../iso/depth.js';
 import { planFrame, itemNode, renderCell, renderFoot, renderItem, renderPlate, renderZoneTag, renderShadows, renderScene, renderDeskCallouts, edgeItems, cafeIds, tipData, glassBackdrops } from '../iso/render.js';
-import { isLive, describe, defaults, LAYER, CORE } from '../model/catalog.js';
-import { PLANS, UNITS, stats, floorPlan, coreItems, toFloor } from '../model/floors.js';
+import { isLive, isLead, leadCls, describe, defaults, LAYER, CORE } from '../model/catalog.js';
+import { PLANS, UNITS, stats, floorPlan, coreItems, toFloor, newId } from '../model/floors.js';
 import { exportPng } from '../lib/exportPng.js';
 import IsoDefs from './IsoDefs.jsx';
 import { entryDoors, roomDoorIds, useDoorSwing, leafNode } from '../iso/doorSwing.js';
@@ -19,9 +19,10 @@ import { keep } from '../lib/keep.js';
 import { ghostBuilding } from '../iso/ghost.js';
 import Palette from './Palette.jsx';
 import Inspector from './Inspector.jsx';
+import { useCustomObjects } from '../lib/customObjects.js';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
 import SceneButton, { icon } from './SceneButton.jsx';
-import { ViewTools, Divider, FloorUnitButtons, StatusLine, sentence } from './ViewTools.jsx';
+import { ViewTools, Divider, FloorUnitButtons, QuickJump, StatusLine, sentence } from './ViewTools.jsx';
 import DockMenu from './DockMenu.jsx';
 import MenuPanel from './MenuPanel.jsx';
 import { useOneOpen } from '../lib/oneOpen.js';
@@ -153,7 +154,8 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   // wheel / zoom rail: this unit's own zoom range
   const zoomBy = usePlanZoom(cam, K, { ...ZOOM, active });
   const vb = cam.vb;
-  const [placing, setPlacing] = useState(null); // { type, rot, via }
+  const [placing, setPlacing] = useState(null); // { type, rot, via, preset?, key? } (preset, key: a saved object)
+  const [custom, saveCustom, removeCustom] = useCustomObjects();   // My objects (Save to Object Panel)
   const [selected, setSelected] = useState(null);
   const [ghost, setGhost] = useState(null); // { item, ok, reason, mode }
   const [hover, setHover] = useState(null); // { cx, cy }
@@ -211,8 +213,9 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     return { item, ...check(item), mode };
   }, [check]);
 
+  // a new item: the type's defaults, or a saved object's exact configuration (its desk code made fresh)
   const newBase = useCallback((p) => ({
-    id: 'ghost', type: p.type, rot: p.rot, ...defaults(p.type),
+    id: 'ghost', ...(p.preset || defaults(p.type)), type: p.type, rot: p.rot,
     ...(p.type === 'desk' ? { label: nextDeskLabel(items, pid) } : {}),
   }), [items, pid]);
 
@@ -351,6 +354,29 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     setMsg(`${dir > 0 ? 'brought forward' : 'sent backward'} · layer ${next}`);
   }, [sel, pid, dispatch]);
 
+  // Save to Object Panel: the selected item's configuration as a reusable object in My objects
+  const saveToPanel = useCallback(() => {
+    if (!sel) return;
+    const saved = saveCustom(sel);
+    setMsg(saved ? `saved to My objects · ${saved.label}` : 'already in My objects');
+  }, [sel, saveCustom]);
+
+  // Replace with…: swap the selected item for another object (a built-in type or a saved one) in its place,
+  // keeping its cell and its turn; one undoable step
+  const replaceWith = useCallback((choice) => {
+    if (!sel || sel.locked) return;
+    const c = choice.key ? custom.find((o) => o.key === choice.key) : null;
+    const base = c ? { ...c.preset } : { type: choice.type, ...defaults(choice.type) };
+    if (!base.type) return;
+    const item = { ...base, id: newId(base.type), gx: sel.gx, gy: sel.gy, rot: sel.rot };
+    if (item.type === 'desk' && !c) item.label = sel.type === 'desk' ? sel.label : nextDeskLabel(items, pid);
+    const reason = validate(allItems.filter((o) => o.id !== sel.id), item, plan);
+    if (reason) { setMsg(`can't replace: ${reason}`); return; }
+    dispatch({ type: 'replace', plan: pid, id: sel.id, item });
+    setSelected(item.id);
+    setMsg(`replaced with ${c ? c.label : describe(item)}`);
+  }, [sel, custom, items, allItems, plan, pid, dispatch]);
+
   const remove = useCallback(() => {
     if (!sel || guard(sel)) return;
     dispatch({ type: 'remove', plan: pid, id: sel.id });
@@ -405,7 +431,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const cafe = useMemo(() => cafeIds(allItems), [allItems]);
   const swung = useMemo(() => roomDoorIds(allItems), [allItems]);
   const lifted = ghost?.mode === 'move' ? drag.current?.base?.id : null;
-  const clsOf = (it) => `it${isLive(it) ? ' live' : ''}${cafe.has(it.id) ? ' cafe' : ''}${swung.has(it.id) ? ' swung' : ''}${it.id === selected ? ' sel' : ''}${it.id === lifted ? ' lifted' : ''}${it.locked ? ' locked' : ''}`;
+  const clsOf = (it) => `it${isLive(it) ? ' live' : ''}${leadCls(it)}${cafe.has(it.id) ? ' cafe' : ''}${swung.has(it.id) ? ' swung' : ''}${it.id === selected ? ' sel' : ''}${it.id === lifted ? ' lifted' : ''}${it.locked ? ' locked' : ''}`;
 
   const neighbours = unitNeighbours(pid, plans);
   const core = unitCore(pid);
@@ -417,7 +443,12 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const solidNodes = useMemo(() => {
     const list = [...items.filter((it) => LAYER[it.type] !== 'floor'), ...edges]
       .map((it) => ({ ...itemNode(it), it, cls: it.id.startsWith('edge-') ? 'it edge' : clsOf(it) }));
-    for (const it of core?.solid || []) list.push({ ...itemNode(it), it, faded: true, cls: 'it core-faded' });
+    // the building core: the pieces inside this unit's outline (its WC pocket) at full strength; the rest —
+    // the lifts, storerooms, WCs and stairs by the other units — faded like those units (.nbc)
+    for (const it of core?.solid || []) {
+      const r = cellRect(it), mine = r.x0 < plan.cols && r.x1 > 0 && r.y0 < plan.rows && r.y1 > 0;
+      list.push({ ...itemNode(it), it, faded: true, cls: mine ? 'it core-faded' : 'it core-faded nbc' });
+    }
     for (const n of neighbours) for (const it of n.near) list.push({ ...itemNode(it), it, faded: true, unit: n.unit, cls: 'it nbi' });
     if (ghost) list.push({ ...itemNode(ghost.item), it: ghost.item, ghost: true, cls: `it ghost${isLive(ghost.item) ? ' live' : ''}${ghost.ok ? '' : ' bad'}` });
     for (const d of swingDoors) list.push({ ...leafNode(d), slot: d.id });   // the swinging door leaves' slots
@@ -434,6 +465,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     .map((it) => `<g class="tag${isLive(it) ? ' live' : ''}">${renderZoneTag(K, it)}</g>`).join(''), [floorNodes, K]);
 
   const [hoverUnit, setHoverUnit] = useState(null);
+  const [dockUnit, setDockUnit] = useState(null);   // the unit whose button in the dock is hovered: its floor lights up
   const gliding = useRef(false);
   const glide = (unit) => {
     const nb = neighbours.find((n) => n.unit === unit);
@@ -447,7 +479,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const nearby = (n) => overlaps(vb, n.to, 0.25);
   // one part of a neighbouring unit drawn as a block: its floor ('flat'), or its far pieces ('behind', 'ahead')
   const nbG = (part) => (n) => n[part] && (
-    <g key={`${part}-${n.unit}`} data-unit={n.unit} data-noexport="" className={`nb${hoverUnit === n.unit ? ' hot' : ''}`} dangerouslySetInnerHTML={{ __html: n[part] }} />
+    <g key={`${part}-${n.unit}`} data-unit={n.unit} data-noexport="" className={`nb${hoverUnit === n.unit ? ' hot' : ''}${dockUnit === n.unit ? ' dock-hot' : ''}`} dangerouslySetInnerHTML={{ __html: n[part] }} />
   );
 
   const hovered = !ghost && !placing && hoverId && hoverId !== selected ? items.find((i) => i.id === hoverId) : null;
@@ -471,6 +503,33 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   // navigation as one row of round buttons at the bottom left of the drawing (as on the floor
   // view): back to the floor, the floors with this floor's units (this one ringed; another glides over
   // to it), and fit
+  // the dock's quick jumps: only this unit's own places — its teams (department areas), its team leaders'
+  // desks and its meeting rooms; a kind the unit has none of keeps its slot with a "None" badge
+  const jumps = useMemo(() => {
+    const at = (it) => ({ id: it.id, it });
+    const seats = (z) => {   // the desks in a zone (by their centre) and how many are taken
+      const f = footprint(z), ds = items.filter((d) => d.type === 'desk' && d.gx + 2 >= z.gx && d.gx + 2 < z.gx + f.w && d.gy + 2 >= z.gy && d.gy + 2 < z.gy + f.d);
+      return ds.length ? `${ds.filter((d) => d.name).length}/${ds.length} seats` : '';
+    };
+    return {
+      teams: items.filter((z) => z.type === 'zone' && ['dept', 'ceo'].includes(z.kind || 'dept'))
+        .map((z) => ({ ...at(z), label: z.label || 'Team', sub: [z.en, seats(z)].filter(Boolean).join(' · ') })),
+      leads: items.filter(isLead).map((d) => ({ ...at(d), label: d.name, sub: [d.team, d.label].filter(Boolean).join(' · ') })),
+      rooms: items.filter((z) => z.type === 'zone' && z.kind === 'meeting')
+        .map((z) => ({ ...at(z), label: z.label || 'Meeting room', sub: [z.en, z.on ? 'In use' : 'Free'].filter(Boolean).join(' · ') })),
+    };
+  }, [items]);
+  const jumpTo = (j) => {
+    const f = footprint(j.it);
+    setSelected(j.id); setMsg('');
+    cam.glideTo(focusBox(K, { gx: j.it.gx, gy: j.it.gy, w: f.w, d: f.d }, VB0));
+  };
+  const JUMP_ICON = {
+    teams: icon(<><circle cx="5.5" cy="6" r="2" /><circle cx="10.5" cy="6" r="2" /><path d="M2 13c.4-2.2 1.8-3.3 3.5-3.3S8.6 10.8 9 13M7 13c.4-2.2 1.8-3.3 3.5-3.3S13.6 10.8 14 13" /></>),
+    leads: icon(<><circle cx="8" cy="5.5" r="2.3" /><path d="M3.5 13.5c.6-2.6 2.4-3.9 4.5-3.9s3.9 1.3 4.5 3.9" /><path d="M6 2.2l2 1 2-1" /></>),
+    rooms: icon(<><rect x="4" y="5.5" width="8" height="5" rx="1" /><path d="M5.5 3.5h1M9.5 3.5h1M5.5 12.5h1M9.5 12.5h1" /></>),
+  };
+
   const tools = (
     <ViewTools left={`calc(0.75rem + ${paletteMin ? '3.5rem' : '14rem'} + 0.75rem)`} after={<>
       {/* editing actions: round frosted buttons floating beside the dock (R and Delete still work); Rotate shows
@@ -495,9 +554,15 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     </>}>
       <SceneButton place="above-start" compact docked label={`Floor ${plan.floor}`} tip={`Back to every unit of floor ${plan.floor}`} onClick={onBack}>{icon(<path d="M10 3 5 8l5 5" />)}</SceneButton>
       <Divider />
-      <FloorUnitButtons floor={plan.floor} unit={plan.unit}
+      <FloorUnitButtons floor={plan.floor} unit={plan.unit} only
+        onHoverUnit={(u) => { setDockUnit(u); if (u !== plan.unit) setHoverUnit(u); }}
         onFloor={(f) => onSwitch(f, UNITS[f].includes(plan.unit) ? plan.unit : UNITS[f][0])}
         onUnit={(f, u) => glide(u)} />
+      <Divider />
+      {/* this unit's own places only: its teams, team leaders and meeting rooms */}
+      <QuickJump label="Teams" icon={JUMP_ICON.teams} items={jumps.teams} onPick={jumpTo} onHover={(j) => setHoverId(j?.id || null)} />
+      <QuickJump label="Team leaders" icon={JUMP_ICON.leads} items={jumps.leads} onPick={jumpTo} onHover={(j) => setHoverId(j?.id || null)} />
+      <QuickJump label="Meeting rooms" icon={JUMP_ICON.rooms} items={jumps.rooms} onPick={jumpTo} onHover={(j) => setHoverId(j?.id || null)} />
       <Divider />
       <DockMenu items={[
         { label: 'Export PNG', icon: 'export', onClick: exportPlan },
@@ -521,7 +586,8 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
           </button>
         </div>
         <div className={`fade-bottom no-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-1 pb-10 ${paletteMin ? 'pal-min' : ''}`}>
-          <Palette placing={placing} setPlacing={setPlacing} showCore={showCore} collapsed={paletteMin} />
+          <Palette placing={placing} setPlacing={setPlacing} showCore={showCore} collapsed={paletteMin}
+            custom={custom} onRemoveCustom={(k) => { removeCustom(k); if (placing?.key === k) setPlacing(null); }} />
         </div>
       </aside>
 
@@ -551,7 +617,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
             {neighbours.filter(nearby).map(nbG('flat'))}
             {core && <g data-noexport="" className="nb core" dangerouslySetInnerHTML={{ __html: core.flat }} />}
             {neighbours.filter(nearby).map(nbG('behind'))}
-            <Html html={plate} />
+            <Html html={plate} className={dockUnit === plan.unit ? 'own-plate hot' : 'own-plate'} />
             {floorNodes.map((it) => <ItemG key={it.id} K={K} item={it} cls={clsOf(it)} cut={cutH} />)}
             <Html html={shadows} className="shell-shadows" />
             <Html html={feet} data-noexport="" />
@@ -597,6 +663,10 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
             patch={(p) => sel && dispatch({ type: 'patch', plan: pid, id: sel.id, patch: p })}
             resize={resize}
             select={(id) => { setSelected(id); setMsg(''); }}
+            custom={custom}
+            showCore={showCore}
+            onSave={saveToPanel}
+            onReplace={replaceWith}
           />
         </div>
       </MenuPanel>

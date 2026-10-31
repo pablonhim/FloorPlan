@@ -362,6 +362,7 @@ function entryFor(a, before, after) {
       return keys.length ? { id: a.id, text: `Edited ${what(next)} · ${keys.join(', ')}` } : null;
     }
     case 'remove': return { id: a.id, text: `Removed ${what(cur)}` };
+    case 'replace': { const it = after.find((i) => i.id === a.item.id); return { id: a.item.id, text: `Replaced ${what(cur)} with ${what(it)}` }; }
     case 'reset': return { text: 'Reset to the official PDF layout' };
     default: return null;
   }
@@ -419,6 +420,13 @@ export function reducer(state, a) {
       }), a);
     case 'remove':
       return commit(state, a.plan, items.filter((i) => i.id !== a.id), a);
+    case 'replace': {   // swap an item for another object in place (Replace with…): one step, one undo
+      const cur = items.find((i) => i.id === a.id);
+      if (!cur) return state;
+      const it = { ...a.item, id: a.item.id || newId(a.item.type), gx: cur.gx, gy: cur.gy };
+      const rest = items.filter((i) => i.id !== a.id);
+      return validate(rest, it, plan) ? state : commit(state, a.plan, items.map((i) => (i.id === a.id ? it : i)), a);
+    }
     case 'reset':
       return commit(state, a.plan, seedPlan(a.plan), a);
     case 'undo':

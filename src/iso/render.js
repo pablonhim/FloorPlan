@@ -3,7 +3,7 @@ import { CELL, TILE, PILLAR_H, SLAB } from './units.js';
 import { esc, frame } from './kernel.js';
 import { footprint } from './grid.js';
 import { renderParts, placeRect } from './parts.js';
-import { partsFor, SIZES, zoneTag, LAYER, isLive, tipFor, TIP_LANGS, NEUTRAL_TYPES } from '../model/catalog.js';
+import { partsFor, SIZES, zoneTag, LAYER, isLive, leadCls, tipFor, TIP_LANGS, NEUTRAL_TYPES } from '../model/catalog.js';
 import { depthSort } from './depth.js';
 import { shadowLayer, rectsPath, hull } from './shadow.js';
 import { roomDoorIds, entryDoors, leafNode, leafSlot } from './doorSwing.js';
@@ -243,10 +243,11 @@ export function renderScene(K, plan, items, { bare = false } = {}) {
   const cafe = cafeIds(items), swung = roomDoorIds(items);
   // items flagged `faded` (another unit's shell drawn round this one) are sorted in with the rest but drawn
   // faded, cast no shadow and are no targets (.it.faded)
-  const g = (it, extra = '') => `<g class="it${it.faded ? ' faded' : ''}${isLive(it) ? ' live' : ''}${cafe.has(it.id) ? ' cafe' : ''}${swung.has(it.id) ? ' swung' : ''}${extra}"${extra ? '' : tipAttrs(it)}>${renderItem(K, it)}</g>`;
+  const g = (it, extra = '') => `<g class="it${it.faded ? ' faded' : ''}${isLive(it) ? ' live' : ''}${leadCls(it)}${cafe.has(it.id) ? ' cafe' : ''}${swung.has(it.id) ? ' swung' : ''}${extra}"${extra ? '' : tipAttrs(it)}>${renderItem(K, it)}</g>`;
   const floor = items.filter((it) => LAYER[it.type] === 'floor')
     .sort((a, b) => (a.layer || 0) - (b.layer || 0) || (a.type === b.type ? area(b) - area(a) : a.type === 'zone' ? -1 : 1));   // a layer (Bring forward / Send backward) first
   let s = (bare ? '' : renderPlate(K, plan)) + floor.map((it) => g(it)).join('');
+  if (!bare) s += '<g class="floor-hi"></g>';   // a floor-level highlight (a hovered unit), filled by the view
   if (!bare) s += renderShadows(K, plan, items.filter((it) => !it.faded), edges);
   // the swinging door leaves' slots (doorSwing) take their place among the solids
   const slots = bare ? [] : entryDoors(items.filter((it) => !it.faded)).map((d) => ({ ...leafNode(d), slot: d.id }));

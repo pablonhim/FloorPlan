@@ -2,7 +2,7 @@
 // editing actions and shortcuts live on the bottom bar).
 import { useEffect, useState } from 'react';
 import { baseSize, footprint } from '../iso/grid.js';
-import { SIZES, ZONE_KINDS } from '../model/catalog.js';
+import { SIZES, ZONE_KINDS, PALETTE } from '../model/catalog.js';
 import Switch, { ICONS } from './Switch.jsx';
 
 const inputCls = 'w-full rounded-md border border-edge bg-recess px-2 py-1.5 text-[12px] text-ink-hi outline-none focus:border-accent placeholder:text-ink/60';
@@ -61,7 +61,37 @@ function Legend({ plan }) {
   );
 }
 
-export default function Inspector({ plan, item, items, patch, resize, select }) {
+/**
+ * Replace with…: a picker of the objects in the Objects panel (My objects first) that swaps the selected item
+ * for the chosen one in its place, in a single step (FloorEditor replaceWith).
+ */
+function ReplacePicker({ item, custom, showCore, onReplace }) {
+  const groups = PALETTE.filter((g) => showCore || !g.core);
+  return (
+    <label className="flex flex-col gap-1">
+      <span className={capCls}>Replace with…</span>
+      <select value="" className={inputCls} disabled={item.locked} title={item.locked ? 'Unlock it to replace it' : 'Swap it for another object, in place'}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v) onReplace(v.startsWith('c:') ? { key: v.slice(2) } : { type: v.slice(2) });
+        }}>
+        <option value="">{item.locked ? 'Locked' : 'Choose an object'}</option>
+        {custom.length > 0 && (
+          <optgroup label="My objects">
+            {custom.map((c) => <option key={c.key} value={`c:${c.key}`}>{c.label}</option>)}
+          </optgroup>
+        )}
+        {groups.map((g) => (
+          <optgroup key={g.group} label={g.group}>
+            {g.types.filter((t) => t !== item.type).map((t) => <option key={t} value={`t:${t}`}>{SIZES[t].label}</option>)}
+          </optgroup>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+export default function Inspector({ plan, item, items, patch, resize, select, custom = [], showCore = true, onSave, onReplace }) {
   const [q, setQ] = useState('');
   const teams = [...new Set(items.filter((i) => i.type === 'zone' && ['dept', 'ceo'].includes(i.kind)).map((i) => i.label))];
   const desks = items.filter((i) => i.type === 'desk')
@@ -118,6 +148,9 @@ export default function Inspector({ plan, item, items, patch, resize, select }) 
 
           <Switch checked={!!item.locked} onChange={(locked) => patch({ locked })} label="Locked" icon={ICONS.lock}
             title={item.locked ? 'Locked: can be selected but not dragged, nudged, rotated or deleted' : 'Unlocked'} />
+
+          {onReplace && <ReplacePicker item={item} custom={custom} showCore={showCore} onReplace={onReplace} />}
+          {onSave && <Btn onClick={onSave} title="Keep this object, exactly as it is, in My objects at the top of the Objects panel">Save to Object Panel</Btn>}
         </section>
       ) : (
         <Legend plan={plan} />
