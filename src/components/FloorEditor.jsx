@@ -165,7 +165,6 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const [hover, setHover] = useState(null); // { cx, cy }
   const [hoverId, setHoverId] = useState(null); // item under the pointer
   const [panelOpen, setPanelOpen] = useState(false);   // the inspector panel (the info button beside the dock)
-  useEffect(() => { if (selected) setPanelOpen(true); }, [selected]);   // selecting an item opens it
   useEffect(() => { setPanelOpen(false); }, [pid]);                      // another unit: closed again
   const [paletteMin, setPaletteMin] = useState(true);   // the objects panel starts collapsed to its icons
   useOneOpen(!paletteMin, () => setPaletteMin(true));   // the objects panel too: one menu or panel open at a time

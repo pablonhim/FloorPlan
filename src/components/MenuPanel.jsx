@@ -1,4 +1,4 @@
-// The info button (ⓘ ⇄ ✕) just right of a view's bottom-left dock, with a floating frosted panel that pops up
+// The info button (ⓘ ⇄ ✕) just right of a view's bottom-left dock, with a floating white frosted panel that pops up
 // above it, starting at its left edge: the same quick springy pop as the ⋯ menu (.menu-pop), gone at once on
 // close; always mounted, inert while closed; the button wobbles as it closes. (The ⋯ menu has the bottom-right
 // corner.)
@@ -22,7 +22,7 @@ export default function MenuPanel({ open, onOpen, label, fill = false, width = '
   return (
     <div className="relative shrink-0">
       <aside id={id} inert={!open} aria-hidden={!open} aria-label={label} style={fill ? { height: tall } : { maxHeight: tall }}
-        className={`frost-panel frost-edge frost-thin absolute bottom-full left-0 mb-2 ${width} rounded-xl flex flex-col ${open ? 'menu-pop pointer-events-auto visible' : 'pointer-events-none invisible'}`}>
+        className={`menu-frost absolute bottom-full left-0 mb-2 ${width} rounded-[10px] flex flex-col ${open ? 'menu-pop pointer-events-auto visible' : 'pointer-events-none invisible'}`}>
         {children}
       </aside>
       <button type="button" onClick={toggle} onAnimationEnd={() => setJelly(false)}

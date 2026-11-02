@@ -130,7 +130,7 @@ export default function App() {
                             return (
                               <li key={f}>
                                 <button type="button" disabled={!rented} onClick={() => openFloor(f, true)}
-                                  className={`w-full flex items-center gap-2 rounded-md px-2 py-0.5 text-left text-[12px] leading-5 ${rented ? 'border border-accent/60 bg-accent-dim text-ink-hi hover:border-accent' : 'border border-transparent text-ink cursor-default'}`}>
+                                  className={`menu-item w-full flex items-center gap-2 rounded-md px-2 py-1 text-left text-[12px] leading-4 outline-none ${rented ? 'text-ink-hi' : 'text-ink cursor-default'}`}>
                                   <span className={`size-1.5 rounded-full ${rented ? 'bg-accent' : 'bg-detail'}`} />
                                   <span className="tabular-nums w-8">{f === 0 ? 'G' : `F${String(f).padStart(2, '0')}`}</span>
                                   <span className="flex-1">{rented ? t('Units {u}', { u: UNITS[f].join(' · ') }) : t(f === 0 ? 'Lobby' : 'Vacant')}</span>

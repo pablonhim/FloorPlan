@@ -71,10 +71,10 @@ function FloorDropdown({ floor, onFloor }) {
       </button>
       {open && (
         <div role="menu" aria-label={t('Floor')} onKeyDown={onMenuKey}
-          className="menu-frost absolute bottom-full left-1/2 z-30 mb-2 w-max -translate-x-1/2 rounded-xl p-1">
+          className="menu-frost absolute bottom-full left-1/2 z-30 mb-2 w-max -translate-x-1/2 rounded-[10px] p-0.5">
           {RENTED.map((f) => (
             <button key={f} type="button" role="menuitemradio" aria-checked={f === floor} onClick={() => pick(f)}
-              className={`menu-item flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-left text-[12px] outline-none ${f === floor ? 'text-accent-hi' : 'text-ink-hi'}`}>
+              className={`menu-item flex w-full items-center gap-2 whitespace-nowrap rounded-md px-2 py-1 text-left text-[12px] leading-4 outline-none ${f === floor ? 'text-accent-hi' : 'text-ink-hi'}`}>
               <span className="w-7 font-semibold tabular-nums">{f}F</span>
               <span className="flex-1 text-ink">{t('Units {u}', { u: UNITS[f].join(' · ') })}</span>
               {f === floor && <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" /></svg>}
@@ -153,12 +153,12 @@ export function QuickJump({ label, icon: glyph, items, onPick, onHover, onHoverA
       )}
       {open && (
         <div role="menu" aria-label={label} onKeyDown={onMenuKey}
-          className="menu-frost no-scrollbar absolute bottom-full left-1/2 z-30 mb-2 max-h-[50vh] min-w-[180px] max-w-[260px] -translate-x-1/2 overflow-y-auto rounded-xl p-1">
-          <div className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-[.16em] text-ink">{label}</div>
+          className="menu-frost no-scrollbar absolute bottom-full left-1/2 z-30 mb-2 max-h-[50vh] min-w-[180px] max-w-[260px] -translate-x-1/2 overflow-y-auto rounded-[10px] p-0.5">
+          <div className="px-2 pb-1 pt-1 text-[10px] uppercase tracking-[.16em] text-ink">{label}</div>
           {items.map((it) => (
             <button key={it.id} type="button" role="menuitem" onClick={() => { setOpen(false); onHover?.(null); onPick(it); }}
               onPointerEnter={() => onHover?.(it)} onPointerLeave={() => onHover?.(null)}
-              className="menu-item flex w-full min-w-0 flex-col rounded-lg px-2.5 py-1.5 text-left outline-none">
+              className="menu-item flex w-full min-w-0 flex-col rounded-md px-2 py-1 text-left leading-4 outline-none">
               <span className="truncate text-[12px] text-ink-hi">{it.label}</span>
               {it.sub && <span className="truncate text-[10.5px] text-ink">{it.sub}</span>}
             </button>

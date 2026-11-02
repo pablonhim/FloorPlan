@@ -99,14 +99,14 @@ export default function SearchBar({ plans, onPick }) {
         )}
       </div>
       {show && (
-        <div className="menu-frost absolute bottom-full left-0 right-0 z-40 mb-2 overflow-hidden rounded-2xl">
+        <div className="menu-frost absolute bottom-full left-0 right-0 z-40 mb-2 overflow-hidden rounded-[10px]">
           {results.length ? (
-            <ul ref={list} id={`${id}-list`} role="listbox" aria-label={t('Search results')} className="no-scrollbar max-h-[min(26rem,60vh)] overflow-y-auto p-1.5">
+            <ul ref={list} id={`${id}-list`} role="listbox" aria-label={t('Search results')} className="no-scrollbar max-h-[min(26rem,60vh)] overflow-y-auto p-0.5">
               {results.map((r, i) => (
                 <li key={r.key} id={`${id}-${i}`} role="option" aria-selected={i === act}
                   onPointerDown={(e) => e.preventDefault()} onPointerEnter={() => setAct(i)} onClick={() => pick(r)}
-                  className="menu-item flex cursor-pointer items-center gap-2.5 rounded-xl px-2 py-1.5">
-                  <span className={`grid size-7 shrink-0 place-items-center rounded-full ${i === act ? 'text-accent' : 'text-ink'}`} title={t(KIND_NAME[r.kind])}>{KIND[r.kind]}</span>
+                  className="menu-item flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 leading-4">
+                  <span className={`grid size-5 shrink-0 place-items-center rounded-full ${i === act ? 'text-accent' : 'text-ink'}`} title={t(KIND_NAME[r.kind])}>{KIND[r.kind]}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[12px] text-ink-hi">{loc(r.title, t)}</span>
                     <span className="block truncate text-[11px] text-ink">{loc(r.sub, t)}</span>

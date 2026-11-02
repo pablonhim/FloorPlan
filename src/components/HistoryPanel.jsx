@@ -49,7 +49,7 @@ export default function HistoryPanel({ open, onClose, log, onOpenEntry, onClear 
 
   return (
     <aside ref={panel} inert={!open} aria-hidden={!open} aria-label={t('History')}
-      className={`frost-panel frost-edge fixed bottom-3 right-3 top-[3.75rem] z-50 flex w-[22rem] max-w-[calc(100vw-1.5rem)] flex-col rounded-2xl transition-[translate,opacity,visibility] motion-reduce:transition-none ${open ? 'visible translate-x-0 opacity-100 duration-[380ms] ease-[cubic-bezier(.22,1,.36,1)]' : 'invisible translate-x-[calc(100%+1rem)] opacity-0 duration-[240ms] ease-in'}`}>
+      className={`menu-frost fixed bottom-3 right-3 top-[3.75rem] z-50 flex w-[22rem] max-w-[calc(100vw-1.5rem)] flex-col rounded-2xl transition-[translate,opacity,visibility] motion-reduce:transition-none ${open ? 'visible translate-x-0 opacity-100 duration-[380ms] ease-[cubic-bezier(.22,1,.36,1)]' : 'invisible translate-x-[calc(100%+1rem)] opacity-0 duration-[240ms] ease-in'}`}>
       <div className="flex items-center gap-2 border-b border-[color-mix(in_srgb,var(--ink)_18%,transparent)] px-3 py-2">
         <span className="flex-1 text-[13px] font-medium text-ink-hi">{t('History')}</span>
         <button type="button" onClick={onClose} aria-label={t('Close history')} title={t('Close · Esc')}
@@ -86,7 +86,7 @@ export default function HistoryPanel({ open, onClose, log, onOpenEntry, onClear 
                     <li key={`${e.t}-${e.plan}-${e.id || e.action}`}>
                       <button type="button" onClick={() => onOpenEntry(e)} disabled={!PLANS[e.plan]}
                         title={PLANS[e.plan] ? t('Open floor {n} unit {u}', { n: PLANS[e.plan].floor, u: PLANS[e.plan].unit }) : undefined}
-                        className="flex w-full items-start gap-2 rounded-xl px-2 py-1.5 text-left hover:bg-accent-dim disabled:hover:bg-transparent">
+                        className="menu-item flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left outline-none">
                         <span className="w-10 shrink-0 pt-px text-[11px] text-ink tabular-nums">{time(e.t)}</span>
                         <span className="min-w-0 flex-1">
                           <span className={`block text-[12px] leading-snug ${e.action === 'undo' || e.action === 'remove' ? 'text-ink-hi/80' : 'text-ink-hi'}`}>{e.text}</span>

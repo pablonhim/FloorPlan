@@ -359,7 +359,7 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
             <button key={u.unit} type="button" onClick={() => onUnit(floor, u.unit)}
               onPointerEnter={() => setHoverUnit(u.unit)} onPointerLeave={() => setHoverUnit(null)}
               onFocus={() => setHoverUnit(u.unit)} onBlur={() => setHoverUnit(null)}
-              className={`text-left rounded-md border px-2 py-1 transition-colors ${hoverUnit === u.unit ? 'border-accent bg-accent-dim' : 'border-transparent hover:bg-accent-dim'}`}>
+              className={`menu-item text-left rounded-md px-2 py-1 outline-none ${hoverUnit === u.unit ? 'on' : ''}`}>
               <div className="flex items-baseline justify-between">
                 <span className="text-[13px] leading-5 text-ink-hi">{t('Unit {u}', { u: u.unit })}</span>
                 <span className="text-[11px] text-accent-hi tabular-nums">{t('{a}/{d} seats', { a: s.assigned, d: s.desks })}</span>

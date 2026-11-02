@@ -702,7 +702,6 @@ export function buildSvg({ occ, cursor, away, vipArrived, vipGone, plans }) {
   svg += `<g transform="${TOP(0, 0, PZ)}">
     <rect class="plate-edge" x="${PLATE.x0 + EDGE}" y="${PLATE.y0 + EDGE}" width="${PLATE.x1 - PLATE.x0 - 2 * EDGE}" height="${PLATE.y1 - PLATE.y0 - 2 * EDGE}" rx="${PLATE_R - EDGE}"/>
   </g>`;
-  svg += `<g transform="${FRONT(PLATE.x0, PLATE.y1, PZ)}"><text class="label" x="${(PLATE.x1 - PLATE.x0) / 2 - 40}" y="5.2" font-size="4" letter-spacing=".6">TELA OFFICE BUILDING · ${NF} STOREYS · ${EXTENT.w} × ${EXTENT.d} M</text></g>`;
 
   svg += courtyard();
   svg += tipG('VIP route', 'VIP 통로', vipDeck());      // the raised VIP route with its graded ramp, bays and markings

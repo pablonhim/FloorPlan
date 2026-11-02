@@ -171,10 +171,10 @@ export default function Inspector({ plan, item, items, patch, resize, select, cu
           {desks.map((d, i) => (
             <li key={d.id}>
               {(i === 0 || desks[i - 1].team !== d.team) && (
-                <div className="truncate px-1 pt-2 pb-0.5 text-[10px] uppercase tracking-[.14em] text-ink">{d.team || tr('Unassigned / other')}</div>
+                <div className="truncate px-2 pt-2 pb-0.5 text-[10px] uppercase tracking-[.14em] text-ink">{d.team || tr('Unassigned / other')}</div>
               )}
               <button type="button" onClick={() => select(d.id)}
-                className={`flex w-full min-w-0 items-center gap-2 rounded px-1 py-1 text-left text-[12px] hover:bg-recess ${item?.id === d.id ? 'bg-recess' : ''}`}>
+                className={`menu-item flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1 text-left text-[12px] leading-4 outline-none ${item?.id === d.id ? 'on' : ''}`}>
                 <span className={`size-1.5 shrink-0 rounded-full ${d.name ? 'bg-accent' : 'bg-detail'}`} />
                 <span className="w-12 shrink-0 text-ink tabular-nums">{d.label || '—'}</span>
                 <span className={`truncate ${d.name ? 'text-ink-hi' : 'text-ink'}`}>{d.name || d.note || tr('unassigned')}</span>
