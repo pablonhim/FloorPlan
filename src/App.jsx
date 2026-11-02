@@ -3,7 +3,7 @@ import { useTheme } from './lib/theme.js';
 import { initState, reducer, save, saveLog, floorStats, planId, RENTED, TOTAL_FLOORS, UNITS, PLANS } from './model/floors.js';
 import { focusOf } from './model/search.js';
 import TowerView from './components/TowerView.jsx';
-import MenuIcon from './components/MenuIcon.jsx';
+import MenuPanel from './components/MenuPanel.jsx';
 import Credit from './components/Credit.jsx';
 import SearchBar from './components/SearchBar.jsx';
 import HistoryPanel from './components/HistoryPanel.jsx';
@@ -16,6 +16,7 @@ import { useSky } from './lib/sky.js';
 import SkyToggle from './components/SkyToggle.jsx';
 import VolumeDefs from './components/VolumeDefs.jsx';
 import { useViewPrefs } from './lib/prefs.js';
+import { useT } from './lib/i18n.js';
 
 // the floor and unit pages load as their own chunks (the building page is the first view); both are
 // fetched as soon as the browser is idle after the first paint, so opening a floor never waits on them
@@ -54,6 +55,7 @@ function Layer({ active, plain, children }) {
 
 export default function App() {
   const { theme, setTheme, light, labels, setLabels } = useTheme();
+  const t = useT();
   // morning / evening / night: the sky behind the drawing and its light, and the theme with it (lib/sky)
   // view settings in the dock's ⋯ menu: line work, weather background, floor grid (lib/prefs)
   const [prefs, setPref] = useViewPrefs();
@@ -77,8 +79,6 @@ export default function App() {
     }).catch(() => {}));
   }, []);
   const [floorsOpen, setFloorsOpen] = useState(false); // floor panel on the building view, collapsed by default
-  const [jelly, setJelly] = useState(false);           // menu button wobbles as the panel lands back in it
-  const toggleFloors = () => { if (floorsOpen) setJelly(true); setFloorsOpen(!floorsOpen); };
   const towerRef = useRef(null);
 
   // autosave every committed change to LocalStorage
@@ -89,7 +89,6 @@ export default function App() {
   useEffect(() => { saveLog(state.log); }, [state.log]);
   const [historyOpen, setHistoryOpen] = useState(false);
   // one menu or side panel open at a time (lib/oneOpen): the floor list and History count too
-  useOneOpen(floorsOpen, () => setFloorsOpen(false));
   useOneOpen(historyOpen, () => setHistoryOpen(false));
   const dockMenu = useMemo(() => ({ openHistory: () => setHistoryOpen(true), labels, setLabels, prefs, setPref }), [labels, setLabels, prefs, setPref]);
   // a search result (or an edit in the history): open its page; `focus` (a fresh object every time, so
@@ -116,45 +115,38 @@ export default function App() {
   const renderView = (view, active) => (
   view.kind === 'building' ? (
             <div className="relative flex flex-1 min-h-0">
-              {/* the floor panel floats over the scene, so the building keeps its place whether it is open or not */}
               <div className="flex flex-1 min-w-0">
                 <TowerView active={active} occupancy={occupancy} plans={state.plans} light={light} svgRef={towerRef}
-                  onOpen={(f) => openFloor(f, true)} onGuide={(f) => setView({ kind: 'floor', floor: f, guide: true })} />
-              </div>
-              {/* floor list: a menu button at the bottom right that opens a floating frosted panel above it */}
-              <div className="pointer-events-none absolute top-[3.75rem] bottom-3 right-3 z-10 flex w-56 flex-col items-end justify-end gap-2">
-              {/* always mounted, inert while closed; it pops up like the dock's ⋯ menu (.menu-pop) */}
-              <aside id="floor-panel" inert={!floorsOpen} aria-hidden={!floorsOpen}
-                className={`frost-panel frost-edge frost-thin w-56 min-h-0 rounded-xl p-1 flex flex-col gap-0.5 overflow-auto ${floorsOpen ? 'menu-pop pointer-events-auto visible' : 'pointer-events-none invisible'}`}>
-                <h3 className="px-2 pt-1 text-[10px] uppercase tracking-[.18em] text-ink">Floors</h3>
-                <ul className="flex flex-col gap-px">
-                  {floors.map((f) => {
-                    const rented = RENTED.includes(f);
-                    const o = occupancy[f];
-                    return (
-                      <li key={f}>
-                        <button type="button" disabled={!rented} onClick={() => openFloor(f, true)}
-                          className={`w-full flex items-center gap-2 rounded-md px-2 py-0.5 text-left text-[12px] leading-5 ${rented ? 'border border-accent/60 bg-accent-dim text-ink-hi hover:border-accent' : 'border border-transparent text-ink cursor-default'}`}>
-                          <span className={`size-1.5 rounded-full ${rented ? 'bg-accent' : 'bg-detail'}`} />
-                          <span className="tabular-nums w-8">{f === 0 ? 'G' : `F${String(f).padStart(2, '0')}`}</span>
-                          <span className="flex-1">{rented ? `Units ${UNITS[f].join(' · ')}` : f === 0 ? 'Lobby' : 'Vacant'}</span>
-                          {rented && <span className="text-[11px] text-accent-hi tabular-nums">{o.assigned}/{o.desks}</span>}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-                <p className="px-2 pb-1 pt-0.5 text-[11px] leading-snug text-ink">
-                  Floors 2 and 4 are rented (Units C and D each), laid out from the official layout PDF of 2026-09-29.
-                  Lit windows show how many desks have someone assigned.
-                </p>
-              </aside>
-              <button type="button" onClick={toggleFloors} onAnimationEnd={() => setJelly(false)}
-                aria-expanded={floorsOpen} aria-controls="floor-panel" aria-label={floorsOpen ? 'Close floor list' : 'Open floor list'}
-                title={floorsOpen ? 'Close floor list' : 'Floors'}
-                className={`frost-panel frost-edge frost-thin pointer-events-auto grid size-10 shrink-0 place-items-center rounded-full text-ink-hi hover:text-accent ${jelly ? 'jelly' : ''}`}>
-                <MenuIcon open={floorsOpen} />
-              </button>
+                  onOpen={(f) => openFloor(f, true)} onGuide={(f) => setView({ kind: 'floor', floor: f, guide: true })}
+                  info={(
+                    // the floor list: the info button just right of the dock, its frosted panel popping up above it
+                    <MenuPanel open={floorsOpen} onOpen={setFloorsOpen} label={t('Floors')} width="w-56" id="floor-panel">
+                      <div className="no-scrollbar flex min-h-0 flex-col gap-0.5 overflow-auto p-1">
+                        <h3 className="px-2 pt-1 text-[10px] uppercase tracking-[.18em] text-ink">{t('Floors')}</h3>
+                        <ul className="flex flex-col gap-px">
+                          {floors.map((f) => {
+                            const rented = RENTED.includes(f);
+                            const o = occupancy[f];
+                            return (
+                              <li key={f}>
+                                <button type="button" disabled={!rented} onClick={() => openFloor(f, true)}
+                                  className={`w-full flex items-center gap-2 rounded-md px-2 py-0.5 text-left text-[12px] leading-5 ${rented ? 'border border-accent/60 bg-accent-dim text-ink-hi hover:border-accent' : 'border border-transparent text-ink cursor-default'}`}>
+                                  <span className={`size-1.5 rounded-full ${rented ? 'bg-accent' : 'bg-detail'}`} />
+                                  <span className="tabular-nums w-8">{f === 0 ? 'G' : `F${String(f).padStart(2, '0')}`}</span>
+                                  <span className="flex-1">{rented ? t('Units {u}', { u: UNITS[f].join(' · ') }) : t(f === 0 ? 'Lobby' : 'Vacant')}</span>
+                                  {rented && <span className="text-[11px] text-accent-hi tabular-nums">{o.assigned}/{o.desks}</span>}
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                        <p className="px-2 pb-1 pt-0.5 text-[11px] leading-snug text-ink">
+                          {t('Floors 2 and 4 are rented (Units C and D each), laid out from the official layout PDF of 2026-09-29.')}{' '}
+                          {t('Lit windows show how many desks have someone assigned.')}
+                        </p>
+                      </div>
+                    </MenuPanel>
+                  )} />
               </div>
             </div>
           ) : view.kind === 'floor' ? (
@@ -187,11 +179,11 @@ export default function App() {
       <header className="pointer-events-none absolute inset-x-0 top-0 z-30 flex h-14 items-center gap-3 px-4">
         <div className="sky-head flex flex-col gap-1">
           <div className="flex items-center gap-3">
-            <span className="text-[18px] font-semibold leading-none text-ink-hi tracking-wide">Floor Plan</span>
+            <span className="text-[18px] font-semibold leading-none text-ink-hi tracking-wide">{t('Floor Plan')}</span>
             {/* the page you are on, beside the logo: same size, quieter (none on the building page) */}
             {view.kind !== 'building' && (
               <span className="text-[18px] leading-none tracking-wide text-ink-hi/45" aria-live="polite">
-                {view.kind === 'floor' ? `Floor ${view.floor}` : `Floor ${view.floor} · Unit ${view.unit}`}
+                {view.kind === 'floor' ? t('Floor {n}', { n: view.floor }) : t('Floor {n} · Unit {u}', { n: view.floor, u: view.unit })}
               </span>
             )}
           </div>

@@ -5,6 +5,7 @@
 // chosen time's icon. The toggle sits outside the theme's cross-fade (view-transition-name in index.css), so
 // the knob slides on the live page instead of fading between its two places.
 import { SKIES } from '../lib/sky.js';
+import { useT } from '../lib/i18n.js';
 
 const I = (d) => (
   <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>
@@ -17,6 +18,7 @@ const OPT = {
 const STEP = 22;   // knob travel per stop (px): knob 20px, 2px inset
 
 export default function SkyToggle({ sky, onChange, weather = true }) {
+  const t = useT();
   // without the weather background (the dock's ⋯ menu) it is a plain light / dark switch: two stops, the light
   // one standing for morning or evening (whichever is on; picking it from night brings back morning)
   const stops = weather ? SKIES : ['light', 'night'];
@@ -33,8 +35,9 @@ export default function SkyToggle({ sky, onChange, weather = true }) {
     pick(stops[Math.max(0, Math.min(stops.length - 1, i + d))]);
   };
   const opt = (s) => OPT[s === 'light' ? 'morning' : s];
+  const name = (s) => t(s === 'light' ? 'Light' : opt(s).label);
   return (
-    <div role="radiogroup" aria-label={weather ? 'Time of day' : 'Light or dark'} tabIndex={0} onKeyDown={onKey}
+    <div role="radiogroup" aria-label={t(weather ? 'Time of day' : 'Light or dark')} tabIndex={0} onKeyDown={onKey}
       className="sky-toggle switch group pointer-events-auto inline-flex shrink-0 items-center rounded-full outline-none">
       {/* the track: the same see-through frost as the bottom dock, whatever is behind it */}
       <span className="frost-panel frost-edge frost-thin relative h-6 rounded-full transition-[width] duration-300 ease-[cubic-bezier(.4,0,.2,1)]"
@@ -55,7 +58,7 @@ export default function SkyToggle({ sky, onChange, weather = true }) {
         {/* the stops, each an equal share of the track */}
         <span className="absolute inset-0 flex">
           {stops.map((s) => (
-            <button key={s} type="button" role="radio" aria-checked={s === stops[i]} aria-label={s === 'light' ? 'Light' : opt(s).label} title={s === 'light' ? 'Light' : opt(s).label}
+            <button key={s} type="button" role="radio" aria-checked={s === stops[i]} aria-label={name(s)} title={name(s)}
               tabIndex={-1} onClick={() => pick(s)} className="h-full flex-1 rounded-full outline-none" />
           ))}
         </span>

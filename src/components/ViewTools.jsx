@@ -5,16 +5,18 @@ import { useEffect, useRef, useState } from 'react';
 import SceneButton from './SceneButton.jsx';
 import { RENTED, UNITS, PLANS, planId } from '../model/floors.js';
 import { useOneOpen } from '../lib/oneOpen.js';
+import { useT } from '../lib/i18n.js';
 
 /**
- * The bottom-left tool dock (place it in the drawing's positioned container); `menu` (the ⋯ More button) sits
+ * The bottom-left tool dock (place it in the drawing's positioned container); `menu` (the info button) sits
  * just right of it as a round button of its own, `after` floats beside that, and `left` (a CSS length) moves it
  * right, e.g. past a panel floating at the left.
  */
 export function ViewTools({ children, menu = null, after = null, left = '1rem' }) {
+  const t = useT();
   return (
     <div className="absolute bottom-3 z-20 flex h-10 items-center gap-2" style={{ left }}>
-      <div className="frost-panel frost-edge frost-thin flex h-10 items-center gap-0 rounded-full px-1" role="toolbar" aria-label="View tools">{children}</div>
+      <div className="frost-panel frost-edge frost-thin flex h-10 items-center gap-0 rounded-full px-1" role="toolbar" aria-label={t('View tools')}>{children}</div>
       {menu}
       {after}
     </div>
@@ -40,6 +42,7 @@ export const Divider = () => <span className="mx-0.5 block h-5 w-px bg-[color-mi
  * (the one shown checked). Closes on a choice, a click outside or Escape; arrow keys move through it.
  */
 function FloorDropdown({ floor, onFloor }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   useOneOpen(open, () => setOpen(false));
   const box = useRef(null);
@@ -62,18 +65,18 @@ function FloorDropdown({ floor, onFloor }) {
     <div ref={box} className="relative">
       <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}
         className={`flex h-8 items-center gap-1 rounded-full pl-3 pr-2 text-[11.5px] font-semibold tabular-nums transition-colors ${open ? 'bg-accent-dim text-accent' : 'text-ink-hi hover:bg-[color-mix(in_srgb,var(--ink)_12%,transparent)]'}`}>
-        Floor {floor}
+        {t('Floor {n}', { n: floor })}
         <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
           aria-hidden="true" className={`transition-transform duration-150 ${open ? 'rotate-180' : ''}`}><path d="M4 10l4-4 4 4" /></svg>
       </button>
       {open && (
-        <div role="menu" aria-label="Floor" onKeyDown={onMenuKey}
+        <div role="menu" aria-label={t('Floor')} onKeyDown={onMenuKey}
           className="menu-frost absolute bottom-full left-1/2 z-30 mb-2 w-max -translate-x-1/2 rounded-xl p-1">
           {RENTED.map((f) => (
             <button key={f} type="button" role="menuitemradio" aria-checked={f === floor} onClick={() => pick(f)}
               className={`menu-item flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-left text-[12px] outline-none ${f === floor ? 'text-accent-hi' : 'text-ink-hi'}`}>
               <span className="w-7 font-semibold tabular-nums">{f}F</span>
-              <span className="flex-1 text-ink">Units {UNITS[f].join(' · ')}</span>
+              <span className="flex-1 text-ink">{t('Units {u}', { u: UNITS[f].join(' · ') })}</span>
               {f === floor && <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" /></svg>}
             </button>
           ))}
@@ -88,16 +91,17 @@ function FloorDropdown({ floor, onFloor }) {
  * onFloor(f) for another floor, onUnit(f, u) for a unit.
  */
 export function FloorUnitButtons({ floor, unit = null, onFloor, onUnit, onHoverUnit, only = false }) {
+  const t = useT();
   return (
-    <div className="flex items-center gap-0" role="group" aria-label={only ? `Floor ${floor}` : `Floor ${floor} and its units`}>
+    <div className="flex items-center gap-0" role="group" aria-label={t(only ? 'Floor {n}' : 'Floor {n} and its units', { n: floor })}>
       <FloorDropdown floor={floor} onFloor={onFloor} />
       {/* only: inside a unit, just the floor picker (choosing units is left to the floor view) */}
       {!only && UNITS[floor].map((u) => {
         const p = PLANS[planId(floor, u)];
         return (
-          <SceneButton place="above" compact docked key={u} label={`Unit ${u}`} active={u === unit} onClick={() => u !== unit && onUnit(floor, u)}
+          <SceneButton place="above" compact docked key={u} label={t('Unit {u}', { u })} active={u === unit} onClick={() => u !== unit && onUnit(floor, u)}
             onPointerEnter={() => onHoverUnit?.(u)} onPointerLeave={() => onHoverUnit?.(null)}
-            tip={u === unit ? `Editing unit ${u} · ${p.subtitleEn || p.subtitle}` : `Open unit ${u}'s layout · ${p.subtitleEn || p.subtitle}`}>
+            tip={`${t(u === unit ? 'Editing unit {u}' : "Open unit {u}'s layout", { u })} · ${p.subtitleEn || p.subtitle}`}>
             <span className="text-[12px] font-semibold">{u}</span>
           </SceneButton>
         );

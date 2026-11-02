@@ -20,8 +20,9 @@ import { leg, cubicLeg, pose, person, planPath, duration } from '../iso/scenes.j
 import { showVia, setBox } from '../lib/svgCamera.js';
 import { exportPng } from '../lib/exportPng.js';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
-import DockMenu from './DockMenu.jsx';
+import { CornerMenu } from './DockMenu.jsx';
 import { factorOf, fracOf, onZoomCommand, setZoom } from '../lib/zoomStore.js';
+import { useT } from '../lib/i18n.js';
 
 /*  World units: 1 m = M units. The building stands on a site plate with a 6.4 m margin.
     plate      0..PW × 0..PD, height PZ
@@ -92,9 +93,15 @@ const RAMPS = [
 /** Flat courtyard surfaces on the plate: entrance band, the loop lane, VIP spur and zone, bays, park. */
 /**
  * The site's features carry a hover tip (HoverTip, the same pill as the plans'): `inner` wrapped in a group
- * with its name only, short, in English and Korean (data-tip-ko), picked by the display language.
+ * with its name only, short, in English, Korean and Khmer (data-tip-ko / -km), picked by the display language.
  */
-const tipG = (en, ko, inner) => `<g class="ext-tip" data-tip="${en}" data-tip-ko="${ko}">${inner}</g>`;
+const TIP_KM = {
+  'VIP route': 'ផ្លូវ VIP', 'VIP parking': 'ចំណត VIP', 'Underground parking exit': 'ច្រកចេញចំណតក្រោមដី',
+  'Public restroom': 'បន្ទប់ទឹកសាធារណៈ', 'Main entrance': 'ច្រកចូលធំ', 'Underground parking entrance': 'ច្រកចូលចំណតក្រោមដី',
+  'VIP checkpoint': 'ប៉ុស្តិ៍ត្រួតពិនិត្យ VIP', 'Car park': 'ចំណតរថយន្ត', 'Front lawn': 'វាលស្មៅខាងមុខ',
+  'Site exit gate': 'ទ្វារចេញ', 'Site entrance gate': 'ទ្វារចូល', 'Reflecting pool': 'ស្រះទឹក', ATM: 'ATM',
+};
+const tipG = (en, ko, inner) => `<g class="ext-tip" data-tip="${en}" data-tip-ko="${ko}" data-tip-km="${TIP_KM[en] || en}">${inner}</g>`;
 
 function courtyard() {
   const { TOP } = K;
@@ -1260,6 +1267,7 @@ function floorInfo(floor, plans) {
 
 /** Floating card next to the pointer for a hovered rented floor. */
 function FloorTip({ floor, plans, x, y, box }) {
+  const t = useT();
   const info = floorInfo(floor, plans);
   const total = info.reduce((a, u) => ({ d: a.d + u.seats.desks, s: a.s + u.seats.assigned }), { d: 0, s: 0 });
   const left = x + 340 > box.width ? x - 336 : x + 16;   // keep the card inside the stage
@@ -1271,21 +1279,21 @@ function FloorTip({ floor, plans, x, y, box }) {
     <div ref={card} className="frost floor-tip absolute z-20 w-80 max-h-[calc(100%-1rem)] overflow-hidden pointer-events-none rounded-xl p-3"
       style={{ left, top: Math.max(8, Math.min(y - 20, box.height - h - 8)) }} role="tooltip">
       {/* the invitation first, a little louder, then whose floor it is */}
-      <div className="mb-0.5 text-[11px] font-semibold tracking-wide text-ink-hi">Click to hop in →</div>
+      <div className="mb-0.5 text-[11px] font-semibold tracking-wide text-ink-hi">{t('Click to hop in →')}</div>
       <div className="flex items-baseline justify-between">
-        <span className="text-[14px] font-semibold text-ink-hi">KOSIGN Floor {floor}</span>
-        <span className="text-[11px] text-ink tabular-nums">{info.length} units · {total.s}/{total.d} seats</span>
+        <span className="text-[14px] font-semibold text-ink-hi">{t('KOSIGN Floor {n}', { n: floor })}</span>
+        <span className="text-[11px] text-ink tabular-nums">{t('{n} units · {a}/{d} seats', { n: info.length, a: total.s, d: total.d })}</span>
       </div>
       <ul className="mt-2 flex flex-col gap-2">
         {info.map((u) => (
           <li key={u.unit} className="border-t border-edge pt-2">
             <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[12px] text-ink-hi"><span className="font-semibold">Unit {u.unit}</span> · {u.title}</span>
-              <span className="shrink-0 text-[11px] text-ink tabular-nums">{u.seats.desks ? `${u.seats.assigned}/${u.seats.desks}` : 'no desks'}</span>
+              <span className="text-[12px] text-ink-hi"><span className="font-semibold">{t('Unit {u}', { u: u.unit })}</span> · {u.title}</span>
+              <span className="shrink-0 text-[11px] text-ink tabular-nums">{u.seats.desks ? `${u.seats.assigned}/${u.seats.desks}` : t('no desks')}</span>
             </div>
             <div className="text-[10.5px] text-ink">{u.en}</div>
-            {u.teams.length > 0 && <div className="mt-1 text-[11px] text-ink-hi"><span className="text-ink">Teams </span>{u.teams.join(', ')}</div>}
-            {u.rooms.length > 0 && <div className="text-[11px] text-ink-hi"><span className="text-ink">Rooms </span>{u.rooms.join(', ')}</div>}
+            {u.teams.length > 0 && <div className="mt-1 text-[11px] text-ink-hi"><span className="text-ink">{t('Teams')} </span>{u.teams.join(', ')}</div>}
+            {u.rooms.length > 0 && <div className="text-[11px] text-ink-hi"><span className="text-ink">{t('Rooms')} </span>{u.rooms.join(', ')}</div>}
           </li>
         ))}
       </ul>
@@ -1295,7 +1303,8 @@ function FloorTip({ floor, plans, x, y, box }) {
 
 let duskPlayed = false; // the nightfall plays once per page load on mount, then only on theme switches
 
-export default function TowerView({ occupancy, plans, onOpen, onGuide, light, svgRef, active = true }) {
+export default function TowerView({ occupancy, plans, onOpen, onGuide, light, svgRef, info = null, active = true }) {
+  const t = useT();
   const activeNow = useRef(active);
   activeNow.current = active;
   const [tip, setTip] = useState(null); // { floor, x, y } while a rented floor is hovered
@@ -1529,7 +1538,7 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
     const [model, paint] = BAY_FLEET[k % BAY_FLEET.length];
     setAway((s) => new Set(s).add(PARKED[k]));
     start({ kind: 'car', model, paint, path: parkInPath(PARKED[k]) });
-    setMsg(`Car P${PARKED[k] + 1} is heading down to B1`);
+    setMsg(['Car P{n} is heading down to B1', { n: PARKED[k] + 1 }]);
   };
   const leaveB1 = () => {
     const [model, paint] = EXIT_FLEET[nextExit.current++ % EXIT_FLEET.length];
@@ -1552,7 +1561,7 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
         setVipArrived((m) => new Map(m).set(bay, [model, paint]));
         setVipGone((s) => { const n = new Set(s); n.delete(bay); return n; });
       } });
-    setMsg(`A guest is heading to VIP ${bay + 1}`);
+    setMsg(['A guest is heading to VIP {n}', { n: bay + 1 }]);
   };
   const leaveVip = () => {
     // the most recent arrival leaves first, otherwise the last of the original VIP cars
@@ -1562,7 +1571,7 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
     const [model, paint] = vipArrived.get(bay) || VIP_FLEET[VIP_PARKED.indexOf(bay) % VIP_FLEET.length];
     setVipGone((s) => new Set(s).add(bay));
     start({ kind: 'car', model, paint, path: vipLeavePath(bay, VIP_REVERSED.has(bay) && !vipArrived.has(bay)) });
-    setMsg(`VIP ${bay + 1} is heading out`);
+    setMsg(['VIP {n} is heading out', { n: bay + 1 }]);
   };
   const goKosign = (floor) => {
     setCursor(floor);   // the target floor is highlighted while the visitor heads there
@@ -1580,7 +1589,7 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
     start({ kind: 'person', path: walk, view });
     clearTimeout(exitTimer.current);
     exitTimer.current = setTimeout(() => start({ kind: 'person', path: exit, view }), ((INTRO + duration(walk) + LIFT_RISE) * 1000) / PACE);
-    setMsg(`On the way to KOSIGN, floor ${floor}`);
+    setMsg(['On the way to KOSIGN, floor {n}', { n: floor }]);
   };
   // ATM button: zoom the camera to the ATM room, or back out to the whole site
   const focusView = useRef(null);
@@ -1774,7 +1783,7 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
   const pick = (i) => {
     setCursor(i);
     if (RENTED.includes(i)) onOpen(i);
-    else setMsg(i === 0 ? `G is the lobby · only floors ${RENTED.join(' and ')} are rented` : `floor ${i} is vacant · only floors ${RENTED.join(' and ')} are rented`);
+    else setMsg(i === 0 ? ['G is the lobby · only floors {a} and {b} are rented', { a: RENTED[0], b: RENTED[1] }] : ['Floor {n} is vacant · only floors {a} and {b} are rented', { n: i, a: RENTED[0], b: RENTED[1] }]);
   };
 
   const onKey = (e) => {
@@ -1810,14 +1819,14 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
   }, []);
 
   const o = occupancy[cursor];
-  const read = msg || (RENTED.includes(cursor)
-    ? `Floor ${cursor} · ${o.assigned} of ${o.desks} seats taken`
-    : cursor === 0 ? 'Ground floor · Lobby' : `Floor ${cursor} · Vacant`);
+  const read = msg ? t(msg) : RENTED.includes(cursor)
+    ? t('Floor {n} · {a} of {d} seats taken', { n: cursor, a: o.assigned, d: o.desks })
+    : cursor === 0 ? t('Ground floor · Lobby') : t('Floor {n} · Vacant', { n: cursor });
 
   return (
     <div ref={holder} tabIndex={0} onKeyDown={onKey} className="relative flex-1 min-h-0 overflow-hidden outline-none stage-glow">
       {map && (
-        <figure className="pointer-events-none absolute left-4 bottom-14 z-10 w-40" aria-label="Mini-map: live route">
+        <figure className="pointer-events-none absolute left-4 bottom-14 z-10 w-40" aria-label={t('Mini-map: live route')}>
           <svg viewBox={MINIMAP.viewBox} className="block w-full h-auto" aria-hidden="true">
             <g dangerouslySetInnerHTML={{ __html: MINIMAP.svg }} />
             <path className="mm-route" d={map.d} />
@@ -1832,7 +1841,9 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
       )}
       {/* scene controls (animate traffic and a visitor through the site): the bottom-left dock, as on the floor
           and unit pages; hovering a button shows its hint above it at once */}
-      <ViewTools menu={<DockMenu items={[{ label: 'Export PNG', icon: 'export', onClick: () => exportPng(svgRef.current, { filename: 'tela-office-building.png' }).catch(() => {}) }]} />}>
+      <CornerMenu items={[{ label: 'Export PNG', icon: 'export', onClick: () => exportPng(svgRef.current, { filename: 'tela-office-building.png' }).catch(() => {}) }]} />
+      {/* info: the floor list's button (App), just right of the dock */}
+      <ViewTools menu={info}>
         {[
           // paired scenes share one button: after parking it offers leaving (in red), and back again
           b1Next === 'park'
@@ -1849,12 +1860,12 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
             ? ['Close gates', () => holdGates(false), 'Slide the site entrance and exit gates shut', true, ICON.gate]
             : ['Open gates', () => holdGates(true), 'Slide the site entrance and exit gates open (and keep them open)', false, ICON.gate],
         ].map(([label, fn, tip, leave, glyph], i) => (
-          <SceneButton key={label} place={i ? 'above' : 'above-start'} compact docked label={label} tip={tip} onClick={fn} red={leave}>{glyph}</SceneButton>
+          <SceneButton key={label} place={i ? 'above' : 'above-start'} compact docked label={t(label)} tip={t(tip)} onClick={fn} red={leave}>{glyph}</SceneButton>
         ))}
         {/* a divider sets the KOSIGN floor buttons apart from the site scenes */}
         <Divider />
         {RENTED.map((f) => (
-          <SceneButton key={f} place="above" compact docked label={`KOSIGN ${f}F`} tip={`Walk in, take the east lift to floor ${f} and follow the route to KOSIGN`} onClick={() => goKosign(f)}>
+          <SceneButton key={f} place="above" compact docked label={`KOSIGN ${f}F`} tip={t('Walk in, take the east lift to floor {n} and follow the route to KOSIGN', { n: f })} onClick={() => goKosign(f)}>
             <span className="text-[11px] font-semibold tabular-nums">{f}F</span>
           </SceneButton>
         ))}
@@ -1862,7 +1873,7 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
             ATM zoom on */}
         {changed && <>
           <Divider />
-          <span className="pop-in"><SceneButton place="above" compact docked label="Reset" tip="Every car back in its bay, every scene stopped" onClick={resetScene}>{ICON.reset}</SceneButton></span>
+          <span className="pop-in"><SceneButton place="above" compact docked label={t('Reset')} tip={t('Every car back in its bay, every scene stopped')} onClick={resetScene}>{ICON.reset}</SceneButton></span>
         </>}
       </ViewTools>
       <svg
@@ -1871,7 +1882,7 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
         viewBox={K.viewBox}
         data-view={K.viewBox}
         role="img"
-        aria-label="Isometric view of the TELA Office Building, 11 storeys including the ground floor. Floors 2 and 4 are rented and glow; click one, or use arrow keys and Enter, to open its floor plan."
+        aria-label={t('Isometric view of the TELA Office Building, 11 storeys including the ground floor. Floors 2 and 4 are rented and glow; click one, or use arrow keys and Enter, to open its floor plan.')}
         onClick={(e) => { const f = e.target.closest('.fl'); if (f) pick(+f.dataset.f); }}
         onMouseOver={(e) => { const f = e.target.closest('.fl'); if (f) { setCursor(+f.dataset.f); setMsg(''); } }}
         onMouseMove={(e) => {

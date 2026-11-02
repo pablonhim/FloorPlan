@@ -338,7 +338,7 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
 /* the dock's More menu opens with a small springy pop (as the edit buttons), staying a column */
-.dock-menu { animation: dock-menu-in .18s cubic-bezier(.34, 1.56, .64, 1); transform-origin: bottom center; }
+.dock-menu { animation: dock-menu-in .18s cubic-bezier(.34, 1.56, .64, 1); transform-origin: calc(100% - 20px) 100%; }
 @keyframes dock-menu-in { from { opacity: 0; scale: .85; } }
 /* the Objects panel collapsed to its icons: smaller thumbnails, so the column stays slim */
 .pal-min svg.office-lit { width: 2.75rem; height: 2rem; }
@@ -389,7 +389,7 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 :root[data-corten="on"] .flower.f1 { fill: #95d5b2; } :root[data-corten="on"] .flower.f2 { fill: #1b4332; }
 
 /* the hamburger menus open the same way, out of their button at the bottom right */
-.menu-pop { animation: dock-menu-in .18s cubic-bezier(.34, 1.56, .64, 1); transform-origin: calc(100% - 20px) 100%; }
+.menu-pop { animation: dock-menu-in .18s cubic-bezier(.34, 1.56, .64, 1); transform-origin: 20px 100%; }
 @media (prefers-reduced-motion: reduce) { .dock-menu, .menu-pop { animation: none; } }
 
 /* the viewer count's eye blinks like a real one: open, a quick close-and-open every few seconds, now and
@@ -423,3 +423,6 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
   --struct-line: rgba(220, 150, 110, .22); --line: #5a4a42; --detail: #3a3330; --car-edge: rgba(220, 150, 110, .2);
   --shadow: #000000;
 }
+
+/* Khmer: no letter-spacing (it pulls the stacked vowels and subscripts apart) */
+html:lang(km) [class*="tracking-"] { letter-spacing: normal; }

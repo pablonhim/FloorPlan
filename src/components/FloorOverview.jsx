@@ -20,8 +20,9 @@ import { reportDepth, usePlanZoom } from '../lib/planZoom.js';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
 import SceneButton, { icon } from './SceneButton.jsx';
 import { ViewTools, Divider, FloorUnitButtons, StatusLine, sentence } from './ViewTools.jsx';
-import DockMenu from './DockMenu.jsx';
+import { CornerMenu } from './DockMenu.jsx';
 import MenuPanel from './MenuPanel.jsx';
+import { useT } from '../lib/i18n.js';
 import { entryDoors, useDoorSwing } from '../iso/doorSwing.js';
 
 const TW = TILE * CELL;
@@ -112,10 +113,10 @@ const TOOL = {
 };
 /** The dock's place buttons after Meeting rooms: what each stands for, and its name. */
 const SPOTS = [
-  { key: 'stair', label: 'Stairs', one: 'staircase', many: 'staircases' },
-  { key: 'lift', label: 'Elevators', one: 'elevator', many: 'elevators' },
-  { key: 'wcW', label: "Women's WC", one: "women's restroom", many: "women's restrooms" },
-  { key: 'wcM', label: "Men's WC", one: "men's restroom", many: "men's restrooms" },
+  { key: 'stair', label: 'Stairs', hide: 'Hide stairs', one: 'Light up the staircase on this floor', many: 'Light up the {n} staircases on this floor', none: 'No staircases on this floor' },
+  { key: 'lift', label: 'Elevators', hide: 'Hide elevators', one: 'Light up the elevator on this floor', many: 'Light up the {n} elevators on this floor', none: 'No elevators on this floor' },
+  { key: 'wcW', label: "Women's WC", hide: "Hide women's WC", one: "Light up the women's restroom on this floor", many: "Light up the {n} women's restrooms on this floor", none: "No women's restrooms on this floor" },
+  { key: 'wcM', label: "Men's WC", hide: "Hide men's WC", one: "Light up the men's restroom on this floor", many: "Light up the {n} men's restrooms on this floor", none: "No men's restrooms on this floor" },
 ];
 
 /** Zoom range: view width as a share of the fitted width (closest, farthest). */
@@ -172,6 +173,7 @@ function floorScene(floor, plans) {
 export const prewarmFloors = (plans) => RENTED.map((f) => () => floorScene(f, plans));
 
 export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, light, guide = false, focus = null, intro = false, active = true }) {
+  const t = useT();
   const { plan, K, shellSvg, ghost } = floorStatic(floor);
   const { floorItems, scene } = floorScene(floor, plans);
   const VB0 = useMemo(() => ({ x: 0, y: 0, w: K.W, h: K.H }), [K]);
@@ -339,29 +341,57 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
   const total = Object.values(unitStats).reduce((a, b) => ({ desks: a.desks + b.desks, assigned: a.assigned + b.assigned }), { desks: 0, assigned: 0 });
 
   const exportFloor = async () => {
-    try { await exportPng(svgRef.current, { filename: `floor-${floor}-all-units.png`, viewBox: K.viewBox }); setMsg('exported png'); }
-    catch (err) { setMsg(`export failed: ${err.message}`); }
+    try { await exportPng(svgRef.current, { filename: `floor-${floor}-all-units.png`, viewBox: K.viewBox }); setMsg(['exported png']); }
+    catch (err) { setMsg(['export failed: {e}', { e: err.message }]); }
   };
 
   // the view tools, as one row of round buttons at the bottom left of the drawing:
   // back to the building, the floors with this floor's units, then fit and the meeting-room highlight
+  // the units list: the info button just right of the dock, its frosted panel popping up above it; closed when
+  // the floor opens
+  const unitsList = (
+    <MenuPanel open={unitsOpen} onOpen={setUnitsOpen} label={t('Units on floor {n}', { n: floor })}>
+      <div className="no-scrollbar flex min-h-0 flex-col gap-0.5 overflow-y-auto p-1">
+        <h3 className="px-2 pt-1 text-[10px] uppercase tracking-[.18em] text-ink">{t('Units on floor {n}', { n: floor })}</h3>
+        {plan.units.map((u) => {
+          const p = PLANS[u.id], s = unitStats[u.unit];
+          return (
+            <button key={u.unit} type="button" onClick={() => onUnit(floor, u.unit)}
+              onPointerEnter={() => setHoverUnit(u.unit)} onPointerLeave={() => setHoverUnit(null)}
+              onFocus={() => setHoverUnit(u.unit)} onBlur={() => setHoverUnit(null)}
+              className={`text-left rounded-md border px-2 py-1 transition-colors ${hoverUnit === u.unit ? 'border-accent bg-accent-dim' : 'border-transparent hover:bg-accent-dim'}`}>
+              <div className="flex items-baseline justify-between">
+                <span className="text-[13px] leading-5 text-ink-hi">{t('Unit {u}', { u: u.unit })}</span>
+                <span className="text-[11px] text-accent-hi tabular-nums">{t('{a}/{d} seats', { a: s.assigned, d: s.desks })}</span>
+              </div>
+              <div className="truncate text-[11px] leading-4 text-ink">{p.subtitleEn || p.subtitle}</div>
+              <ol className="mt-0.5 text-[11px] leading-4">
+                {p.legend.map((l, i) => <li key={l} className="flex min-w-0 gap-2"><span className="w-3 shrink-0 text-accent tabular-nums">{i + (p.legendStart || 1)}</span><span className="truncate text-ink-hi">{l}</span></li>)}
+              </ol>
+            </button>
+          );
+        })}
+      </div>
+    </MenuPanel>
+  );
+
   const tools = (
-    <ViewTools menu={<DockMenu items={[{ label: 'Export PNG', icon: 'export', onClick: exportFloor }]} />}>
-      <SceneButton place="above-start" compact docked label="Building" tip="Back to the whole building" onClick={onBack}>{TOOL.back}</SceneButton>
+    <ViewTools menu={unitsList}>
+      <SceneButton place="above-start" compact docked label={t('Building')} tip={t('Back to the whole building')} onClick={onBack}>{TOOL.back}</SceneButton>
       <Divider />
       <FloorUnitButtons floor={floor} onFloor={onFloor} onUnit={onUnit} onHoverUnit={(u) => { setHoverUnit(u); setDockUnit(u); }} />
       <Divider />
-      <SceneButton place="above" compact docked label={showMeet ? 'Hide rooms' : 'Meeting rooms'} active={showMeet} onClick={() => setShowMeet((v) => !v)}
+      <SceneButton place="above" compact docked label={t(showMeet ? 'Hide rooms' : 'Meeting rooms')} active={showMeet} onClick={() => setShowMeet((v) => !v)}
         onPointerEnter={() => setSpotHover('meet')} onPointerLeave={() => setSpotHover(null)}
-        tip={rooms.length ? `Light up the ${rooms.length} meeting rooms on this floor` : 'No meeting rooms on this floor'}>{TOOL.meet}</SceneButton>
+        tip={rooms.length ? t('Light up the {n} meeting rooms on this floor', { n: rooms.length }) : t('No meeting rooms on this floor')}>{TOOL.meet}</SceneButton>
       {/* stairs, elevators and the restrooms, the same way: hover lights their floors, a click their glow */}
-      {SPOTS.map(({ key, label, one, many }) => {
+      {SPOTS.map(({ key, label, hide, one, many, none }) => {
         const n = spots[key].length;
         return (
-          <SceneButton key={key} place="above" compact docked label={spotOn === key ? `Hide ${label.toLowerCase()}` : label} active={spotOn === key}
+          <SceneButton key={key} place="above" compact docked label={t(spotOn === key ? hide : label)} active={spotOn === key}
             onClick={() => setSpotOn((v) => (v === key ? null : key))}
             onPointerEnter={() => setSpotHover(key)} onPointerLeave={() => setSpotHover(null)}
-            tip={n ? `Light up the ${n === 1 ? one : `${n} ${many}`} on this floor` : `No ${many} on this floor`}>{TOOL[key]}</SceneButton>
+            tip={t(n ? (n === 1 ? one : many) : none, { n })}>{TOOL[key]}</SceneButton>
         );
       })}
     </ViewTools>
@@ -376,7 +406,7 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
             className="floor-ov office-lit cam-over select-none touch-none" data-dock-unit={dockUnit || undefined} data-spot={spotHover || undefined}
             viewBox={cam.box}
             role="img"
-            aria-label={`Isometric plan of floor ${floor} with units ${plan.units.map((u) => u.unit).join(' and ')}. Click a unit to open it.`}
+            aria-label={t('Isometric plan of floor {n} with units {u}. Click a unit to open it.', { n: floor, u: plan.units.map((u) => u.unit).join(' · ') })}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -397,41 +427,18 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
           {tools}
           {/* the status line (and any message or route note above it), top centre */}
           <StatusLine>
-            {msg ? <div className="text-accent-hi">{sentence(msg)}</div> : null}
-            {kosign && <div className="text-accent-hi">{kosign.path ? `Follow the line to ${kosign.room.label}` : 'No route to KOSIGN on this floor'}</div>}
+            {msg ? <div className="text-accent-hi">{sentence(t(msg))}</div> : null}
+            {kosign && <div className="text-accent-hi">{kosign.path ? t('Follow the line to {r}', { r: kosign.room.label }) : t('No route to KOSIGN on this floor')}</div>}
             <div className="text-ink-hi">
-              {hoverUnit ? `Unit ${hoverUnit} · Click to open` : `Floor ${floor} · ${total.assigned} of ${total.desks} seats taken`}
+              {hoverUnit ? t('Unit {u} · Click to open', { u: hoverUnit }) : t('Floor {n} · {a} of {d} seats taken', { n: floor, a: total.assigned, d: total.desks })}
             </div>
           </StatusLine>
           {/* Export sits in the app header beside the Labels / Dark mode switches, as tall as they are */}
         </div>
       </div>
 
-      {/* the units list: a menu button at the bottom right whose frosted panel grows out of it (as on the
-          building page); closed when the floor opens */}
-      <MenuPanel open={unitsOpen} onOpen={setUnitsOpen} label={`Units on floor ${floor}`}>
-        <div className="no-scrollbar flex min-h-0 flex-col gap-0.5 overflow-y-auto p-1">
-          <h3 className="px-2 pt-1 text-[10px] uppercase tracking-[.18em] text-ink">Units on floor {floor}</h3>
-          {plan.units.map((u) => {
-            const p = PLANS[u.id], s = unitStats[u.unit];
-            return (
-              <button key={u.unit} type="button" onClick={() => onUnit(floor, u.unit)}
-                onPointerEnter={() => setHoverUnit(u.unit)} onPointerLeave={() => setHoverUnit(null)}
-                onFocus={() => setHoverUnit(u.unit)} onBlur={() => setHoverUnit(null)}
-                className={`text-left rounded-md border px-2 py-1 transition-colors ${hoverUnit === u.unit ? 'border-accent bg-accent-dim' : 'border-transparent hover:bg-accent-dim'}`}>
-                <div className="flex items-baseline justify-between">
-                  <span className="text-[13px] leading-5 text-ink-hi">Unit {u.unit}</span>
-                  <span className="text-[11px] text-accent-hi tabular-nums">{s.assigned}/{s.desks} seats</span>
-                </div>
-                <div className="truncate text-[11px] leading-4 text-ink">{p.subtitleEn || p.subtitle}</div>
-                <ol className="mt-0.5 text-[11px] leading-4">
-                  {p.legend.map((l, i) => <li key={l} className="flex min-w-0 gap-2"><span className="w-3 shrink-0 text-accent tabular-nums">{i + (p.legendStart || 1)}</span><span className="truncate text-ink-hi">{l}</span></li>)}
-                </ol>
-              </button>
-            );
-          })}
-        </div>
-      </MenuPanel>
+      {/* the ⋯ menu, bottom right */}
+      <CornerMenu items={[{ label: 'Export PNG', icon: 'export', onClick: exportFloor }]} />
     </div>
   );
 }

@@ -5,6 +5,7 @@
 import { CELL, PILLAR_H, WALL_H } from '../iso/units.js';
 import { esc, slits } from '../iso/kernel.js';
 import { rotPoint } from '../iso/parts.js';
+import { getLang } from '../lib/i18n.js';
 
 /**
  * Footprint (cells, unrotated), height (world units) and metadata.
@@ -136,11 +137,8 @@ export function describe(item) {
 /** The hover cards' languages: English, and Korean / Khmer where the catalog has the words. */
 export const TIP_LANGS = ['en', 'ko', 'km'];
 
-/** The display language's tip language (the browser's language: ko… → Korean, km… → Khmer, else English). */
-export function tipLang() {
-  const l = (typeof navigator !== 'undefined' && (navigator.languages?.[0] || navigator.language)) || 'en';
-  return TIP_LANGS.find((t) => t !== 'en' && l.toLowerCase().startsWith(t)) || 'en';
-}
+/** The display language's tip language: the one chosen in the dock's ⋯ menu (lib/i18n). */
+export const tipLang = getLang;
 
 /**
  * Hover card text for an item in one language: { title, sub }, or null for the ones that get no card
@@ -153,13 +151,13 @@ export function tipFor(item, lang = 'en') {
   const s = SIZES[item.type], ko = lang === 'ko', km = lang === 'km';
   if (item.type === 'desk') {
     const name = (item.name || '').trim();
-    return { title: name || (ko ? '빈 자리' : 'Unassigned desk'), sub: [item.label, item.team].filter(Boolean).join(' · ') || (lang === 'en' ? s.note : '') };
+    return { title: name || (ko ? '빈 자리' : km ? 'តុទំនេរ' : 'Unassigned desk'), sub: [item.label, item.team].filter(Boolean).join(' · ') || (lang === 'en' ? s.note : '') };
   }
   if (item.type === 'wc') {
     const m = item.gender === 'm';
-    return { title: ko ? (m ? '남자 화장실' : '여자 화장실') : (m ? "Men's WC" : "Women's WC"), sub: '' };
+    return { title: ko ? (m ? '남자 화장실' : '여자 화장실') : km ? (m ? 'បន្ទប់ទឹកបុរស' : 'បន្ទប់ទឹកស្ត្រី') : (m ? "Men's WC" : "Women's WC"), sub: '' };
   }
-  if (item.type === 'elevator') return { title: ko ? '엘리베이터' : 'Elevator', sub: ko ? '전 층 운행 · G – 10' : 'to every floor · G – 10' };
+  if (item.type === 'elevator') return { title: ko ? '엘리베이터' : km ? 'ជណ្ដើរយន្ត' : 'Elevator', sub: ko ? '전 층 운행 · G – 10' : km ? 'ទៅគ្រប់ជាន់ · G – 10' : 'to every floor · G – 10' };
   const title = (km && s.km) || (ko && s.kr) || s.label;
   return { title, sub: lang === 'en' ? s.note || '' : '' };
 }

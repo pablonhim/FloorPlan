@@ -5,6 +5,7 @@ import { frame } from '../iso/kernel.js';
 import { CELL } from '../iso/units.js';
 import { renderItem } from '../iso/render.js';
 import { PALETTE, SIZES, NEUTRAL_TYPES, leadCls } from '../model/catalog.js';
+import { useT } from '../lib/i18n.js';
 
 // how an item is previewed: as it is placed (plain, not lit up as assigned / in use), only resized to fit
 const PREVIEW = { counter: { on: true }, zone: { kind: 'dept', label: 'Room' }, wall: { w: 6 }, glass: { w: 6 }, partition: { w: 6 }, table: { w: 9, d: 3 } };
@@ -28,6 +29,7 @@ export function Preview({ type, preset }) {
 }
 
 export default function Palette({ placing, setPlacing, showCore, collapsed = false, custom = [], onRemoveCustom }) {
+  const tr = useT();   // (t is a type in here)
   const [tip, setTip] = useState(null);   // collapsed: the hovered icon's card { s, x, y }
   useEffect(() => {   // no stale card after expanding, or while the list scrolls under the pointer
     setTip(null);
@@ -53,7 +55,7 @@ export default function Palette({ placing, setPlacing, showCore, collapsed = fal
   };
   const tone = (t, c) => ((c ? placing?.key === c.key : placing?.type === t && !placing?.key) ? 'bg-accent-dim ring-1 ring-accent' : 'hover:bg-accent-dim');
   const mine = custom.filter((c) => showCore || !PALETTE.some((g) => g.core && g.types.includes(c.preset.type)));
-  const size = (s) => `${s.w * 20}×${s.d * 20} cm${s.sizable ? ' · sizable' : ''}`;
+  const size = (s) => `${s.w * 20}×${s.d * 20} cm${s.sizable ? ` · ${tr('sizable')}` : ''}`;
   const groups = PALETTE.filter((g) => showCore || !g.core);
 
   // collapsed: just the icons in one column, groups set apart by thin lines; hovering (or focusing) one shows
@@ -64,7 +66,7 @@ export default function Palette({ placing, setPlacing, showCore, collapsed = fal
     return (
       <div className="flex flex-col items-center gap-1">
         {mine.length > 0 && (
-          <div role="group" aria-label="My objects" className="flex flex-col items-center gap-1">
+          <div role="group" aria-label={tr('My objects')} className="flex flex-col items-center gap-1">
             {mine.map((c) => (
               <button key={c.key} {...props(c.preset.type, c)} aria-label={c.label}
                 onMouseEnter={(e) => show(e, { label: c.label, w: c.preset.w || SIZES[c.preset.type].w, d: c.preset.d || SIZES[c.preset.type].d })}
@@ -84,13 +86,13 @@ export default function Palette({ placing, setPlacing, showCore, collapsed = fal
             <span className="block text-ink tabular-nums">{size(tip.s)}</span>
           </div>, document.body)}
         {groups.map(({ group, types }, gi) => (
-          <div key={group} role="group" aria-label={group} className="flex flex-col items-center gap-1">
+          <div key={group} role="group" aria-label={tr(group)} className="flex flex-col items-center gap-1">
             {gi > 0 && <span className="my-1 block h-px w-6 bg-[color-mix(in_srgb,var(--ink)_30%,transparent)]" aria-hidden="true" />}
             {types.map((t) => {
               const s = SIZES[t];
               return (
-                <button key={t} {...props(t)} aria-label={`${s.label} · ${size(s)}`}
-                  onMouseEnter={(e) => show(e, s)} onFocus={(e) => show(e, s)} onMouseLeave={() => setTip(null)} onBlur={() => setTip(null)}
+                <button key={t} {...props(t)} aria-label={`${tr(s.label)} · ${size(s)}`}
+                  onMouseEnter={(e) => show(e, { ...s, label: tr(s.label) })} onFocus={(e) => show(e, { ...s, label: tr(s.label) })} onMouseLeave={() => setTip(null)} onBlur={() => setTip(null)}
                   onDragStartCapture={() => setTip(null)}
                   className={`grid place-items-center rounded-lg p-0.5 transition-colors cursor-grab ${tone(t)}`}>
                   <Preview type={t} />
@@ -107,7 +109,7 @@ export default function Palette({ placing, setPlacing, showCore, collapsed = fal
     <div className="flex flex-col gap-2">
       {mine.length > 0 && (
         <section>
-          <h3 className="text-[10px] uppercase tracking-[.18em] text-ink mb-0.5 pl-1.5">My objects</h3>
+          <h3 className="text-[10px] uppercase tracking-[.18em] text-ink mb-0.5 pl-1.5">{tr('My objects')}</h3>
           <div className="flex flex-col gap-0.5">
             {mine.map((c) => {
               const s = SIZES[c.preset.type];
@@ -121,7 +123,7 @@ export default function Palette({ placing, setPlacing, showCore, collapsed = fal
                       <span className="text-[10px] text-ink tabular-nums">{size({ ...s, w: c.preset.w || s.w, d: c.preset.d || s.d })}</span>
                     </span>
                   </button>
-                  <button type="button" aria-label={`Remove ${c.label} from My objects`} title="Remove from My objects"
+                  <button type="button" aria-label={tr('Remove {x} from My objects', { x: c.label })} title={tr('Remove from My objects')}
                     onClick={() => onRemoveCustom?.(c.key)}
                     className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-1 text-[13px] leading-none text-ink opacity-0 transition-opacity hover:text-ink-hi focus:opacity-100 group-hover:opacity-100">×</button>
                 </div>
@@ -132,7 +134,7 @@ export default function Palette({ placing, setPlacing, showCore, collapsed = fal
       )}
       {groups.map(({ group, types }) => (
         <section key={group}>
-          <h3 className="text-[10px] uppercase tracking-[.18em] text-ink mb-0.5 pl-1.5">{group}</h3>
+          <h3 className="text-[10px] uppercase tracking-[.18em] text-ink mb-0.5 pl-1.5">{tr(group)}</h3>
           <div className="flex flex-col gap-0.5">
             {types.map((t) => {
               const s = SIZES[t];
@@ -141,8 +143,8 @@ export default function Palette({ placing, setPlacing, showCore, collapsed = fal
                   className={`flex items-center gap-2 rounded-lg px-1.5 py-0.5 text-left text-ink-hi transition-colors cursor-grab ${tone(t)}`}>
                   <Preview type={t} />
                   <span className="flex flex-col leading-tight">
-                    {/* name and size only: other-language names come with the language toggle */}
-                    <span className="text-[12px]">{s.label}</span>
+                    {/* name (in the display language) and size */}
+                    <span className="text-[12px]">{tr(s.label)}</span>
                     <span className="text-[10px] text-ink tabular-nums">{size(s)}</span>
                   </span>
                 </button>

@@ -23,7 +23,8 @@ import { useCustomObjects } from '../lib/customObjects.js';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
 import SceneButton, { icon } from './SceneButton.jsx';
 import { ViewTools, Divider, FloorUnitButtons, QuickJump, StatusLine, sentence } from './ViewTools.jsx';
-import DockMenu from './DockMenu.jsx';
+import { useT, why } from '../lib/i18n.js';
+import { CornerMenu } from './DockMenu.jsx';
 import MenuPanel from './MenuPanel.jsx';
 import { useOneOpen } from '../lib/oneOpen.js';
 import { useRaiseOnHover } from '../lib/raiseOnHover.js';
@@ -134,6 +135,7 @@ export const prewarmUnits = (plans) => Object.keys(PLANS).flatMap((pid) => [
 const ZOOM = { min: 0.12, max: 1.5 };
 
 export default function FloorEditor({ pid, items: allItems, plans, dispatch, onBack, onSwitch, light, savedAt, focus = null, active = true }) {
+  const t = useT();
   // The office view: the unit's own building-core items (elevators, restrooms, stairwells) are hidden here
   // (the faded core round the unit shows them); they still block placement, so nothing can be stacked onto
   // the real core. (A building-core mode used to show them; the view is now always the office view.)
@@ -162,7 +164,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const [ghost, setGhost] = useState(null); // { item, ok, reason, mode }
   const [hover, setHover] = useState(null); // { cx, cy }
   const [hoverId, setHoverId] = useState(null); // item under the pointer
-  const [panelOpen, setPanelOpen] = useState(false);   // the right-hand panel (menu at the bottom right)
+  const [panelOpen, setPanelOpen] = useState(false);   // the inspector panel (the info button beside the dock)
   useEffect(() => { if (selected) setPanelOpen(true); }, [selected]);   // selecting an item opens it
   useEffect(() => { setPanelOpen(false); }, [pid]);                      // another unit: closed again
   const [paletteMin, setPaletteMin] = useState(true);   // the objects panel starts collapsed to its icons
@@ -231,10 +233,10 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
 
   const stamp = (g) => {
     if (!g) return false;
-    if (!g.ok) { setMsg(`can't place: ${g.reason}`); return false; }
+    if (!g.ok) { setMsg(["can't place: {r}", { r: why(g.reason) }]); return false; }
     const { id, ...item } = g.item; // eslint-disable-line no-unused-vars
     dispatch({ type: 'add', plan: pid, item });
-    setMsg(`placed ${describe(g.item)} at ${g.item.gx},${g.item.gy}`);
+    setMsg(['placed {x} at {at}', { x: describe(g.item), at: `${g.item.gx},${g.item.gy}` }]);
     return true;
   };
 
@@ -293,15 +295,15 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
       if (!d.moved && commit) {
         setSelected(d.hit);
         const it = d.hit && items.find((i) => i.id === d.hit);
-        setMsg(it?.locked ? `${describe(it)} · locked` : '');
+        setMsg(it?.locked ? ['{x} · locked', { x: describe(it) }] : '');
       }
       return;
     }
     if (d.moved && commit && ghost?.mode === 'move') {
       if (ghost.ok) {
         dispatch({ type: 'move', plan: pid, id: d.base.id, gx: ghost.item.gx, gy: ghost.item.gy, rot: ghost.item.rot });
-        setMsg(`moved to ${ghost.item.gx},${ghost.item.gy}`);
-      } else setMsg(`can't move: ${ghost.reason}`);
+        setMsg(['moved to {at}', { at: `${ghost.item.gx},${ghost.item.gy}` }]);
+      } else setMsg(["can't move: {r}", { r: why(ghost.reason) }]);
     }
     setGhost(null);
   };
@@ -323,7 +325,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   }, [toSvg, K]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- commands ----------
-  const guard = (it) => { if (it?.locked) { setMsg(`${describe(it)} is locked · unlock it in the inspector`); return true; } return false; };
+  const guard = (it) => { if (it?.locked) { setMsg(['{x} is locked · unlock it in the inspector', { x: describe(it) }]); return true; } return false; };
 
   const rotate = useCallback(() => {
     const d = drag.current;
@@ -342,8 +344,8 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     if (!sel || guard(sel)) return;
     const next = rotateItem(sel, plan);
     const { reason } = check(next);
-    if (reason) setMsg(`can't rotate: ${reason}`);
-    else { dispatch({ type: 'rotate', plan: pid, id: sel.id }); setMsg(`rotated to ${next.rot}°`); }
+    if (reason) setMsg(["can't rotate: {r}", { r: why(reason) }]);
+    else { dispatch({ type: 'rotate', plan: pid, id: sel.id }); setMsg(['rotated to {n}°', { n: next.rot }]); }
   }, [placing, sel, check, plan, pid, dispatch, ghostAt, placeGhost]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // drawing order for walls and pillars (z-index): a layer above or below the rest where they overlap; a
@@ -353,14 +355,14 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     const next = Math.max(-9, Math.min(9, (sel.layer || 0) + dir));
     if (next === (sel.layer || 0)) return;
     dispatch({ type: 'patch', plan: pid, id: sel.id, patch: { layer: next } });
-    setMsg(`${dir > 0 ? 'brought forward' : 'sent backward'} · layer ${next}`);
+    setMsg([dir > 0 ? 'brought forward · layer {n}' : 'sent backward · layer {n}', { n: next }]);
   }, [sel, pid, dispatch]);
 
   // Save to Object Panel: the selected item's configuration as a reusable object in My objects
   const saveToPanel = useCallback(() => {
     if (!sel) return;
     const saved = saveCustom(sel);
-    setMsg(saved ? `saved to My objects · ${saved.label}` : 'already in My objects');
+    setMsg(saved ? ['saved to My objects · {x}', { x: saved.label }] : ['already in My objects']);
   }, [sel, saveCustom]);
 
   // Replace with…: swap the selected item for another object (a built-in type or a saved one) in its place,
@@ -373,16 +375,16 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     const item = { ...base, id: newId(base.type), gx: sel.gx, gy: sel.gy, rot: sel.rot };
     if (item.type === 'desk' && !c) item.label = sel.type === 'desk' ? sel.label : nextDeskLabel(items, pid);
     const reason = validate(allItems.filter((o) => o.id !== sel.id), item, plan);
-    if (reason) { setMsg(`can't replace: ${reason}`); return; }
+    if (reason) { setMsg(["can't replace: {r}", { r: why(reason) }]); return; }
     dispatch({ type: 'replace', plan: pid, id: sel.id, item });
     setSelected(item.id);
-    setMsg(`replaced with ${c ? c.label : describe(item)}`);
+    setMsg(['replaced with {x}', { x: c ? c.label : describe(item) }]);
   }, [sel, custom, items, allItems, plan, pid, dispatch]);
 
   const remove = useCallback(() => {
     if (!sel || guard(sel)) return;
     dispatch({ type: 'remove', plan: pid, id: sel.id });
-    setMsg(`deleted ${describe(sel)}`);
+    setMsg(['deleted {x}', { x: describe(sel) }]);
     setSelected(null);
   }, [sel, pid, dispatch]);
 
@@ -390,7 +392,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     if (!sel || guard(sel)) return;
     const next = { ...sel, gx: sel.gx + dx, gy: sel.gy + dy };
     const { reason } = check(next);
-    if (reason) setMsg(`can't move: ${reason}`);
+    if (reason) setMsg(["can't move: {r}", { r: why(reason) }]);
     else dispatch({ type: 'move', plan: pid, id: sel.id, gx: next.gx, gy: next.gy });
   }, [sel, check, pid, dispatch]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -398,7 +400,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     if (!sel) return;
     const next = { ...sel, ...(w ? { w } : {}), ...(d ? { d } : {}) };
     const { reason } = check(next);
-    if (reason) setMsg(`can't resize: ${reason}`);
+    if (reason) setMsg(["can't resize: {r}", { r: why(reason) }]);
     else { dispatch({ type: 'resize', plan: pid, id: sel.id, w, d }); setMsg(''); }
   };
 
@@ -407,7 +409,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     const onKey = (e) => {
       if (e.target.closest?.('input, textarea, select')) return;
       const k = e.key;
-      if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'z') { dispatch({ type: 'undo' }); setMsg('undo'); }
+      if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'z') { dispatch({ type: 'undo' }); setMsg(['undo']); }
       else if (k === 'r' || k === 'R') rotate();
       else if (k === ']') layer(1);
       else if (k === '[') layer(-1);
@@ -489,8 +491,8 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   // desks and its meeting rooms; a kind the unit has none of keeps its slot with a "None" badge
   const jumps = useMemo(() => ({
     rooms: items.filter((z) => z.type === 'zone' && z.kind === 'meeting')
-      .map((z) => ({ id: z.id, it: z, label: z.label || 'Meeting room', sub: [z.en, z.on ? 'In use' : 'Free'].filter(Boolean).join(' · ') })),
-  }), [items]);
+      .map((z) => ({ id: z.id, it: z, label: z.label || t('Meeting room'), sub: [z.en, t(z.on ? 'In use' : 'Free')].filter(Boolean).join(' · ') })),
+  }), [items, t]);
   const hovered = !ghost && !placing && hoverId && hoverId !== selected ? items.find((i) => i.id === hoverId) : null;
   const feet = (jumpGroup ? jumps[jumpGroup].map((j) => renderFoot(K, j.it, 'foot hover')).join('') : '') +
     (hovered ? renderFoot(K, hovered, 'foot hover') : '') +
@@ -499,14 +501,14 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     (hover && !ghost && !hovered ? renderCell(K, hover.cx, hover.cy) : '');
 
   const exportPlan = async () => {
-    try { await exportPng(svgRef.current, { filename: `floor-${plan.floor}-unit-${plan.unit}.png`, viewBox: K.viewBox }); setMsg('exported png'); }
-    catch (err) { setMsg(`export failed: ${err.message}`); }
+    try { await exportPng(svgRef.current, { filename: `floor-${plan.floor}-unit-${plan.unit}.png`, viewBox: K.viewBox }); setMsg(['exported png']); }
+    catch (err) { setMsg(['export failed: {e}', { e: err.message }]); }
   };
 
-  const status = hoverUnit ? `Unit ${hoverUnit} · Click to open` : [
-    `Floor ${plan.floor}, Unit ${plan.unit}`,
-    `${st.assigned} of ${st.desks} seats taken`,
-    savedAt ? `Saved ${savedAt}` : 'Not saved',
+  const status = hoverUnit ? t('Unit {u} · Click to open', { u: hoverUnit }) : [
+    t('Floor {n}, Unit {u}', { n: plan.floor, u: plan.unit }),
+    t('{a} of {d} seats taken', { a: st.assigned, d: st.desks }),
+    savedAt ? t('Saved {time}', { time: savedAt }) : t('Not saved'),
   ].join(' · ');
 
 
@@ -522,33 +524,55 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     rooms: icon(<><rect x="4" y="5.5" width="8" height="5" rx="1" /><path d="M5.5 3.5h1M9.5 3.5h1M5.5 12.5h1M9.5 12.5h1" /></>),
   };
 
+  // the inspector: the info button just right of the dock, its frosted panel growing out of it to full height;
+  // closed when the unit opens, opening by itself when an item is selected (its fields are where it is edited)
+  const inspector = (
+    <MenuPanel open={panelOpen} onOpen={setPanelOpen} fill label={t('Unit {u} details', { u: plan.unit })}>
+      <div className="flex items-center gap-2 border-b border-[color-mix(in_srgb,var(--ink)_18%,transparent)] px-2.5 py-1.5">
+        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink-hi">
+          {sel ? t('Selected') : t('Unit {u}', { u: plan.unit })}<span className="text-ink"> · {t('{a}/{d} seats', { a: st.assigned, d: st.desks })}</span>
+        </span>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col px-2 pt-2">
+        <Inspector
+          plan={plan}
+          item={sel}
+          items={items}
+          patch={(p) => sel && dispatch({ type: 'patch', plan: pid, id: sel.id, patch: p })}
+          resize={resize}
+          select={(id) => { setSelected(id); setMsg(''); }}
+          custom={custom}
+          showCore={showCore}
+          onSave={saveToPanel}
+          onReplace={replaceWith}
+        />
+      </div>
+    </MenuPanel>
+  );
+
   const tools = (
-    <ViewTools left={`calc(0.75rem + ${paletteMin ? '3.5rem' : '14rem'} + 0.75rem)`} menu={
-      <DockMenu items={[
-        { label: 'Export PNG', icon: 'export', onClick: exportPlan },
-        { label: 'Reset to PDF', icon: 'reset', danger: true, onClick: () => { if (confirm(`Reset floor ${plan.floor} unit ${plan.unit} to the official PDF layout? (Undo can restore your version.)`)) dispatch({ type: 'reset', plan: pid }); } },
-      ]} />} after={<>
+    <ViewTools left={`calc(0.75rem + ${paletteMin ? '3.5rem' : '14rem'} + 0.75rem)`} menu={inspector} after={<>
       {/* editing actions: round frosted buttons floating beside the dock (R and Delete still work); Rotate shows
           only while there is something to turn (a movable item selected, or one being placed) and Delete only
           while a removable item is selected (Undo sits at the bottom right, by the menu button) */}
-      <div className="flex items-center gap-2" role="toolbar" aria-label="Edit">
+      <div className="flex items-center gap-2" role="toolbar" aria-label={t('Edit')}>
         {((sel && !sel.locked) || placing) && (
-          <span className="pop-in"><SceneButton place="above" tall label="Rotate" tip="Turn the selected item (or the one being placed) · R" onClick={rotate}>
+          <span className="pop-in"><SceneButton place="above" tall label={t('Rotate')} tip={t('Turn the selected item (or the one being placed) · R')} onClick={rotate}>
             {icon(<><path d="M13 8a5 5 0 1 1-1.5-3.6" /><path d="M13 2.5V5h-2.5" /></>)}</SceneButton></span>
         )}
         {sel && LAYERED.has(sel.type) && (<>
-          <span className="pop-in"><SceneButton place="above" tall label="Bring forward" tip={`Draw it over what it overlaps · ]${sel.layer ? ` · layer ${sel.layer}` : ''}`} onClick={() => layer(1)}>
+          <span className="pop-in"><SceneButton place="above" tall label={t('Bring forward')} tip={`${t('Draw it over what it overlaps')} · ]${sel.layer ? ` · ${t('layer {n}', { n: sel.layer })}` : ''}`} onClick={() => layer(1)}>
             {icon(<><rect x="5.5" y="2.5" width="8" height="8" rx="1" /><path d="M2.5 6v6.5a1 1 0 0 0 1 1H10" /></>)}</SceneButton></span>
-          <span className="pop-in"><SceneButton place="above" tall label="Send backward" tip={`Draw it under what it overlaps · [${sel.layer ? ` · layer ${sel.layer}` : ''}`} onClick={() => layer(-1)}>
+          <span className="pop-in"><SceneButton place="above" tall label={t('Send backward')} tip={`${t('Draw it under what it overlaps')} · [${sel.layer ? ` · ${t('layer {n}', { n: sel.layer })}` : ''}`} onClick={() => layer(-1)}>
             {icon(<><rect x="2.5" y="5.5" width="8" height="8" rx="1" /><path d="M5.5 2.5h7a1 1 0 0 1 1 1v7" strokeDasharray="1.6 1.4" /></>)}</SceneButton></span>
         </>)}
         {sel && !sel.locked && (
-          <span className="pop-in"><SceneButton place="above" tall label="Delete" tip="Remove the selected item · Delete" onClick={remove}>
+          <span className="pop-in"><SceneButton place="above" tall label={t('Delete')} tip={t('Remove the selected item · Delete')} onClick={remove}>
             {icon(<><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" /><path d="M7 7v4M9 7v4" /></>)}</SceneButton></span>
         )}
       </div>
     </>}>
-      <SceneButton place="above-start" compact docked label={`Floor ${plan.floor}`} tip={`Back to every unit of floor ${plan.floor}`} onClick={onBack}>{icon(<path d="M10 3 5 8l5 5" />)}</SceneButton>
+      <SceneButton place="above-start" compact docked label={t('Floor {n}', { n: plan.floor })} tip={t('Back to every unit of floor {n}', { n: plan.floor })} onClick={onBack}>{icon(<path d="M10 3 5 8l5 5" />)}</SceneButton>
       <Divider />
       <FloorUnitButtons floor={plan.floor} unit={plan.unit} only
         onHoverUnit={(u) => { setDockUnit(u); if (u !== plan.unit) setHoverUnit(u); }}
@@ -557,7 +581,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
       {/* this unit's meeting rooms (none: no slot, and no divider) */}
       {jumps.rooms.length > 0 && <>
         <Divider />
-        <QuickJump label="Meeting rooms" icon={JUMP_ICON.rooms} items={jumps.rooms} onPick={jumpTo} onHover={(j) => setHoverId(j?.id || null)} onHoverAll={(on) => setJumpGroup(on ? 'rooms' : null)} />
+        <QuickJump label={t('Meeting rooms')} icon={JUMP_ICON.rooms} items={jumps.rooms} onPick={jumpTo} onHover={(j) => setHoverId(j?.id || null)} onHoverAll={(on) => setJumpGroup(on ? 'rooms' : null)} />
       </>}
     </ViewTools>
   );
@@ -569,9 +593,9 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
           Its header collapses it to a slim column of icons (names in a frosted card on hover) */}
       <aside className={`frost-panel frost-edge absolute left-3 top-[3.75rem] bottom-3 z-10 flex flex-col rounded-2xl ${paletteMin ? 'w-14' : 'w-56'}`}>
         <div className={`flex items-center gap-2 py-1.5 pr-1 ${paletteMin ? 'justify-center pl-1' : 'pl-2.5'} border-b border-[color-mix(in_srgb,var(--ink)_18%,transparent)]`}>
-          {!paletteMin && <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink-hi">Objects</span>}
+          {!paletteMin && <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink-hi">{t('Objects')}</span>}
           <button type="button" onClick={() => setPaletteMin((m) => !m)} aria-expanded={!paletteMin}
-            aria-label={paletteMin ? 'Expand the objects panel' : 'Collapse the objects panel'} title={paletteMin ? 'Expand' : 'Collapse'}
+            aria-label={t(paletteMin ? 'Expand the objects panel' : 'Collapse the objects panel')} title={t(paletteMin ? 'Expand' : 'Collapse')}
             className="grid size-6 shrink-0 place-items-center rounded-full text-ink hover:bg-accent-dim hover:text-accent">
             {icon(<path d={paletteMin ? 'M6 4l4 4-4 4' : 'M10 4 6 8l4 4'} />)}
           </button>
@@ -591,7 +615,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
             style={{ cursor: placing ? 'copy' : undefined }}
             viewBox={cam.box}
             role="img"
-            aria-label={`Isometric floor plan of floor ${plan.floor}, unit ${plan.unit}. Drag desks and partitions to move them on the 20 cm grid; R rotates, Delete removes.`}
+            aria-label={t('Isometric floor plan of floor {n}, unit {u}. Drag desks and partitions to move them on the 20 cm grid; R rotates, Delete removes.', { n: plan.floor, u: plan.unit })}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={() => endDrag(true)}
@@ -626,41 +650,22 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
           {tools}
           {/* the status line (and any message above it), top centre */}
           <StatusLine>
-            {msg ? <div className="text-accent-hi">{sentence(msg)}</div> : null}
+            {msg ? <div className="text-accent-hi">{sentence(t(msg))}</div> : null}
             <div className="text-ink-hi">{status}</div>
           </StatusLine>
         </div>
       </div>
 
-      {/* the inspector: a menu button at the bottom right whose frosted panel grows out of it to full height
-          (as on the building page's floor list); closed when the unit opens, opening by itself when an item is
-          selected (its fields are where it is edited) */}
-      {/* Undo, always there, just left of the menu button on the bottom line (⌘Z still works) */}
+      {/* Undo, always there, just left of the ⋯ menu on the bottom line (⌘Z still works) */}
       <div className="absolute bottom-3 right-[3.75rem] z-10">   {/* 0.75rem edge + 40px button + 0.5rem gap */}
-        <SceneButton place="above" tall label="Undo" tip="Undo the last change · ⌘Z" onClick={() => dispatch({ type: 'undo' })}>
+        <SceneButton place="above" tall label={t('Undo')} tip={t('Undo the last change · ⌘Z')} onClick={() => dispatch({ type: 'undo' })}>
           {icon(<><path d="M5.5 3 2.5 6l3 3" /><path d="M2.5 6H10a3.5 3.5 0 0 1 0 7H7" /></>)}</SceneButton>
       </div>
-      <MenuPanel open={panelOpen} onOpen={setPanelOpen} fill label={`Unit ${plan.unit} details`}>
-        <div className="flex items-center gap-2 border-b border-[color-mix(in_srgb,var(--ink)_18%,transparent)] px-2.5 py-1.5">
-          <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink-hi">
-            {sel ? 'Selected' : `Unit ${plan.unit}`}<span className="text-ink"> · {st.assigned}/{st.desks} seats</span>
-          </span>
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col px-2 pt-2">
-          <Inspector
-            plan={plan}
-            item={sel}
-            items={items}
-            patch={(p) => sel && dispatch({ type: 'patch', plan: pid, id: sel.id, patch: p })}
-            resize={resize}
-            select={(id) => { setSelected(id); setMsg(''); }}
-            custom={custom}
-            showCore={showCore}
-            onSave={saveToPanel}
-            onReplace={replaceWith}
-          />
-        </div>
-      </MenuPanel>
+      {/* the ⋯ menu, bottom right */}
+      <CornerMenu items={[
+        { label: 'Export PNG', icon: 'export', onClick: exportPlan },
+        { label: 'Reset to PDF', icon: 'reset', danger: true, onClick: () => { if (confirm(t('Reset floor {n} unit {u} to the official PDF layout? (Undo can restore your version.)', { n: plan.floor, u: plan.unit }))) dispatch({ type: 'reset', plan: pid }); } },
+      ]} />
     </div>
   );
 }

@@ -26,8 +26,8 @@
   --furn-top:#3b3e43; --desk-top:#3b3e43; --furn:#303337; --furn-side:#2a2c30; --furn-edge:rgba(255,255,255,.19);
   --chair:#303337; --chair-side:#2a2c30; --chair-back-top:#3b3e43; --chair-top:#44474c; --chair-edge:var(--furn-edge);
   /* Host Grotesk for Latin; it has no Khmer glyphs, so Khmer (សសរ …) always renders in Google Sans.
-     Neither covers Hangul, so Korean falls back to the system Korean UI fonts. */
-  --font:"Host Grotesk","Google Sans","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;
+     Neither covers Hangul, so Korean renders in Pretendard (index.html), then the system Korean UI fonts. */
+  --font:"Host Grotesk","Google Sans","Pretendard Variable",Pretendard,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;
 }
 :root[data-theme="light"] {
   color-scheme: light;

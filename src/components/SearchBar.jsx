@@ -5,6 +5,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { buildIndex, search } from '../model/search.js';
 import { icon } from './SceneButton.jsx';
 import { useOneOpen } from '../lib/oneOpen.js';
+import { useT } from '../lib/i18n.js';
 
 const KIND = {
   floor: icon(<><path d="M2.5 6 8 3l5.5 3L8 9z" /><path d="M2.5 9.5 8 12.5l5.5-3" /></>),
@@ -16,7 +17,18 @@ const KIND = {
 };
 const KIND_NAME = { floor: 'Floor', unit: 'Unit', person: 'Employee', desk: 'Desk', room: 'Room', storage: 'Storage' };
 
+/** The index's own English bits (model/search) in the display language; names and room labels stay as they are. */
+const LOC = [
+  [/^Floor (\d+) · Unit (\w+)$/, (m, t) => t('Floor {n} · Unit {u}', { n: m[1], u: m[2] })],
+  [/^Floor (\d+)$/, (m, t) => t('Floor {n}', { n: m[1] })],
+  [/^Unit (\w+)$/, (m, t) => t('Unit {u}', { u: m[1] })],
+  [/^Units (.+)$/, (m, t) => t('Units {u}', { u: m[1] })],
+  [/^Desk (.+)$/, (m, t) => t('Desk {x}', { x: m[1] })],
+];
+const loc = (s, t) => { for (const [re, f] of LOC) { const m = re.exec(s || ''); if (m) return f(m, t); } return t(s); };
+
 export default function SearchBar({ plans, onPick }) {
+  const t = useT();
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   useOneOpen(open, () => setOpen(false));
@@ -74,11 +86,11 @@ export default function SearchBar({ plans, onPick }) {
         </svg>
         <input ref={input} value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={onKeyDown}
           type="search" role="combobox" aria-expanded={Boolean(show)} aria-controls={`${id}-list`} aria-autocomplete="list"
-          aria-activedescendant={show && results[act] ? `${id}-${act}` : undefined} aria-label="Search employees, units, rooms and storage"
-          placeholder="Search people, rooms…" spellCheck={false}
+          aria-activedescendant={show && results[act] ? `${id}-${act}` : undefined} aria-label={t('Search employees, units, rooms and storage')}
+          placeholder={t('Search people, rooms…')} spellCheck={false}
           className="min-w-0 flex-1 bg-transparent text-[14px] text-ink-hi outline-none placeholder:text-ink/70 [&::-webkit-search-cancel-button]:hidden" />
         {q ? (
-          <button type="button" onClick={() => { setQ(''); input.current?.focus(); }} aria-label="Clear search"
+          <button type="button" onClick={() => { setQ(''); input.current?.focus(); }} aria-label={t('Clear search')}
             className="grid size-5 shrink-0 place-items-center rounded-full text-ink hover:text-accent">
             {icon(<path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />)}
           </button>
@@ -89,24 +101,24 @@ export default function SearchBar({ plans, onPick }) {
       {show && (
         <div className="menu-frost absolute bottom-full left-0 right-0 z-40 mb-2 overflow-hidden rounded-2xl">
           {results.length ? (
-            <ul ref={list} id={`${id}-list`} role="listbox" aria-label="Search results" className="no-scrollbar max-h-[min(26rem,60vh)] overflow-y-auto p-1.5">
+            <ul ref={list} id={`${id}-list`} role="listbox" aria-label={t('Search results')} className="no-scrollbar max-h-[min(26rem,60vh)] overflow-y-auto p-1.5">
               {results.map((r, i) => (
                 <li key={r.key} id={`${id}-${i}`} role="option" aria-selected={i === act}
                   onPointerDown={(e) => e.preventDefault()} onPointerEnter={() => setAct(i)} onClick={() => pick(r)}
                   className="menu-item flex cursor-pointer items-center gap-2.5 rounded-xl px-2 py-1.5">
-                  <span className={`grid size-7 shrink-0 place-items-center rounded-full ${i === act ? 'text-accent' : 'text-ink'}`} title={KIND_NAME[r.kind]}>{KIND[r.kind]}</span>
+                  <span className={`grid size-7 shrink-0 place-items-center rounded-full ${i === act ? 'text-accent' : 'text-ink'}`} title={t(KIND_NAME[r.kind])}>{KIND[r.kind]}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12px] text-ink-hi">{r.title}</span>
-                    <span className="block truncate text-[11px] text-ink">{r.sub}</span>
+                    <span className="block truncate text-[12px] text-ink-hi">{loc(r.title, t)}</span>
+                    <span className="block truncate text-[11px] text-ink">{loc(r.sub, t)}</span>
                   </span>
-                  <span className="shrink-0 text-right text-[10px] leading-tight text-ink tabular-nums">{r.where}</span>
+                  <span className="shrink-0 text-right text-[10px] leading-tight text-ink tabular-nums">{loc(r.where, t)}</span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="px-3 py-3 text-[12px] text-ink">No matches for “{q.trim()}”</p>
+            <p className="px-3 py-3 text-[12px] text-ink">{t('No matches for “{q}”', { q: q.trim() })}</p>
           )}
-          <p className="border-t border-[color-mix(in_srgb,var(--ink)_18%,transparent)] px-3 py-1.5 text-[10px] text-ink">↑ ↓ to move · Enter to open · Esc to close</p>
+          <p className="border-t border-[color-mix(in_srgb,var(--ink)_18%,transparent)] px-3 py-1.5 text-[10px] text-ink">{t('↑ ↓ to move · Enter to open · Esc to close')}</p>
         </div>
       )}
     </div>

@@ -3,6 +3,7 @@
 // the last 45 s. Where the presence store is not reachable (local dev, or not set up on Vercel) the pill
 // says so instead of showing a number.
 import { useEffect, useState } from 'react';
+import { useT } from '../lib/i18n.js';
 
 const BEAT = 20_000;
 const newId = () => (crypto.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
@@ -39,11 +40,12 @@ export function useLiveViewers() {
 
 export default function LiveViewers() {
   const { count, offline } = useLiveViewers();
+  const t = useT();
   // an eye and how many people are looking now; 0 when nobody is, or the count cannot be reached
   const n = !offline && count != null ? count : 0;
   return (
-    <span role="status" aria-live="polite" aria-label={`${n} ${n === 1 ? 'person' : 'people'} viewing now`}
-      title={offline ? 'Viewers: the live count is not reachable right now' : `${n} ${n === 1 ? 'person is' : 'people are'} viewing now (you included)`}
+    <span role="status" aria-live="polite" aria-label={t(n === 1 ? '{n} person viewing now' : '{n} people viewing now', { n })}
+      title={offline ? t('Viewers: the live count is not reachable right now') : t(n === 1 ? '{n} person is viewing now (you included)' : '{n} people are viewing now (you included)', { n })}
       className="pointer-events-auto inline-flex items-center gap-1 tabular-nums">
       <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
         className={n > 0 ? 'text-accent' : ''}>

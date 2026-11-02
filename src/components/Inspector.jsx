@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { baseSize, footprint } from '../iso/grid.js';
 import { SIZES, ZONE_KINDS, PALETTE, isLead } from '../model/catalog.js';
 import Switch, { ICONS } from './Switch.jsx';
+import { useT } from '../lib/i18n.js';
 
 const inputCls = 'w-full rounded-md border border-edge bg-recess px-2 py-1.5 text-[12px] text-ink-hi outline-none focus:border-accent placeholder:text-ink/60';
 const capCls = 'text-[10px] uppercase tracking-[.16em] text-ink';
@@ -66,24 +67,25 @@ function Legend({ plan }) {
  * for the chosen one in its place, in a single step (FloorEditor replaceWith).
  */
 function ReplacePicker({ item, custom, showCore, onReplace }) {
+  const tr = useT();
   const groups = PALETTE.filter((g) => showCore || !g.core);
   return (
     <label className="flex flex-col gap-1">
-      <span className={capCls}>Replace with…</span>
-      <select value="" className={inputCls} disabled={item.locked} title={item.locked ? 'Unlock it to replace it' : 'Swap it for another object, in place'}
+      <span className={capCls}>{tr('Replace with…')}</span>
+      <select value="" className={inputCls} disabled={item.locked} title={tr(item.locked ? 'Unlock it to replace it' : 'Swap it for another object, in place')}
         onChange={(e) => {
           const v = e.target.value;
           if (v) onReplace(v.startsWith('c:') ? { key: v.slice(2) } : { type: v.slice(2) });
         }}>
-        <option value="">{item.locked ? 'Locked' : 'Choose an object'}</option>
+        <option value="">{tr(item.locked ? 'Locked' : 'Choose an object')}</option>
         {custom.length > 0 && (
-          <optgroup label="My objects">
+          <optgroup label={tr('My objects')}>
             {custom.map((c) => <option key={c.key} value={`c:${c.key}`}>{c.label}</option>)}
           </optgroup>
         )}
         {groups.map((g) => (
-          <optgroup key={g.group} label={g.group}>
-            {g.types.filter((t) => t !== item.type).map((t) => <option key={t} value={`t:${t}`}>{SIZES[t].label}</option>)}
+          <optgroup key={g.group} label={tr(g.group)}>
+            {g.types.filter((t) => t !== item.type).map((t) => <option key={t} value={`t:${t}`}>{tr(SIZES[t].label)}</option>)}
           </optgroup>
         ))}
       </select>
@@ -92,6 +94,7 @@ function ReplacePicker({ item, custom, showCore, onReplace }) {
 }
 
 export default function Inspector({ plan, item, items, patch, resize, select, custom = [], showCore = true, onSave, onReplace }) {
+  const tr = useT();
   const [q, setQ] = useState('');
   const teams = [...new Set(items.filter((i) => i.type === 'zone' && ['dept', 'ceo'].includes(i.kind)).map((i) => i.label))];
   const desks = items.filter((i) => i.type === 'desk')
@@ -109,50 +112,50 @@ export default function Inspector({ plan, item, items, patch, resize, select, cu
         <section className="flex flex-col gap-3">
           <div className="min-w-0">
             <div className="truncate text-[13px] text-ink-hi">
-              {s.label}{item.type === 'desk' && item.label ? <span className="text-ink"> · {item.label}</span> : null}
+              {tr(s.label)}{item.type === 'desk' && item.label ? <span className="text-ink"> · {item.label}</span> : null}
             </div>
             <div className="text-[11px] text-ink tabular-nums">{footprint(item).w * 20}×{footprint(item).d * 20} cm · {item.rot}°</div>
           </div>
 
           {item.type === 'desk' && (
             <>
-              <Field label="Employee" value={item.name} onCommit={(v) => patch({ name: v })} placeholder="Unassigned" />
-              <Field label="Team" value={item.team} onCommit={(v) => patch({ team: v })} placeholder="—" list="teams" />
-              <Field label="Desk code" value={item.label} onCommit={(v) => patch({ label: v })} placeholder="2C-01" />
-              <Field label="Note" value={item.note} onCommit={(v) => patch({ note: v })} placeholder="e.g. 원격 PC" />
-              <Switch checked={isLead(item)} onChange={(lead) => patch({ lead })} label="Team leader" icon={ICONS.inUse}
-                title={isLead(item) ? 'Team leader: the desk is drawn in light wood' : 'Not a team leader'} />
-              {item.name ? <Btn onClick={() => patch({ name: '', team: '' })}>Unassign seat</Btn> : null}
+              <Field label={tr('Employee')} value={item.name} onCommit={(v) => patch({ name: v })} placeholder={tr('Unassigned')} />
+              <Field label={tr('Team')} value={item.team} onCommit={(v) => patch({ team: v })} placeholder="—" list="teams" />
+              <Field label={tr('Desk code')} value={item.label} onCommit={(v) => patch({ label: v })} placeholder="2C-01" />
+              <Field label={tr('Note')} value={item.note} onCommit={(v) => patch({ note: v })} placeholder={tr('e.g. 원격 PC')} />
+              <Switch checked={isLead(item)} onChange={(lead) => patch({ lead })} label={tr('Team leader')} icon={ICONS.inUse}
+                title={tr(isLead(item) ? 'Team leader: the desk is drawn in light wood' : 'Not a team leader')} />
+              {item.name ? <Btn onClick={() => patch({ name: '', team: '' })}>{tr('Unassign seat')}</Btn> : null}
             </>
           )}
           {item.type === 'zone' && (
             <>
-              <Field label="Name" value={item.label} onCommit={(v) => patch({ label: v })} placeholder="Zone" />
-              <Field label="English" value={item.en} onCommit={(v) => patch({ en: v })} placeholder="—" />
+              <Field label={tr('Name')} value={item.label} onCommit={(v) => patch({ label: v })} placeholder={tr('Zone')} />
+              <Field label={tr('English')} value={item.en} onCommit={(v) => patch({ en: v })} placeholder="—" />
               <label className="flex flex-col gap-1">
-                <span className={capCls}>Kind</span>
+                <span className={capCls}>{tr('Kind')}</span>
                 <select value={item.kind || 'dept'} onChange={(e) => patch({ kind: e.target.value })} className={inputCls}>
-                  {Object.entries(ZONE_KINDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  {Object.entries(ZONE_KINDS).map(([k, v]) => <option key={k} value={k}>{tr(v)}</option>)}
                 </select>
               </label>
-              {item.kind === 'meeting' && <Switch checked={!!item.on} onChange={(on) => patch({ on })} label="In use" icon={ICONS.inUse} title={item.on ? 'In use' : 'Free'} />}
-              {['cafe', 'barista'].includes(item.kind) && <Switch checked={!!item.on} onChange={(on) => patch({ on })} label="Open" icon={ICONS.open} title={item.on ? 'Open' : 'Closed'} />}
+              {item.kind === 'meeting' && <Switch checked={!!item.on} onChange={(on) => patch({ on })} label={tr('In use')} icon={ICONS.inUse} title={tr(item.on ? 'In use' : 'Free')} />}
+              {['cafe', 'barista'].includes(item.kind) && <Switch checked={!!item.on} onChange={(on) => patch({ on })} label={tr('Open')} icon={ICONS.open} title={tr(item.on ? 'Open' : 'Closed')} />}
             </>
           )}
-          {item.type === 'counter' && <Switch checked={!!item.on} onChange={(on) => patch({ on })} label="Open" icon={ICONS.open} title={item.on ? 'Open' : 'Closed'} />}
+          {item.type === 'counter' && <Switch checked={!!item.on} onChange={(on) => patch({ on })} label={tr('Open')} icon={ICONS.open} title={tr(item.on ? 'Open' : 'Closed')} />}
 
           {s.sizable && (
             <div className="flex gap-2">
-              <NumField label={s.sizable === 'w' ? 'Length (cells)' : 'Width (cells)'} value={size.w} onCommit={(n) => resize(n, null)} />
-              {s.sizable.includes('d') && <NumField label="Depth (cells)" value={size.d} onCommit={(n) => resize(null, n)} />}
+              <NumField label={tr(s.sizable === 'w' ? 'Length (cells)' : 'Width (cells)')} value={size.w} onCommit={(n) => resize(n, null)} />
+              {s.sizable.includes('d') && <NumField label={tr('Depth (cells)')} value={size.d} onCommit={(n) => resize(null, n)} />}
             </div>
           )}
 
-          <Switch checked={!!item.locked} onChange={(locked) => patch({ locked })} label="Locked" icon={ICONS.lock}
-            title={item.locked ? 'Locked: can be selected but not dragged, nudged, rotated or deleted' : 'Unlocked'} />
+          <Switch checked={!!item.locked} onChange={(locked) => patch({ locked })} label={tr('Locked')} icon={ICONS.lock}
+            title={tr(item.locked ? 'Locked: can be selected but not dragged, nudged, rotated or deleted' : 'Unlocked')} />
 
           {onReplace && <ReplacePicker item={item} custom={custom} showCore={showCore} onReplace={onReplace} />}
-          {onSave && <Btn onClick={onSave} title="Keep this object, exactly as it is, in My objects at the top of the Objects panel">Save to Object Panel</Btn>}
+          {onSave && <Btn onClick={onSave} title={tr('Keep this object, exactly as it is, in My objects at the top of the Objects panel')}>{tr('Save to Object Panel')}</Btn>}
         </section>
       ) : (
         <Legend plan={plan} />
@@ -160,21 +163,21 @@ export default function Inspector({ plan, item, items, patch, resize, select, cu
 
       <section className="flex min-w-0 flex-col gap-2">
         <div className="flex items-baseline justify-between">
-          <h3 className={capCls.replace('16em', '18em')}>Seating</h3>
+          <h3 className={capCls.replace('16em', '18em')}>{tr('Seating')}</h3>
           <span className="text-[11px] text-ink tabular-nums">{all.filter((d) => d.name).length}/{all.length}</span>
         </div>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search desk, name, team" className={inputCls} />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('Search desk, name, team')} className={inputCls} />
         <ul className="-mx-1">
           {desks.map((d, i) => (
             <li key={d.id}>
               {(i === 0 || desks[i - 1].team !== d.team) && (
-                <div className="truncate px-1 pt-2 pb-0.5 text-[10px] uppercase tracking-[.14em] text-ink">{d.team || 'Unassigned / other'}</div>
+                <div className="truncate px-1 pt-2 pb-0.5 text-[10px] uppercase tracking-[.14em] text-ink">{d.team || tr('Unassigned / other')}</div>
               )}
               <button type="button" onClick={() => select(d.id)}
                 className={`flex w-full min-w-0 items-center gap-2 rounded px-1 py-1 text-left text-[12px] hover:bg-recess ${item?.id === d.id ? 'bg-recess' : ''}`}>
                 <span className={`size-1.5 shrink-0 rounded-full ${d.name ? 'bg-accent' : 'bg-detail'}`} />
                 <span className="w-12 shrink-0 text-ink tabular-nums">{d.label || '—'}</span>
-                <span className={`truncate ${d.name ? 'text-ink-hi' : 'text-ink'}`}>{d.name || d.note || 'unassigned'}</span>
+                <span className={`truncate ${d.name ? 'text-ink-hi' : 'text-ink'}`}>{d.name || d.note || tr('unassigned')}</span>
               </button>
             </li>
           ))}
