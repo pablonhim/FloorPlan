@@ -301,7 +301,8 @@ export function load() {
         const chairs = raw.v >= 4 ? packed : addSeeded(packed, id, (it) => it.type === 'massageChair');
         const racks = raw.v >= 5 ? chairs : addSeeded(chairs, id, (it) => it.type === 'serverRack');
         const moved = raw.v >= 6 ? racks : moveSeeded(racks, id, (it) => it.type === 'serverRack');
-        return raw.v >= 7 || id !== '4D' ? moved : resetSeeded(moved, id, (it) => it.type === 'table' || it.type === 'stool');
+        const cafe = raw.v >= 7 || id !== '4D' ? moved : resetSeeded(moved, id, (it) => it.type === 'table' || it.type === 'stool');
+        return raw.v >= 8 ? cafe : addSeeded(cafe, id, (it) => it.id === '4D-zone-046');   // v7 → v8: the Phnom Penh meeting room
       };
       return Object.fromEntries(Object.keys(PLANS).map((id) => [id, Array.isArray(raw.plans[id]) ? fix(sanitize(raw.plans[id], PLANS[id]), id) : seedPlan(id)]));
     }
@@ -311,7 +312,7 @@ export function load() {
 
 export function save(plans) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ v: 7, savedAt: new Date().toISOString(), plans }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ v: 8, savedAt: new Date().toISOString(), plans }));
     return true;
   } catch {
     return false;

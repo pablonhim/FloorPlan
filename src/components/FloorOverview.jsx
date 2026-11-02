@@ -346,7 +346,7 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
   // the view tools, as one row of round buttons at the bottom left of the drawing:
   // back to the building, the floors with this floor's units, then fit and the meeting-room highlight
   const tools = (
-    <ViewTools>
+    <ViewTools menu={<DockMenu items={[{ label: 'Export PNG', icon: 'export', onClick: exportFloor }]} />}>
       <SceneButton place="above-start" compact docked label="Building" tip="Back to the whole building" onClick={onBack}>{TOOL.back}</SceneButton>
       <Divider />
       <FloorUnitButtons floor={floor} onFloor={onFloor} onUnit={onUnit} onHoverUnit={(u) => { setHoverUnit(u); setDockUnit(u); }} />
@@ -364,8 +364,6 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
             tip={n ? `Light up the ${n === 1 ? one : `${n} ${many}`} on this floor` : `No ${many} on this floor`}>{TOOL[key]}</SceneButton>
         );
       })}
-      <Divider />
-      <DockMenu items={[{ label: 'Export PNG', icon: 'export', onClick: exportFloor }]} />
     </ViewTools>
   );
 

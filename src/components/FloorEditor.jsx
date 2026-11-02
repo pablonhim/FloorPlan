@@ -8,7 +8,7 @@ import { CELL, CUT_H } from '../iso/units.js';
 import { cellRect, centerGrab, collides, footprint, normRot, rotateItem, snapOrigin, validate, worldToCell, onPlate } from '../iso/grid.js';
 import { depthSort } from '../iso/depth.js';
 import { planFrame, itemNode, renderCell, renderFoot, renderItem, renderPlate, renderZoneTag, renderShadows, renderScene, renderDeskCallouts, edgeItems, cafeIds, tipData, glassBackdrops } from '../iso/render.js';
-import { isLive, isLead, leadCls, describe, defaults, LAYER, CORE } from '../model/catalog.js';
+import { isLive, leadCls, describe, defaults, LAYER, CORE } from '../model/catalog.js';
 import { PLANS, UNITS, stats, floorPlan, coreItems, toFloor, newId } from '../model/floors.js';
 import { exportPng } from '../lib/exportPng.js';
 import IsoDefs from './IsoDefs.jsx';
@@ -487,20 +487,10 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
 
   // the dock's quick jumps: only this unit's own places — its teams (department areas), its team leaders'
   // desks and its meeting rooms; a kind the unit has none of keeps its slot with a "None" badge
-  const jumps = useMemo(() => {
-    const at = (it) => ({ id: it.id, it });
-    const seats = (z) => {   // the desks in a zone (by their centre) and how many are taken
-      const f = footprint(z), ds = items.filter((d) => d.type === 'desk' && d.gx + 2 >= z.gx && d.gx + 2 < z.gx + f.w && d.gy + 2 >= z.gy && d.gy + 2 < z.gy + f.d);
-      return ds.length ? `${ds.filter((d) => d.name).length}/${ds.length} seats` : '';
-    };
-    return {
-      teams: items.filter((z) => z.type === 'zone' && ['dept', 'ceo'].includes(z.kind || 'dept'))
-        .map((z) => ({ ...at(z), label: z.label || 'Team', sub: [z.en, seats(z)].filter(Boolean).join(' · ') })),
-      leads: items.filter(isLead).map((d) => ({ ...at(d), label: d.name, sub: [d.team, d.label].filter(Boolean).join(' · ') })),
-      rooms: items.filter((z) => z.type === 'zone' && z.kind === 'meeting')
-        .map((z) => ({ ...at(z), label: z.label || 'Meeting room', sub: [z.en, z.on ? 'In use' : 'Free'].filter(Boolean).join(' · ') })),
-    };
-  }, [items]);
+  const jumps = useMemo(() => ({
+    rooms: items.filter((z) => z.type === 'zone' && z.kind === 'meeting')
+      .map((z) => ({ id: z.id, it: z, label: z.label || 'Meeting room', sub: [z.en, z.on ? 'In use' : 'Free'].filter(Boolean).join(' · ') })),
+  }), [items]);
   const hovered = !ghost && !placing && hoverId && hoverId !== selected ? items.find((i) => i.id === hoverId) : null;
   const feet = (jumpGroup ? jumps[jumpGroup].map((j) => renderFoot(K, j.it, 'foot hover')).join('') : '') +
     (hovered ? renderFoot(K, hovered, 'foot hover') : '') +
@@ -529,13 +519,15 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     cam.glideTo(focusBox(K, { gx: j.it.gx, gy: j.it.gy, w: f.w, d: f.d }, VB0));
   };
   const JUMP_ICON = {
-    teams: icon(<><circle cx="5.5" cy="6" r="2" /><circle cx="10.5" cy="6" r="2" /><path d="M2 13c.4-2.2 1.8-3.3 3.5-3.3S8.6 10.8 9 13M7 13c.4-2.2 1.8-3.3 3.5-3.3S13.6 10.8 14 13" /></>),
-    leads: icon(<><circle cx="8" cy="5.5" r="2.3" /><path d="M3.5 13.5c.6-2.6 2.4-3.9 4.5-3.9s3.9 1.3 4.5 3.9" /><path d="M6 2.2l2 1 2-1" /></>),
     rooms: icon(<><rect x="4" y="5.5" width="8" height="5" rx="1" /><path d="M5.5 3.5h1M9.5 3.5h1M5.5 12.5h1M9.5 12.5h1" /></>),
   };
 
   const tools = (
-    <ViewTools left={`calc(0.75rem + ${paletteMin ? '3.5rem' : '14rem'} + 0.75rem)`} after={<>
+    <ViewTools left={`calc(0.75rem + ${paletteMin ? '3.5rem' : '14rem'} + 0.75rem)`} menu={
+      <DockMenu items={[
+        { label: 'Export PNG', icon: 'export', onClick: exportPlan },
+        { label: 'Reset to PDF', icon: 'reset', danger: true, onClick: () => { if (confirm(`Reset floor ${plan.floor} unit ${plan.unit} to the official PDF layout? (Undo can restore your version.)`)) dispatch({ type: 'reset', plan: pid }); } },
+      ]} />} after={<>
       {/* editing actions: round frosted buttons floating beside the dock (R and Delete still work); Rotate shows
           only while there is something to turn (a movable item selected, or one being placed) and Delete only
           while a removable item is selected (Undo sits at the bottom right, by the menu button) */}
@@ -562,16 +554,11 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
         onHoverUnit={(u) => { setDockUnit(u); if (u !== plan.unit) setHoverUnit(u); }}
         onFloor={(f) => onSwitch(f, UNITS[f].includes(plan.unit) ? plan.unit : UNITS[f][0])}
         onUnit={(f, u) => glide(u)} />
-      <Divider />
-      {/* this unit's own places only: its teams, team leaders and meeting rooms */}
-      <QuickJump label="Teams" icon={JUMP_ICON.teams} items={jumps.teams} onPick={jumpTo} onHover={(j) => setHoverId(j?.id || null)} onHoverAll={(on) => setJumpGroup(on ? 'teams' : null)} />
-      <QuickJump label="Team leaders" icon={JUMP_ICON.leads} items={jumps.leads} onPick={jumpTo} onHover={(j) => setHoverId(j?.id || null)} onHoverAll={(on) => setJumpGroup(on ? 'leads' : null)} />
-      <QuickJump label="Meeting rooms" icon={JUMP_ICON.rooms} items={jumps.rooms} onPick={jumpTo} onHover={(j) => setHoverId(j?.id || null)} onHoverAll={(on) => setJumpGroup(on ? 'rooms' : null)} />
-      <Divider />
-      <DockMenu items={[
-        { label: 'Export PNG', icon: 'export', onClick: exportPlan },
-        { label: 'Reset to PDF', icon: 'reset', danger: true, onClick: () => { if (confirm(`Reset floor ${plan.floor} unit ${plan.unit} to the official PDF layout? (Undo can restore your version.)`)) dispatch({ type: 'reset', plan: pid }); } },
-      ]} />
+      {/* this unit's meeting rooms (none: no slot, and no divider) */}
+      {jumps.rooms.length > 0 && <>
+        <Divider />
+        <QuickJump label="Meeting rooms" icon={JUMP_ICON.rooms} items={jumps.rooms} onPick={jumpTo} onHover={(j) => setHoverId(j?.id || null)} onHoverAll={(on) => setJumpGroup(on ? 'rooms' : null)} />
+      </>}
     </ViewTools>
   );
 

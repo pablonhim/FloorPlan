@@ -1,11 +1,11 @@
-// A bare compass at the left of each view's tool dock. Every view draws the site the same way round: north (world −y)
+// A bare compass at the end of the zoom bar, after Fit (`size` in px). Every view draws the site the same way round: north (world −y)
 // runs up and to the right on screen, 30° above the horizontal, so that is where the needle rests. It is live:
 // dragging or zooming the drawing swings the needle like a real one, and it settles back to north on a spring.
 import { useEffect, useRef } from 'react';
 
 const ROT = 60;   // the needle is drawn pointing straight up; north on screen is 60° clockwise from that
 
-export default function Compass() {
+export default function Compass({ size = 40 }) {
   const needle = useRef(null);
   useEffect(() => {
     const s = { a: 0, v: 0, raf: 0, last: 0 };
@@ -33,9 +33,10 @@ export default function Compass() {
     };
   }, []);
   return (
-    <svg viewBox="-20 -20 40 40" width="40" height="40" role="img" aria-label="Compass: north is up and to the right" className="pointer-events-auto shrink-0">
+    <svg viewBox="-20 -20 40 40" width={size} height={size} role="img" aria-label="Compass: north is up and to the right" className="pointer-events-auto shrink-0">
       <title>North</title>
-      <circle r="18.5" fill="none" stroke="var(--line)" strokeWidth="1.2" opacity=".8" />
+      {/* the ring: a soft white line, so it reads as light catching the edge rather than a grey outline */}
+      <circle r="18.5" fill="none" stroke="rgb(255 255 255 / .6)" strokeWidth="1.2" />
       <g ref={needle} transform={`rotate(${ROT})`}>
         <path d="M0 -10 L2.8 0 L-2.8 0 Z" fill="var(--ink-hi)" />
         <path d="M0 10 L2.8 0 L-2.8 0 Z" fill="none" stroke="var(--ink)" strokeWidth="1" strokeLinejoin="round" />

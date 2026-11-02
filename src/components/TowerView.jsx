@@ -1627,6 +1627,9 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
     setMsg('All cars are back in their bays');
   };
 
+  // anything to reset: a scene playing (its mini-map is up) or the site changed from how it opened
+  const changed = Boolean(map) || away.size > 0 || vipArrived.size > 0 || vipGone.size > 0 || b1Next !== 'park' || vipNext !== 'drive' || atmZoom || gatesOpen;
+
   useEffect(() => { if (active) holder.current?.focus({ preventScroll: true }); }, [active]);   // ↑ ↓ Enter work at once, also on coming back
 
 
@@ -1829,7 +1832,7 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
       )}
       {/* scene controls (animate traffic and a visitor through the site): the bottom-left dock, as on the floor
           and unit pages; hovering a button shows its hint above it at once */}
-      <ViewTools>
+      <ViewTools menu={<DockMenu items={[{ label: 'Export PNG', icon: 'export', onClick: () => exportPng(svgRef.current, { filename: 'tela-office-building.png' }).catch(() => {}) }]} />}>
         {[
           // paired scenes share one button: after parking it offers leaving (in red), and back again
           b1Next === 'park'
@@ -1855,10 +1858,12 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
             <span className="text-[11px] font-semibold tabular-nums">{f}F</span>
           </SceneButton>
         ))}
-        <Divider />
-        <SceneButton place="above" compact docked label="Reset" tip="Every car back in its bay, every scene stopped" onClick={resetScene}>{ICON.reset}</SceneButton>
-        <Divider />
-        <DockMenu items={[{ label: 'Export PNG', icon: 'export', onClick: () => exportPng(svgRef.current, { filename: 'tela-office-building.png' }).catch(() => {}) }]} />
+        {/* Reset only once something has changed: a scene playing, a car moved, the gates held open or the
+            ATM zoom on */}
+        {changed && <>
+          <Divider />
+          <span className="pop-in"><SceneButton place="above" compact docked label="Reset" tip="Every car back in its bay, every scene stopped" onClick={resetScene}>{ICON.reset}</SceneButton></span>
+        </>}
       </ViewTools>
       <svg
         ref={svgRef}

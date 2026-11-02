@@ -2,11 +2,12 @@
 // on the line of the bottom-left dock, showing how far
 // the current view is zoomed — its own range only (building, floor or unit) — with − / + buttons. Grey at
 // rest; while the thumb is dragged it takes the accent colour and the zoom follows the pointer at once. A
-// click on the track glides to that depth; Fit glides back to the whole view. The thumb follows the zoom
-// (zoomStore).
+// click on the track glides to that depth; Fit glides back to the whole view; the live compass ends the bar.
+// The thumb follows the zoom (zoomStore).
 import { useRef, useState } from 'react';
 import { useZoom, zoomCommand } from '../lib/zoomStore.js';
 import SceneButton, { icon } from './SceneButton.jsx';
+import Compass from './Compass.jsx';
 
 const NAME = { building: 'Building', floor: 'Floor', unit: 'Unit' };
 const TRACK = 88;             // px
@@ -48,6 +49,8 @@ export default function ZoomRail({ stage, right = '3.75rem' }) {
       <SceneButton place="above" compact docked label="Fit" tip="Fit the whole view" onClick={() => zoomCommand({ fit: true })}>
         {icon(<path d="M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3" />)}
       </SceneButton>
+      <span className="mx-0.5 block h-5 w-px bg-[color-mix(in_srgb,var(--ink)_30%,transparent)]" aria-hidden="true" />
+      <span className="grid size-8 place-items-center"><Compass size={28} /></span>
     </div>
   );
 }
