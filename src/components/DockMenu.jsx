@@ -1,5 +1,6 @@
 // The "More" button in a view's bottom-right corner (CornerMenu): one round frosted button of its own whose
-// frosted menu opens upward, right-aligned to it, with the app's shared switches — Labels, Departments (the teams' names on the floor), Dynamic Background and Floor Grid (the
+// frosted menu opens upward, right-aligned to it, with the app's shared switches — Labels, Block Names (rooms, regions, units), Departments (the teams' names on the floor),
+// Focus Labels (only the hovered unit's or the selected department's), Dynamic Background and Floor Grid (the
 // architectural model's colours are the one look now: no material-style switches) — then the view's own
 // actions (Export PNG …) and History at the bottom, after the Language row (English, Khmer, Korean: lib/i18n), a danger action (Reset to PDF) last. The shared ones come
 // from DockMenuContext (App).
@@ -19,6 +20,8 @@ const I = {
   export: icon(<path d="M8 2.5v8M4.5 7L8 10.5 11.5 7M3 13.5h10" />),
   reset: icon(<><path d="M3 8a5 5 0 1 0 1.5-3.6" /><path d="M3 2.5V5h2.5" /></>),
   labels: icon(<path d="M3 4.5h10M8 4.5v8" />),
+  blocks: icon(<><rect x="2.5" y="2.5" width="5" height="5" rx="1" /><rect x="8.5" y="2.5" width="5" height="5" rx="1" /><rect x="2.5" y="8.5" width="11" height="5" rx="1" /></>),
+  focus: icon(<><circle cx="8" cy="8" r="2" /><path d="M2.5 5.5v-3h3M10.5 2.5h3v3M13.5 10.5v3h-3M5.5 13.5h-3v-3" /></>),
   depts: icon(<><rect x="2.5" y="3.5" width="11" height="9" rx="1.5" /><path d="M5 6.5h4M5 9.5h6" /></>),
   weather: icon(<><circle cx="6" cy="6" r="2.5" /><path d="M5 13h6.5a2.5 2.5 0 0 0 0-5 3.5 3.5 0 0 0-6.6 1A2 2 0 0 0 5 13z" /></>),
   grid: icon(<path d="M2.5 5.5h11M2.5 10.5h11M5.5 2.5v11M10.5 2.5v11" />),
@@ -80,7 +83,9 @@ export default function DockMenu({ items = [] }) {
             [
               { label: 'Labels', icon: I.labels, on: shared.labels, set: shared.setLabels },
               ...(shared.prefs ? [
+                { label: 'Block Names', icon: I.blocks, on: shared.prefs.blocks, set: (v) => shared.setPref('blocks', v) },
                 { label: 'Departments', icon: I.depts, on: shared.prefs.depts, set: (v) => shared.setPref('depts', v) },
+                { label: 'Focus Labels', icon: I.focus, on: shared.prefs.focus, set: (v) => shared.setPref('focus', v) },
                 { label: 'Dynamic Background', icon: I.weather, on: shared.prefs.weather, set: (v) => shared.setPref('weather', v) },
                 { label: 'Floor Grid', icon: I.grid, on: shared.prefs.grid, set: (v) => shared.setPref('grid', v) },
               ] : []),

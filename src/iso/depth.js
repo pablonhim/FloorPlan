@@ -37,6 +37,18 @@ export function overlapOnScreen(a, b) {
     a.z0 - a.x1 < b.z1 - b.x0 - e && b.z0 - b.x1 < a.z1 - a.x0 - e;
 }
 
+/**
+ * The top-down view's painter's order: looking straight down, what is higher covers what is lower, so by
+ * layer, then at joints the solid piece over the one running into it (as in depthSort), then by height.
+ */
+export function planSort(nodes) {
+  return nodes.map((n, i) => [n, i]).sort(([a, i], [b, j]) => layerOf(a) - layerOf(b) || jointRank(a) - jointRank(b) ||
+    a.z1 - b.z1 || a.z0 - b.z0 || i - j).map(([n]) => n);
+}
+
+/** The painter's order for kernel K's view: by depth (isometric) or by height (top-down). */
+export const sortFor = (K) => (K.top ? planSort : depthSort);
+
 /** Returns nodes in back-to-front order (topological sort, stable fallback for ties/cycles). */
 export function depthSort(nodes) {
   const n = nodes.length;

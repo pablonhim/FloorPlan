@@ -3,10 +3,10 @@
 // Pointer pipeline: client px → SVG user units (inverse screen CTM) → world (kernel.unproject on
 // the floor plane z = 0) → cell (floor) → origin (minus grab offset, clamped) → validate().
 // Nothing is stored unless it passes validate(), so placement is 100% grid-snapped.
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { CELL, CUT_H } from '../iso/units.js';
 import { cellRect, centerGrab, collides, footprint, normRot, rotateItem, snapOrigin, validate, worldToCell, onPlate } from '../iso/grid.js';
-import { depthSort } from '../iso/depth.js';
+import { sortFor } from '../iso/depth.js';
 import { planFrame, itemNode, renderCell, renderFoot, renderItem, renderPlate, renderZoneTag, renderShadows, renderScene, renderDeskCallouts, edgeItems, cafeIds, tipData, glassBackdrops, tagCls } from '../iso/render.js';
 import { isLive, leadCls, describe, defaults, LAYER, CORE } from '../model/catalog.js';
 import { PLANS, UNITS, stats, floorPlan, coreItems, toFloor, newId } from '../model/floors.js';
@@ -23,20 +23,21 @@ import DeskCard from './DeskCard.jsx';
 import { useCustomObjects } from '../lib/customObjects.js';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
 import SceneButton, { icon } from './SceneButton.jsx';
-import { ViewTools, Divider, FloorUnitButtons, QuickJump, StatusLine, sentence } from './ViewTools.jsx';
+import { ViewTools, Divider, FloorUnitButtons, QuickJump, StatusLine, ViewModeButton, sentence } from './ViewTools.jsx';
 import { useT, why } from '../lib/i18n.js';
-import { CornerMenu } from './DockMenu.jsx';
+import { CornerMenu, DockMenuContext } from './DockMenu.jsx';
 import MenuPanel from './MenuPanel.jsx';
 import { useOneOpen } from '../lib/oneOpen.js';
 import { useRaiseOnHover } from '../lib/raiseOnHover.js';
 
 /** Each item's drawing, made once and kept (by item: an edited item is a new object; a unit's items are
  *  only ever drawn in that unit's frame). Filled ahead of time while the app is idle (prewarmUnits). */
-const ITEM_HTML = new WeakMap();
+const ITEM_HTML = [new WeakMap(), new WeakMap()];   // isometric, top-down
 const htmlOf = (K, item, cut) => {
   if (cut !== Infinity || item.id === 'ghost') return renderItem(K, item, cut);
-  let h = ITEM_HTML.get(item);
-  if (h === undefined) { h = renderItem(K, item, cut); ITEM_HTML.set(item, h); }
+  const map = ITEM_HTML[K.top ? 1 : 0];
+  let h = map.get(item);
+  if (h === undefined) { h = renderItem(K, item, cut); map.set(item, h); }
   return h;
 };
 
@@ -62,12 +63,17 @@ function nextDeskLabel(items, pid) {
 }
 
 const area = (it) => { const f = footprint(it); return f.w * f.d; };
+/** Does item `it` stand in zone `z` (its footprint's centre inside the zone)? */
+const inZone = (z, it) => {
+  const f = footprint(it), g = footprint(z), cx = it.gx + f.w / 2, cy = it.gy + f.d / 2;
+  return cx >= z.gx && cx < z.gx + g.w && cy >= z.gy && cy < z.gy + g.d;
+};
 
-/** A unit's frame, kept per unit (lib/keep). */
-const unitFrame = (pid) => keep(`unit-frame:${pid}`, [], () => planFrame(PLANS[pid]));
-const unitPlate = (pid) => keep(`unit-plate:${pid}`, [], () => renderPlate(unitFrame(pid), PLANS[pid]));
+/** A unit's frame, kept per unit and view (lib/keep); `top`: the top-down 2D view. */
+const unitFrame = (pid, top = false) => keep(`unit-frame:${pid}:${top}`, [], () => planFrame(PLANS[pid], top));
+const unitPlate = (pid, top = false) => keep(`unit-plate:${pid}:${top}`, [], () => renderPlate(unitFrame(pid, top), PLANS[pid]));
 /** The building ghosted under the unit: only its outer line, storey by storey down to the ground. */
-const unitGhost = (pid) => keep(`unit-ghost:${pid}`, [], () => ghostBuilding(unitFrame(pid), PLANS[pid].mask, PLANS[pid].floor));
+const unitGhost = (pid, top = false) => keep(`unit-ghost:${pid}:${top}`, [], () => ghostBuilding(unitFrame(pid, top), PLANS[pid].mask, PLANS[pid].floor));
 
 // the floor's other units, faded, where they really are around this one (as on the floor overview);
 // hover lifts one, a click glides the camera over to it and opens it (see glide). Their floor (plate,
@@ -76,15 +82,15 @@ const unitGhost = (pid) => keep(`unit-ghost:${pid}`, [], () => ghostBuilding(uni
 // the faded walls along a shared boundary painted over desks in front of them (e.g. unit D's beside the
 // CSO seat in 4C). Pieces farther off cannot cross this unit on screen and are drawn as one block
 // behind or in front of it, by their own depth.
-function unitNeighbours(pid, plans) {
-  const plan = PLANS[pid], K = unitFrame(pid), fp = floorPlan(plan.floor);
-  return keep(`unit-nb:${pid}`, fp.units.filter((u) => u.id !== pid).map((u) => plans?.[u.id]), () => {
+function unitNeighbours(pid, plans, top = false) {
+  const plan = PLANS[pid], K = unitFrame(pid, top), fp = floorPlan(plan.floor);
+  return keep(`unit-nb:${pid}:${top}`, fp.units.filter((u) => u.id !== pid).map((u) => plans?.[u.id]), () => {
     const NEAR = 10;
     const me = fp.units.find((u) => u.id === pid);
     if (!me) return [];
     const mid = (plan.cols + plan.rows) / 2;
     return fp.units.filter((u) => u.id !== pid).map((u) => {
-      const p = PLANS[u.id], Ku = planFrame(p), dx = u.ox - me.ox, dy = u.oy - me.oy;
+      const p = PLANS[u.id], Ku = planFrame(p, top), dx = u.ox - me.ox, dy = u.oy - me.oy;
       const [ox, oy] = K.D(dx * CELL, dy * CELL, 0);
       const own = (plans?.[u.id] || []).filter((it) => !CORE.has(it.type));
       // in this unit's cells, ids kept apart from its own (outer walls keep their edge- prefix)
@@ -112,9 +118,9 @@ function unitNeighbours(pid, plans) {
 // flat parts (zones, door swings) lie under the unit; its walls, lifts and fixtures are depth-sorted in
 // with the unit's own items (see solidNodes): the WC pocket sits inside the unit's outline, behind some of
 // its walls and in front of others, so drawing the core as one block over or under the unit was wrong
-function unitCore(pid) {
-  const plan = PLANS[pid], K = unitFrame(pid);
-  return keep(`unit-core:${pid}`, [], () => {
+function unitCore(pid, top = false) {
+  const plan = PLANS[pid], K = unitFrame(pid, top);
+  return keep(`unit-core:${pid}:${top}`, [], () => {
     const me = floorPlan(plan.floor).units.find((u) => u.id === pid);
     if (!me) return null;
     const its = toFloor(coreItems(), -me.ox, -me.oy);
@@ -143,7 +149,10 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const showCore = false;
   const items = useMemo(() => allItems.filter((it) => !CORE.has(it.type)), [allItems]);
   const plan = PLANS[pid];
-  const K = unitFrame(pid);
+  // the view: isometric, or the flat top-down plan (the dock's 2D button; a view setting kept with the others)
+  const shared = useContext(DockMenuContext);
+  const top = !!shared?.prefs?.top, focusLabels = shared?.prefs?.focus !== false;
+  const K = unitFrame(pid, top);
   const VB0 = useMemo(() => ({ x: 0, y: 0, w: K.W, h: K.H }), [K]);
   const edges = keep(`unit-edges:${pid}`, [], () => edgeItems(plan));
   const svgRef = useRef(null);
@@ -152,7 +161,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const [tip, tipMove, tipHide] = useHoverTip(stageRef);
   // welcome: the unit's entrance doors swing as upright leaves when the unit opens
   const doorsRef = useRef(null);
-  const swingDoors = useMemo(() => entryDoors(allItems), [allItems]);
+  const swingDoors = useMemo(() => (top ? [] : entryDoors(allItems)), [allItems, top]);   // top-down: no leaves to swing
   useDoorSwing(doorsRef, K, swingDoors, pid);
   // the camera: moves are CSS transforms, the viewBox (cam.vb) is written once a move settles (svgCamera)
   const cam = useSvgCamera(svgRef, VB0, reportDepth(K, ZOOM.min, ZOOM.max));
@@ -431,15 +440,15 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   }, [rotate, remove, layer, nudge, placing, dispatch, active]);
 
   // ---------- scene ----------
-  const plate = unitPlate(pid);
+  const plate = unitPlate(pid, top);
   const cafe = useMemo(() => cafeIds(allItems), [allItems]);
   const swung = useMemo(() => roomDoorIds(allItems), [allItems]);
   const lifted = ghost?.mode === 'move' ? drag.current?.base?.id : null;
   const clsOf = (it) => `it${isLive(it) ? ' live' : ''}${leadCls(it)}${cafe.has(it.id) ? ' cafe' : ''}${swung.has(it.id) ? ' swung' : ''}${it.id === selected ? ' sel' : ''}${it.id === lifted ? ' lifted' : ''}${it.locked ? ' locked' : ''}`;
 
-  const neighbours = unitNeighbours(pid, plans);
-  const core = unitCore(pid);
-  const bldGhost = unitGhost(pid);
+  const neighbours = unitNeighbours(pid, plans, top);
+  const core = unitCore(pid, top);
+  const bldGhost = unitGhost(pid, top);
 
   // floor layer (zones, then door swings) lies under everything; the rest is depth-sorted
   const floorNodes = useMemo(() => items.filter((it) => LAYER[it.type] === 'floor')
@@ -456,8 +465,8 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     for (const n of neighbours) for (const it of n.near) list.push({ ...itemNode(it), it, faded: true, unit: n.unit, cls: 'it nbi' });
     if (ghost) list.push({ ...itemNode(ghost.item), it: ghost.item, ghost: true, cls: `it ghost${isLive(ghost.item) ? ' live' : ''}${ghost.ok ? '' : ' bad'}` });
     for (const d of swingDoors) list.push({ ...leafNode(d), slot: d.id });   // the swinging door leaves' slots
-    return depthSort(list);
-  }, [items, edges, ghost, selected, lifted, core, neighbours, swingDoors]); // eslint-disable-line react-hooks/exhaustive-deps
+    return sortFor(K)(list);
+  }, [K, items, edges, ghost, selected, lifted, core, neighbours, swingDoors]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const shadows = useMemo(() => renderShadows(K, plan, items, edges), [K, plan, items, edges]);
   // frosted glass walls: what stands behind each one, blurred, drawn just under it (glassBackdrops)
@@ -466,7 +475,24 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   // the employees' names, floating above their desks (renderDeskCallouts), over everything
   const callouts = useMemo(() => renderDeskCallouts(K, items), [K, items]);
   const tags = useMemo(() => floorNodes.filter((it) => it.type === 'zone')
-    .map((it) => `<g class="tag${tagCls(it)}">${renderZoneTag(K, it)}</g>`).join(''), [floorNodes, K]);
+    .map((it) => `<g class="tag${tagCls(it)}" data-zone="${it.id}">${renderZoneTag(K, it)}</g>`).join(''), [floorNodes, K]);
+  // focus labels (the dock menu's Focus Labels): a desk or department selected, only that department's names
+  // and its people's name cards show; the rest are hidden until the selection is cleared
+  const dept = useMemo(() => {
+    if (!focusLabels || !sel) return null;
+    const isDept = (z) => z.type === 'zone' && ['dept', 'ceo'].includes(z.kind || 'dept');
+    if (isDept(sel)) return sel;
+    const zones = items.filter(isDept);
+    // a desk's own team first, else the department it stands in
+    return (sel.team && zones.find((z) => z.label === sel.team)) || zones.find((z) => inZone(z, sel)) || null;
+  }, [focusLabels, sel, items]);
+  useLayoutEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const members = new Set(dept ? items.filter((it) => it.type === 'desk' && (it.team ? it.team === dept.label : inZone(dept, it))).map((it) => it.id) : []);
+    svg.querySelectorAll('.desk-callouts .desk-callout').forEach((c) => c.classList.toggle('unfocus', !!dept && !members.has(c.dataset.for)));
+    svg.querySelectorAll('.zone-tags .tag.team').forEach((c) => c.classList.toggle('unfocus', !!dept && c.dataset.zone !== dept.id));
+  }, [dept, items, callouts, tags]);
 
   const [hoverUnit, setHoverUnit] = useState(null);
   const [dockUnit, setDockUnit] = useState(null);
@@ -578,6 +604,8 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
         onHoverUnit={(u) => { setDockUnit(u); if (u !== plan.unit) setHoverUnit(u); }}
         onFloor={(f) => onSwitch(f, UNITS[f].includes(plan.unit) ? plan.unit : UNITS[f][0])}
         onUnit={(f, u) => glide(u)} />
+      <Divider />
+      <ViewModeButton top={top} onChange={(v) => shared?.setPref('top', v)} />
       {/* this unit's meeting rooms (none: no slot, and no divider) */}
       {jumps.rooms.length > 0 && <>
         <Divider />

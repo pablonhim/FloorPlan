@@ -7,7 +7,7 @@
 // `deco` draws on a side face in face-local units (u left→right, v downward from the top edge);
 // it is shown only when that face ends up facing the viewer (+y → FRONT plane, +x → SIDE plane).
 
-import { depthSort } from './depth.js';
+import { sortFor } from './depth.js';
 
 /** 2×2 rotation matrices for clockwise plan rotation by 0/90/180/270°. */
 const R = { 0: [1, 0, 0, 1], 90: [0, -1, 1, 0], 180: [-1, 0, 0, -1], 270: [0, 1, -1, 0] };
@@ -52,9 +52,9 @@ export function renderParts(K, parts, { W0, D0, rot, ox, oy, z0 = 0, cut = Infin
     nodes.push({ p, w, z, h, clipped: h < p.h, x0: w.x, y0: w.y, x1: w.x + w.w, y1: w.y + w.d, z0: z, z1: z + h });
   }
   let s = '';
-  for (const { p, w, z, h, clipped } of depthSort(nodes)) {
+  for (const { p, w, z, h, clipped } of sortFor(K)(nodes)) {
     s += p.flat ? K.flat(w.x, w.y, z, w.w, w.d, 'face top' + (p.cls ? ' ' + p.cls : '')) : K.box(w.x, w.y, z, w.w, w.d, h, p.r || 0, p.cls || '');
-    if (p.deco && !clipped) {
+    if (p.deco && !clipped && !K.top) {   // top-down: no upright faces to draw on
       for (const [face, fn] of Object.entries(p.deco)) {
         const fw = face[1] === 'y' ? p.w : p.d;
         const wf = rotFace(face, rot);

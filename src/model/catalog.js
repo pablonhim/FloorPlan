@@ -145,14 +145,11 @@ export const tipLang = getLang;
  * (walls, doors, glass, partitions and room areas: they are everywhere, a card on each would be noise).
  * One language only: words the catalog lacks in Korean or Khmer fall back to English.
  */
-const NO_TIP = new Set(['zone', 'door', 'wall', 'glass', 'partition']);
+// desks have none: their name cards float over them, and a click opens the desk card (DeskCard)
+const NO_TIP = new Set(['zone', 'door', 'wall', 'glass', 'partition', 'desk']);
 export function tipFor(item, lang = 'en') {
   if (!item || NO_TIP.has(item.type)) return null;
   const s = SIZES[item.type], ko = lang === 'ko', km = lang === 'km';
-  if (item.type === 'desk') {
-    const name = (item.name || '').trim();
-    return { title: name || (ko ? '빈 자리' : km ? 'តុទំនេរ' : 'Unassigned desk'), sub: [item.label, item.team].filter(Boolean).join(' · ') || (lang === 'en' ? s.note : '') };
-  }
   if (item.type === 'wc') {
     const m = item.gender === 'm';
     return { title: ko ? (m ? '남자 화장실' : '여자 화장실') : km ? (m ? 'បន្ទប់ទឹកបុរស' : 'បន្ទប់ទឹកស្ត្រី') : (m ? "Men's WC" : "Women's WC"), sub: '' };

@@ -4,19 +4,19 @@ import { esc, frame } from './kernel.js';
 import { footprint } from './grid.js';
 import { renderParts, placeRect } from './parts.js';
 import { partsFor, SIZES, zoneTag, LAYER, isLive, leadCls, tipFor, TIP_LANGS, NEUTRAL_TYPES } from '../model/catalog.js';
-import { depthSort } from './depth.js';
+import { sortFor } from './depth.js';
 import { shadowLayer, rectsPath, hull } from './shadow.js';
 import { roomDoorIds, entryDoors, leafNode, leafSlot } from './doorSwing.js';
 
 const TW = TILE * CELL; // one tile in world units
 
-/** Kernel + viewBox framing a whole plan (plate, slab and the tallest part). */
-export function planFrame(plan) {
+/** Kernel + viewBox framing a whole plan (plate, slab and the tallest part); `top`: the top-down 2D view. */
+export function planFrame(plan, top = false) {
   const W = plan.cols * CELL, D = plan.rows * CELL;
   return frame([
     [-CELL, -CELL, -SLAB], [W + CELL, -CELL, -SLAB], [-CELL, D + CELL, -SLAB], [W + CELL, D + CELL, -SLAB],
     [-CELL, -CELL, PILLAR_H], [W + CELL, -CELL, PILLAR_H], [-CELL, D + CELL, PILLAR_H],
-  ], 0.03, 16 / 10);
+  ], top ? 0.06 : 0.03, 16 / 10, top);
 }
 
 /**
@@ -67,6 +67,7 @@ export function itemNode(item) {
  */
 let GLASS_SEQ = 0;
 export function glassBackdrops(K, nodes, html, cut = Infinity) {
+  if (K.top) return new Map();   // top-down, a glass wall is a line: nothing seen through it
   // clip ids unique to this drawing: the views are kept alive side by side in one document (the floor view
   // and the unit editor both draw the same glass walls, in different frames), and a url(#id) resolves to the
   // first element with that id in the document — a shared id would clip with another view's outline
@@ -178,7 +179,7 @@ export function renderDeskCallouts(K, items) {
     .map(({ it, at }) => {
       const name = it.name.trim(), photo = it.photo || PHOTOS[name], [ax, ay] = K.P(...at), x = ax - W / 2, y = ay - rise - notch - H;
       const size = Math.min(fs, (pic + pad) / Math.max(textW(name, 1), 1e-6));
-      return `<foreignObject class="desk-callout" data-for="${esc(it.id)}" data-id="${esc(it.id)}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${W}" height="${(H + notch).toFixed(1)}">` +
+      return `<foreignObject class="desk-callout${it.unit ? ` u-${it.unit}` : ''}" data-for="${esc(it.id)}" data-id="${esc(it.id)}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${W}" height="${(H + notch).toFixed(1)}">` +
         `<div xmlns="http://www.w3.org/1999/xhtml" class="callout-wrap">` +
         `<div class="callout-card" style="height:${H.toFixed(1)}px;padding:${pad}px ${pad}px ${(pad * 0.6).toFixed(1)}px">` +
         (photo
@@ -248,6 +249,7 @@ export function renderPlate(K, plan) {
 
 /** Shadows on the plate, clipped to it, cast by the structural shell (walls, pillars, core, outer walls). */
 export function renderShadows(K, plan, items, edges = edgeItems(plan)) {
+  if (K.top) return '';   // the flat 2D plan: no shadows
   const clipId = `clip-${plan.id}`;
   const clip = rectsPath(K, runs(plan.mask).map((r) => ({ x0: r.tx0 * TW, y0: r.ty * TW, x1: r.tx1 * TW, y1: (r.ty + 1) * TW })), 0);
   const caster = (it, h) => ({ ...itemNode(it), h });
@@ -276,12 +278,12 @@ export function renderScene(K, plan, items, { bare = false } = {}) {
   if (!bare) s += '<g class="floor-hi"></g>';   // a floor-level highlight (a hovered unit), filled by the view
   if (!bare) s += renderShadows(K, plan, items.filter((it) => !it.faded), edges);
   // the swinging door leaves' slots (doorSwing) take their place among the solids
-  const slots = bare ? [] : entryDoors(items.filter((it) => !it.faded)).map((d) => ({ ...leafNode(d), slot: d.id }));
-  const solid = depthSort([...items.filter((it) => LAYER[it.type] !== 'floor'), ...edges].map((it) => ({ ...itemNode(it), it })).concat(slots));
+  const slots = bare || K.top ? [] : entryDoors(items.filter((it) => !it.faded)).map((d) => ({ ...leafNode(d), slot: d.id }));
+  const solid = sortFor(K)([...items.filter((it) => LAYER[it.type] !== 'floor'), ...edges].map((it) => ({ ...itemNode(it), it })).concat(slots));
   const solids = solid.filter((n) => !n.slot);
   const frost = glassBackdrops(K, solids.map((n) => ({ ...n, cls: `it${n.it.faded ? ' faded' : ''}${cafe.has(n.it.id) ? ' cafe' : ''}` })), (it) => renderItem(K, it));
   s += solid.map((n) => (n.slot ? leafSlot(n.slot) : (frost.get(n.it.id) || '') + g(n.it, n.it.id.startsWith('edge-') ? ' edge' : ''))).join('');
-  s += floor.filter((it) => it.type === 'zone').map((it) => `<g class="tag${tagCls(it)}">${renderZoneTag(K, it)}</g>`).join('');
+  s += floor.filter((it) => it.type === 'zone').map((it) => `<g class="tag${tagCls(it)}${it.unit ? ` u-${it.unit}` : ''}">${renderZoneTag(K, it)}</g>`).join('');
   if (!bare) s += `<g class="desk-callouts">${renderDeskCallouts(K, items.filter((it) => !it.faded))}</g>`;
   return s;
 }

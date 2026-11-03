@@ -8,6 +8,10 @@
 //   FRONT(x,y,z) local u → +x, v → -z          (y = max face, lower-left)
 //   SIDE(x,y,z)  local u → -y, v → -z          (x = max face, lower-right)
 // so ordinary rects/text inside `<g transform="${FRONT(...)}">` land on the plane.
+//
+// Top-down (`top`): the 2D plan, looking straight down — sx = x + OX, sy = y + OY, height dropped. TOP faces
+// are drawn as they are; FRONT and SIDE faces fold flat to nothing, and the painter's order is by height
+// (depth.planSort) instead of by depth.
 
 export const C = Math.cos(Math.PI / 6);
 export const S = Math.sin(Math.PI / 6);
@@ -17,18 +21,22 @@ export const D = (x, y, z) => [(x - y) * C, (x + y) * S - z];
 
 const n2 = (v) => v.toFixed(2);
 
-export function kernel(OX, OY) {
-  const P = (x, y, z) => [(x - y) * C + OX, (x + y) * S - z + OY];
+/** The top-down view's world vector → screen vector. */
+export const DT = (x, y) => [x, y];
+
+export function kernel(OX, OY, top = false) {
+  const D_ = top ? DT : D;
+  const P = top ? (x, y) => [x + OX, y + OY] : (x, y, z) => [(x - y) * C + OX, (x + y) * S - z + OY];
 
   /** Screen → world on the horizontal plane at height z. Exact inverse of P. */
-  const unproject = (sx, sy, z = 0) => {
+  const unproject = top ? (sx, sy) => [sx - OX, sy - OY] : (sx, sy, z = 0) => {
     const a = (sx - OX) / C; // x - y
     const b = (sy - OY + z) / S; // x + y
     return [(a + b) / 2, (b - a) / 2];
   };
 
   const plane = (O, U, V) => {
-    const o = P(...O), u = D(...U), v = D(...V);
+    const o = P(...O), u = D_(...U), v = D_(...V);
     return `matrix(${u[0]} ${u[1]} ${v[0]} ${v[1]} ${o[0]} ${o[1]})`;
   };
   const TOP = (x, y, z) => plane([x, y, z], [1, 0, 0], [0, 1, 0]);
@@ -84,12 +92,20 @@ export function kernel(OX, OY) {
   /** 3D polyline → SVG path "d". */
   const path = (pts) => 'M' + pts.map((p) => P(...p).map(n2).join(' ')).join('L');
 
-  return { OX, OY, P, D, unproject, plane, TOP, FRONT, SIDE, rect, box, flat, path };
+  if (!top) return { OX, OY, P, D: D_, top, unproject, plane, TOP, FRONT, SIDE, rect, box, flat, path };
+  // top-down: a face standing upright folds flat to nothing (its decoration with it), and a box is its top
+  const NONE = 'matrix(0 0 0 0 0 0)', upright = () => NONE;
+  const topRect = (t, ...a) => (t === NONE ? '' : rect(t, ...a));
+  const topBox = (x, y, z, w, d, h, r = 0, cls = '') => {
+    const c = cls ? ' ' + cls : '';
+    return r > 0 ? rounded(x, y, z, w, d, h, r, c).replace(/^<path class="face front[^>]*>/, '') : rect(TOP(x, y, z + h), w, d, 0, 'face top' + c);
+  };
+  return { OX, OY, P, D: D_, top, unproject, plane, TOP, FRONT: upright, SIDE: upright, rect: topRect, box: topBox, flat, path };
 }
 
 /** Frame a scene: pass its extreme 3D corners. Returns kernel + viewBox padded to `aspect`. */
-export function frame(points, margin = 0.09, aspect = 4 / 3) {
-  const d = points.map(([x, y, z]) => D(x, y, z));
+export function frame(points, margin = 0.09, aspect = 4 / 3, top = false) {
+  const d = points.map(([x, y, z]) => (top ? DT : D)(x, y, z));
   const x0 = Math.min(...d.map((p) => p[0])), x1 = Math.max(...d.map((p) => p[0]));
   const y0 = Math.min(...d.map((p) => p[1])), y1 = Math.max(...d.map((p) => p[1]));
   const m = margin * Math.max(x1 - x0, y1 - y0);
@@ -97,7 +113,7 @@ export function frame(points, margin = 0.09, aspect = 4 / 3) {
   let ox = m - x0, oy = m - y0;
   if (w / h < aspect) { const nw = h * aspect; ox += (nw - w) / 2; w = nw; }
   else { const nh = w / aspect; oy += (nh - h) / 2; h = nh; }
-  return { ...kernel(ox, oy), viewBox: `0 0 ${w.toFixed(1)} ${h.toFixed(1)}`, W: w, H: h };
+  return { ...kernel(ox, oy, top), viewBox: `0 0 ${w.toFixed(1)} ${h.toFixed(1)}`, W: w, H: h };
 }
 
 /** Parallel hairlines at a0, a0+step … a1, each spanning b0→b1, in face-local units. */

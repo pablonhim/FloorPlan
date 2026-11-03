@@ -72,6 +72,19 @@
 [data-labels="off"] .zone-badge, [data-labels="off"] .zone-tags { display:none; }
 /* Departments off: only the departments' and executive offices' names go (meeting rooms, WeCafe … keep theirs) */
 [data-depts="off"] .tag.team, svg[data-depts="off"] .tag.team { display:none; }
+/* Block Names off: the rooms' and regions' names (every zone tag but a department's) and the units' titles */
+[data-blocks="off"] .tag:not(.team), svg[data-blocks="off"] .tag:not(.team),
+[data-blocks="off"] :is(.unit-name, .unit-sub), svg[data-blocks="off"] :is(.unit-name, .unit-sub) { display:none; }
+/* Focus Labels: on the floor view, a unit hovered (data-fu), the other units' names, name cards and titles
+   step back; in a unit, the neighbouring units' names, and with a department selected the other departments'
+   (FloorEditor marks them .unfocus) */
+.floor-ov[data-fu="A"] :is(.tag[class*=" u-"], .desk-callout):not(.u-A), .floor-ov[data-fu="A"] .unit-hit:not([data-unit="A"]) :is(.unit-name, .unit-sub),
+.floor-ov[data-fu="B"] :is(.tag[class*=" u-"], .desk-callout):not(.u-B), .floor-ov[data-fu="B"] .unit-hit:not([data-unit="B"]) :is(.unit-name, .unit-sub),
+.floor-ov[data-fu="C"] :is(.tag[class*=" u-"], .desk-callout):not(.u-C), .floor-ov[data-fu="C"] .unit-hit:not([data-unit="C"]) :is(.unit-name, .unit-sub),
+.floor-ov[data-fu="D"] :is(.tag[class*=" u-"], .desk-callout):not(.u-D), .floor-ov[data-fu="D"] .unit-hit:not([data-unit="D"]) :is(.unit-name, .unit-sub),
+.floor-ov[data-fu="E"] :is(.tag[class*=" u-"], .desk-callout):not(.u-E), .floor-ov[data-fu="E"] .unit-hit:not([data-unit="E"]) :is(.unit-name, .unit-sub),
+.floor-ov[data-fu="F"] :is(.tag[class*=" u-"], .desk-callout):not(.u-F), .floor-ov[data-fu="F"] .unit-hit:not([data-unit="F"]) :is(.unit-name, .unit-sub) { visibility:hidden; }
+[data-focus="on"] .nb:not(.core) .tag, .desk-callouts .unfocus, .zone-tags .unfocus { visibility:hidden; }
 
 /* ---- floor editor ---- */
 /* the object under the pointer (with its hover card, HoverTip) lights up; more so at night */

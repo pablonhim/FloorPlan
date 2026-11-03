@@ -65,7 +65,8 @@ export function ghostBuilding(K, mask, floor) {
     `<stop offset=".3" stop-color="#fff" stop-opacity=".85"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>` +
     `<mask id="ghost-fade" maskUnits="objectBoundingBox" maskContentUnits="objectBoundingBox" x="0" y="0" width="1" height="1">` +
     `<rect width="1" height="1" fill="url(#ghost-fade-g)"/></mask></defs>`;
-  return { below: floor > 0 ? `${fade}<g class="ghost-bld" mask="url(#ghost-fade)">${s}</g>` : '', bounds };
+  // top-down, every storey below lies under the open one: nothing to draw
+  return { below: floor > 0 && !K.top ? `${fade}<g class="ghost-bld" mask="url(#ghost-fade)">${s}</g>` : '', bounds };
 }
 
 /** A view (viewBox rect, at aspect `aspect` = h / w) framing screen points pts with padding. */

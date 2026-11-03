@@ -2,7 +2,7 @@
 // dividers between groups), and the floor / unit buttons shared by the floor view and the unit editor.
 // Hints and the floor menu open upward, away from the bottom edge.
 import { useEffect, useRef, useState } from 'react';
-import SceneButton from './SceneButton.jsx';
+import SceneButton, { icon } from './SceneButton.jsx';
 import { RENTED, UNITS, PLANS, planId } from '../model/floors.js';
 import { useOneOpen } from '../lib/oneOpen.js';
 import { useT } from '../lib/i18n.js';
@@ -36,6 +36,21 @@ export const sentence = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
 /** A short vertical divider between groups of header buttons. */
 export const Divider = () => <span className="mx-0.5 block h-5 w-px bg-[color-mix(in_srgb,var(--ink)_35%,transparent)]" aria-hidden="true" />;
+
+const VIEW_ICON = {
+  flat: icon(<><rect x="2.5" y="2.5" width="11" height="11" rx="1" /><path d="M2.5 8h11M8 2.5v11" /></>),   // a plan, from above
+  iso: icon(<><path d="M8 2.2 13.5 5.3v5.4L8 13.8 2.5 10.7V5.3z" /><path d="M2.5 5.3 8 8.4l5.5-3.1M8 8.4v5.4" /></>),   // a box, in 3D
+};
+/** The floor view's and the unit editor's view switch: the isometric 3D view ↔ the flat top-down plan. */
+export function ViewModeButton({ top, onChange }) {
+  const t = useT();
+  return (
+    <SceneButton place="above" compact docked label={t(top ? '3D view' : 'Top-down view')}
+      tip={t(top ? 'Back to the isometric 3D view' : 'The flat 2D plan, seen from straight above')} onClick={() => onChange(!top)}>
+      {top ? VIEW_ICON.iso : VIEW_ICON.flat}
+    </SceneButton>
+  );
+}
 
 /**
  * Floor picker: a pill in the dock showing the floor shown; clicking it opens (upward) a frosted menu of the rented floors
