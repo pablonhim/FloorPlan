@@ -143,9 +143,9 @@ const textW = (s, fs) => [...s].reduce((w, c) => w + (/[\u1100-\uffff]/.test(c) 
 /** Until real photos come, each person's profile picture is an animal — their own, picked by their name (a
  *  stable hash, so it never changes between visits) — shown on its own, no tile behind it. */
 /** Real profile photos, by the name on the desk (public/photos): shown instead of the animal. */
-const PHOTOS = { 보레이: '/photos/borey.jpg' };
+export const PHOTOS = { 보레이: '/photos/borey.jpg' };
 const ANIMALS = ['🐶', '🐱', '🦊', '🐼', '🐨', '🐯', '🦁', '🐰', '🐻', '🐸', '🐵', '🐧', '🦉', '🐷', '🐮', '🐹', '🦄', '🐙', '🦒', '🐢', '🦔', '🐳', '🦦', '🐥'];
-const animalOf = (name) => {
+export const animalOf = (name) => {
   const h = [...name].reduce((a, c) => (a * 31 + c.codePointAt(0)) >>> 0, 17);
   return { a: ANIMALS[h % ANIMALS.length] };
 };
@@ -176,18 +176,22 @@ export function renderDeskCallouts(K, items) {
     .map((it) => ({ it, at: chairTop(it) }))
     .sort((a, b) => a.at[0] + a.at[1] - (b.at[0] + b.at[1]))
     .map(({ it, at }) => {
-      const name = it.name.trim(), [ax, ay] = K.P(...at), x = ax - W / 2, y = ay - rise - notch - H;
+      const name = it.name.trim(), photo = it.photo || PHOTOS[name], [ax, ay] = K.P(...at), x = ax - W / 2, y = ay - rise - notch - H;
       const size = Math.min(fs, (pic + pad) / Math.max(textW(name, 1), 1e-6));
       return `<foreignObject class="desk-callout" data-for="${esc(it.id)}" data-id="${esc(it.id)}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${W}" height="${(H + notch).toFixed(1)}">` +
         `<div xmlns="http://www.w3.org/1999/xhtml" class="callout-wrap">` +
         `<div class="callout-card" style="height:${H.toFixed(1)}px;padding:${pad}px ${pad}px ${(pad * 0.6).toFixed(1)}px">` +
-        (PHOTOS[name]
-          ? `<div class="callout-pic photo" style="width:${pic}px;height:${pic}px"><img src="${PHOTOS[name]}" alt="${esc(name)}"/></div>`
+        (photo
+          ? `<div class="callout-pic photo" style="width:${pic}px;height:${pic}px"><img src="${esc(photo)}" alt="${esc(name)}"/></div>`
           : `<div class="callout-pic" style="width:${pic}px;height:${pic}px;font-size:${(pic * 0.78).toFixed(1)}px">${animalOf(name).a}</div>`) +
         `<div class="callout-name" style="margin-top:${gap}px;height:${nameH}px;line-height:${nameH}px;font-size:${size.toFixed(2)}px">${esc(name)}</div>` +
         `</div><div class="callout-notch" style="width:${notchW}px;height:${notch}px;clip-path:${tail}"></div>${edge}</div></foreignObject>`;
     }).join('');
 }
+
+/** A zone tag's classes after `tag`: lit, and `team` for a department's or an executive office's name (the
+ *  dock menu's Departments switch hides those: data-depts). */
+export const tagCls = (it) => `${isLive(it) ? ' live' : ''}${['dept', 'ceo'].includes(it.kind || 'dept') ? ' team' : ''}`;
 
 export function renderZoneTag(K, item) {
   const n = itemNode(item);
@@ -277,7 +281,7 @@ export function renderScene(K, plan, items, { bare = false } = {}) {
   const solids = solid.filter((n) => !n.slot);
   const frost = glassBackdrops(K, solids.map((n) => ({ ...n, cls: `it${n.it.faded ? ' faded' : ''}${cafe.has(n.it.id) ? ' cafe' : ''}` })), (it) => renderItem(K, it));
   s += solid.map((n) => (n.slot ? leafSlot(n.slot) : (frost.get(n.it.id) || '') + g(n.it, n.it.id.startsWith('edge-') ? ' edge' : ''))).join('');
-  s += floor.filter((it) => it.type === 'zone').map((it) => `<g class="tag${isLive(it) ? ' live' : ''}">${renderZoneTag(K, it)}</g>`).join('');
+  s += floor.filter((it) => it.type === 'zone').map((it) => `<g class="tag${tagCls(it)}">${renderZoneTag(K, it)}</g>`).join('');
   if (!bare) s += `<g class="desk-callouts">${renderDeskCallouts(K, items.filter((it) => !it.faded))}</g>`;
   return s;
 }

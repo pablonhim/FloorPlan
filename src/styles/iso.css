@@ -70,6 +70,8 @@
    zone number badges. Works in the page (attribute on <html>) and in PNG exports (on the <svg>). */
 [data-labels="off"] svg text, svg[data-labels="off"] text,
 [data-labels="off"] .zone-badge, [data-labels="off"] .zone-tags { display:none; }
+/* Departments off: only the departments' and executive offices' names go (meeting rooms, WeCafe … keep theirs) */
+[data-depts="off"] .tag.team, svg[data-depts="off"] .tag.team { display:none; }
 
 /* ---- floor editor ---- */
 /* the object under the pointer (with its hover card, HoverTip) lights up; more so at night */

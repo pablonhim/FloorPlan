@@ -1,5 +1,5 @@
 // View preferences from the dock's ⋯ menu (DockMenu): show the time-of-day
-// weather (sky and its light) and the floor grid. Remembered per viewer (localStorage) and written on the
+// weather (sky and its light), the floor grid and the departments' names. Remembered per viewer (localStorage) and written on the
 // root as data-weather / data-grid, which index.css reads; nothing is redrawn. (The architectural model's
 // colours are the one look now: the old material-style switches, `clay` and `corten`, are gone, and remembered
 // values of them are dropped, so data-clay / data-corten are never set.)
@@ -7,7 +7,7 @@ import { useCallback, useLayoutEffect, useState } from 'react';
 import { flushSync } from 'react-dom';
 
 const KEY = 'floorplan.view';
-const DEFAULTS = { weather: true, grid: true };
+const DEFAULTS = { weather: true, grid: true, depts: true };
 /** Material styles: none any more (the architectural model's colours are the one look). */
 const STYLES = [];
 const read = () => {

@@ -146,6 +146,7 @@ export function sanitize(raw, plan) {
     if (typeof r.locked === 'boolean') it.locked = r.locked;
     if (Number.isInteger(r.n)) it.n = r.n;
     if (r.flip === true) it.flip = true;
+    if (r.type === 'desk' && typeof r.photo === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(r.photo) && r.photo.length < 60000) it.photo = r.photo;   // the employee's profile picture (uploaded on the desk card)
     if (typeof r.lead === 'boolean' && r.type === 'desk') it.lead = r.lead;   // team leader (wood desk), set by hand
     if (Number.isInteger(r.layer) && r.layer !== 0) it.layer = Math.max(-9, Math.min(9, r.layer));   // drawing order override
     if (out.some((o) => o.id === it.id)) it.id = newId(it.type);
@@ -358,6 +359,10 @@ function entryFor(a, before, after) {
       if (cur?.type === 'desk' && 'name' in a.patch && (a.patch.name || '') !== (cur.name || '')) {
         const label = cur.label || 'desk';
         return { id: a.id, text: a.patch.name ? `Assigned ${label} to ${a.patch.name}${cur.name ? ` (was ${cur.name})` : ''}` : `Unassigned ${label} (was ${cur.name})` };
+      }
+      if (cur?.type === 'desk' && Object.keys(a.patch).join() === 'photo') {
+        const who = cur.name || cur.label || 'desk';
+        return { id: a.id, text: a.patch.photo ? `Changed the profile picture of ${who}` : `Removed the profile picture of ${who}` };
       }
       if (Object.keys(a.patch).join() === 'layer') return { id: a.id, text: `${(a.patch.layer || 0) > (cur?.layer || 0) ? 'Brought forward' : 'Sent backward'} ${what(next)}` };
       const keys = Object.keys(a.patch).filter((k) => !['id', 'type', 'gx', 'gy', 'rot', 'w', 'd'].includes(k));

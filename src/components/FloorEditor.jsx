@@ -7,7 +7,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { CELL, CUT_H } from '../iso/units.js';
 import { cellRect, centerGrab, collides, footprint, normRot, rotateItem, snapOrigin, validate, worldToCell, onPlate } from '../iso/grid.js';
 import { depthSort } from '../iso/depth.js';
-import { planFrame, itemNode, renderCell, renderFoot, renderItem, renderPlate, renderZoneTag, renderShadows, renderScene, renderDeskCallouts, edgeItems, cafeIds, tipData, glassBackdrops } from '../iso/render.js';
+import { planFrame, itemNode, renderCell, renderFoot, renderItem, renderPlate, renderZoneTag, renderShadows, renderScene, renderDeskCallouts, edgeItems, cafeIds, tipData, glassBackdrops, tagCls } from '../iso/render.js';
 import { isLive, leadCls, describe, defaults, LAYER, CORE } from '../model/catalog.js';
 import { PLANS, UNITS, stats, floorPlan, coreItems, toFloor, newId } from '../model/floors.js';
 import { exportPng } from '../lib/exportPng.js';
@@ -19,6 +19,7 @@ import { keep } from '../lib/keep.js';
 import { ghostBuilding } from '../iso/ghost.js';
 import Palette from './Palette.jsx';
 import Inspector from './Inspector.jsx';
+import DeskCard from './DeskCard.jsx';
 import { useCustomObjects } from '../lib/customObjects.js';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
 import SceneButton, { icon } from './SceneButton.jsx';
@@ -465,7 +466,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   // the employees' names, floating above their desks (renderDeskCallouts), over everything
   const callouts = useMemo(() => renderDeskCallouts(K, items), [K, items]);
   const tags = useMemo(() => floorNodes.filter((it) => it.type === 'zone')
-    .map((it) => `<g class="tag${isLive(it) ? ' live' : ''}">${renderZoneTag(K, it)}</g>`).join(''), [floorNodes, K]);
+    .map((it) => `<g class="tag${tagCls(it)}">${renderZoneTag(K, it)}</g>`).join(''), [floorNodes, K]);
 
   const [hoverUnit, setHoverUnit] = useState(null);
   const [dockUnit, setDockUnit] = useState(null);
@@ -646,6 +647,11 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
             {neighbours.filter(nearby).map(nbG('ahead'))}
           </svg>
           <HoverTip tip={tip} />
+          {/* the selected desk's card beside it: its employee's picture and name, assigned right there */}
+          {sel?.type === 'desk' && !ghost && !placing && (
+            <DeskCard key={sel.id} desk={sel} svgRef={svgRef} stageRef={stageRef}
+              patch={(p) => dispatch({ type: 'patch', plan: pid, id: sel.id, patch: p })} />
+          )}
           {tools}
           {/* the status line (and any message above it), top centre */}
           <StatusLine>

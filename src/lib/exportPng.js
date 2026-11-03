@@ -51,6 +51,7 @@ export async function exportPng(svg, { filename, viewBox, width = 2400 }) {
   clone.setAttribute('height', height);
   clone.setAttribute('data-theme', root.dataset.theme || 'dark');
   clone.setAttribute('data-labels', root.dataset.labels || 'on');
+  clone.setAttribute('data-depts', root.dataset.depts || 'on');
   // inline tokens win over iso.css's :root defaults (which match the <svg> root inside the image)
   clone.setAttribute('style', TOKENS.map((t) => `${t}:${cs.getPropertyValue(t).trim()}`).join(';'));
 
