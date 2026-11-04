@@ -238,7 +238,16 @@ export function renderPlate(K, plan) {
   const { TOP, box } = K;
   const R = runs(plan.mask);
   let s = '';
-  for (const r of R) s += box(r.tx0 * TW, r.ty * TW, -SLAB, (r.tx1 - r.tx0) * TW, TW, SLAB, 0, 'slab');
+  // one slab box per tile row: every box's edges (its thickness) first, then every top, so a row's front edge
+  // never shows as a seam line across the floor between it and the next row (only the slab's outer edge shows)
+  let tops = '';
+  for (const r of R) {
+    const b = box(r.tx0 * TW, r.ty * TW, -SLAB, (r.tx1 - r.tx0) * TW, TW, SLAB, 0, 'slab');
+    const at = b.lastIndexOf('<', b.indexOf('class="face top'));
+    s += at >= 0 ? b.slice(0, at) : '';
+    tops += at >= 0 ? b.slice(at) : b;
+  }
+  s += tops;
   // 60 cm tile grid as one path: every tile edge exactly once, so shared edges are never drawn twice
   // (which would double their alpha); its strength is a single stroke alpha in .slab-grid
   const edges = new Set();
@@ -291,7 +300,7 @@ export function renderScene(K, plan, items, { bare = false } = {}) {
   const cafe = cafeIds(items), swung = roomDoorIds(items);
   // items flagged `faded` (another unit's shell drawn round this one) are sorted in with the rest but drawn
   // faded, cast no shadow and are no targets (.it.faded)
-  const g = (it, extra = '') => `<g class="it t-${it.type}${it.gender ? ` g-${it.gender}` : ''}${it.unit ? ` u-${it.unit}` : ''}${it.faded ? ' faded' : ''}${isLive(it) ? ' live' : ''}${leadCls(it)}${cafe.has(it.id) ? ' cafe' : ''}${swung.has(it.id) ? ' swung' : ''}${extra}"${it.type === 'desk' ? ` data-item="${esc(it.id)}"` : ''}${extra ? '' : tipAttrs(it)}>${renderItem(K, it)}</g>`;
+  const g = (it, extra = '') => `<g class="it t-${it.type}${it.gender ? ` g-${it.gender}` : ''}${it.unit ? ` u-${it.unit}` : ''}${it.faded ? ' faded' : ''}${isLive(it) ? ' live' : ''}${leadCls(it)}${cafe.has(it.id) ? ' cafe' : ''}${swung.has(it.id) ? ' swung' : ''}${extra}"${it.type === 'desk' ? ` data-item="${esc(it.id)}"` : ''}${it.faded || extra ? '' : ` data-iid="${esc(it.id)}"`}${extra ? '' : tipAttrs(it)}>${renderItem(K, it)}</g>`;
   const floor = items.filter((it) => LAYER[it.type] === 'floor')
     .sort((a, b) => (a.layer || 0) - (b.layer || 0) || (a.type === b.type ? area(b) - area(a) : a.type === 'zone' ? -1 : 1));   // a layer (Bring forward / Send backward) first
   let s = (bare ? '' : renderPlate(K, plan)) + floor.map((it) => g(it)).join('');
@@ -303,7 +312,7 @@ export function renderScene(K, plan, items, { bare = false } = {}) {
   const solids = solid.filter((n) => !n.slot);
   const frost = glassBackdrops(K, solids.map((n) => ({ ...n, cls: `it${n.it.faded ? ' faded' : ''}${cafe.has(n.it.id) ? ' cafe' : ''}` })), (it) => renderItem(K, it));
   s += solid.map((n) => (n.slot ? leafSlot(n.slot) : (frost.get(n.it.id) || '') + g(n.it, n.it.id.startsWith('edge-') ? ' edge' : ''))).join('');
-  s += floor.filter((it) => it.type === 'zone').map((it) => `<g class="tag${tagCls(it)}${it.unit ? ` u-${it.unit}` : ''}">${renderZoneTag(K, it)}</g>`).join('');
+  s += floor.filter((it) => it.type === 'zone').map((it) => `<g class="tag${tagCls(it)}${it.unit ? ` u-${it.unit}` : ''}" data-zone="${esc(it.id)}">${renderZoneTag(K, it)}</g>`).join('');
   if (!bare) s += `<g class="desk-callouts">${renderDeskCallouts(K, items.filter((it) => !it.faded))}</g>`;
   return s;
 }

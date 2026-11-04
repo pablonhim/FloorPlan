@@ -9,7 +9,7 @@ describe('search', () => {
   it('finds an employee by name and opens their unit focused on the desk', () => {
     const [hit] = search(index, '스레이닌');
     expect(hit.kind).toBe('person');
-    expect(hit.view).toMatchObject({ kind: 'unit', floor: 2, unit: 'C', focus: { id: '2C-desk-053' } });
+    expect(hit.view).toMatchObject({ kind: 'unit', floor: 2, unit: 'C', focus: { id: '2C-desk-068' } });
   });
 
   it('finds units, rooms and storage', () => {
@@ -21,7 +21,7 @@ describe('search', () => {
   });
 
   it('finds a desk by its team in English', () => {
-    expect(search(index, 'bplay pay').some((r) => r.kind === 'person')).toBe(true);
+    expect(search(index, 'kosign class').some((r) => r.kind === 'person')).toBe(true);
   });
 
   it('needs every word and returns nothing for an empty query', () => {

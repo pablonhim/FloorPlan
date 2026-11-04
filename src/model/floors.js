@@ -72,6 +72,7 @@ export function floorPlan(floor) {
   const c = CORE.corridor;
   fill(c.x0, c.y0, c.x1, c.y1);
   fill(0, 69, 33, 93); fill(cols - 33, 69, cols, 93);                                          // WC pockets + the floor their doors swing onto
+  fill(33, 84, 60, 87);   // the strip above the west storage room, between the women's WC and Unit C's notch (east: Unit D covers it)
   fill(CORE.stairsW.x0 - 1, CORE.stairsY[0] - 4, CORE.stairsW.x1, CORE.stairsY[1] + 2);         // stair cores (and their doors)
   fill(CORE.stairsE.x0, CORE.stairsY[0] - 4, CORE.stairsE.x1 + 1, CORE.stairsY[1] + 2);
   // a boundary wall both neighbours carry (Unit A's east wall is Unit B's west wall) is drawn once
@@ -303,7 +304,12 @@ export function load() {
         const racks = raw.v >= 5 ? chairs : addSeeded(chairs, id, (it) => it.type === 'serverRack');
         const moved = raw.v >= 6 ? racks : moveSeeded(racks, id, (it) => it.type === 'serverRack');
         const cafe = raw.v >= 7 || id !== '4D' ? moved : resetSeeded(moved, id, (it) => it.type === 'table' || it.type === 'stool');
-        return raw.v >= 8 ? cafe : addSeeded(cafe, id, (it) => it.id === '4D-zone-046');   // v7 → v8: the Phnom Penh meeting room
+        const pp = raw.v >= 8 ? cafe : addSeeded(cafe, id, (it) => it.id === '4D-zone-046');   // v7 → v8: the Phnom Penh meeting room
+        // v8 → v9: the official layout of 2026-11-04 — every desk (seats, names, teams) and area (renamed
+        // departments) as it gives them, and the WeCafe's tables, stools and round tables re-laid once
+        if (raw.v >= 9) return pp;
+        const seated = resetSeeded(pp, id, (it) => it.type === 'desk' || it.type === 'zone');
+        return id !== '4D' ? seated : resetSeeded(seated, id, (it) => ['table', 'stool', 'roundTable'].includes(it.type));
       };
       return Object.fromEntries(Object.keys(PLANS).map((id) => [id, Array.isArray(raw.plans[id]) ? fix(sanitize(raw.plans[id], PLANS[id]), id) : seedPlan(id)]));
     }
@@ -313,7 +319,7 @@ export function load() {
 
 export function save(plans) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ v: 8, savedAt: new Date().toISOString(), plans }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ v: 9, savedAt: new Date().toISOString(), plans }));
     return true;
   } catch {
     return false;

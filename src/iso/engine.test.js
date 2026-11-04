@@ -102,21 +102,21 @@ describe('depth sort', () => {
   });
 });
 
-describe('official layout (PDF 2026-09-29)', () => {
+describe('official layout (PDF 2026-11-04)', () => {
   const seeds = seedAll();
   it('has floor 2 with units A–D and floor 4 with units C and D', () => {
     expect(Object.keys(PLANS).sort()).toEqual(['2A', '2B', '2C', '2D', '4C', '4D']);
     expect(UNITS[2]).toEqual(['A', 'B', 'C', 'D']);
     expect(UNITS[4]).toEqual(['C', 'D']);
   });
-  it('splits PDF page 4 into Unit A (Webcash / Local Solutions) and Unit B (R&D / Global / HQ)', () => {
+  it('splits PDF page 4 into Unit A (Webcash / Outsourcing 2) and Unit B (R&D / Global / HQ)', () => {
     const named = (id) => seeds[id].filter((i) => i.type === 'desk' && i.name).map((i) => i.name);
-    expect(named('2A')).toEqual(expect.arrayContaining(['정인성 팀장', '쏙라', '짠나앗']));
-    expect(named('2B')).toEqual(expect.arrayContaining(['최기종 부대표', '체트라', '처언']));
+    expect(named('2A')).toEqual(expect.arrayContaining(['정인성 팀장', '또까따', '짠나앗']));
+    expect(named('2B')).toEqual(expect.arrayContaining(['최기종 부대표', '체트라', '처언', '쏙라']));
     const zones = (id) => seeds[id].filter((i) => i.type === 'zone').map((z) => z.label);
-    expect(zones('2A')).toEqual(expect.arrayContaining(['매꽁 회의실', 'GA 스토리지', '웹케시', '로컬솔루션']));
+    expect(zones('2A')).toEqual(expect.arrayContaining(['매꽁 회의실', 'GA 스토리지', '웹케시', '아웃소싱 2']));
     expect(zones('2B')).toEqual(expect.arrayContaining(['앞싸라 회의실', 'HQ · 최기종 부대표', 'IT 인프라']));
-    expect(PLANS['2B'].legendStart).toBe(4);
+    expect(PLANS['2B'].legendStart).toBe(3);
   });
   it('loads every item from the PDF with nothing dropped by validation (doubled door leaves merged)', () => {
     for (const id of Object.keys(PLANS)) {

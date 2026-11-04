@@ -93,48 +93,71 @@
 /* …everything but furniture (walls, the core's lifts, WCs and storerooms, the site's features …) only a touch */
 .tip-hot:not(:has(.face.furn)) { filter:brightness(1.04) saturate(1.05); }
 :root:not([data-theme="light"]) .tip-hot:not(:has(.face.furn)) { filter:brightness(1.14) saturate(1.06); }
-/* neighbouring units around the one being edited: at full strength, every piece in the building's own default
-   finish — its three surface tones (top / east / a deeper south face) and its line — with the sky's cast (the
-   --nb-* tones, index.css), in the light and the dark theme alike; no colour, no shadows, so the unit being edited
-   is the only one in colour. The ground (the slab and the room areas) keeps its own colour. Clickable (glide). */
+/* Out of focus — one look in every view: whatever is not the part being viewed stays at full strength as a white
+   clay model: every surface in one matte clay white, but still lit — its top, east and south faces in their own
+   tones (with the time of day's cast, the --nb-* tones in index.css), its cast and contact shadows, and its glass
+   still translucent and frosted — so the part in view is the one thing in colour and material. That is: the units
+   round the one being edited and the building core by them (the unit editor; a neighbour hovered, to glide over
+   to it, keeps this look and only its floor lights up), the other teams in Team view (with the frosted copies behind glass), the other
+   units while a unit's button is hovered on the floor view (and everything but the places a place button lights
+   up), and the shells of the units a floor does not rent. The ground (slabs, room areas) keeps its own colour. */
 :root, .office-lit {
   --nb-top:var(--struct-top); --nb-side:var(--struct-lit);
-  --nb-front:color-mix(in srgb, var(--struct-shade) 94%, var(--ink)); --nb-glass:var(--struct-glass); }
+  --nb-front:color-mix(in srgb, var(--struct-shade) 94%, var(--ink)); --nb-glass:var(--struct-glass);
+  --clay:#f6f4ef; }
+:root:not([data-theme="light"]) .office-lit, :root:not([data-theme="light"]) { --clay:#b4b1aa; }
 .nb { cursor:pointer; }
-/* …a little faded; the hovered one comes up to full strength (still in the building's finish) */
-:is(.nb:not(.core), .it.nbi, .it.nbc) { opacity:.8; transition:opacity .2s ease; }
-:is(.nb.hot, svg[data-hot="A"] .nbi[data-unit="A"], svg[data-hot="B"] .nbi[data-unit="B"], svg[data-hot="C"] .nbi[data-unit="C"], svg[data-hot="D"] .nbi[data-unit="D"]) { opacity:1; }
-:is(.nb:not(.core), .it.nbi, .it.nbc) {
+/* (raised over every material's own colours — the leaders' birch desks and wooden chairs, the office chairs,
+   the screens — which are set with high-priority rules of their own) */
+:root:root:root:root:root:root:root:root :is(.nb:not(.core), .it.nbc, .it.team-off, .it.faded, .shell-units, svg[data-team] .glass-behind,
+    .it.nbi,
+    .floor-ov[data-dock-unit="A"] .it:not(.u-A, .faded), .floor-ov[data-dock-unit="B"] .it:not(.u-B, .faded),
+    .floor-ov[data-dock-unit="C"] .it:not(.u-C, .faded), .floor-ov[data-dock-unit="D"] .it:not(.u-D, .faded),
+    .floor-ov[data-spot="meet"] .it:not(.faded), .floor-ov[data-spot="stair"] .it:not(.t-stair, .faded),
+    .floor-ov[data-spot="lift"] .it:not(.t-elevator, .faded), .floor-ov[data-spot="wcW"] .it:not(.t-wc.g-f, .faded),
+    .floor-ov[data-spot="wcM"] .it:not(.t-wc.g-m, .faded)) {
+  --clay-top:color-mix(in srgb, var(--clay) 86%, var(--nb-top));
+  --clay-side:color-mix(in srgb, color-mix(in srgb, var(--clay) 86%, var(--nb-side)) 93%, #000);
+  --clay-front:color-mix(in srgb, color-mix(in srgb, var(--clay) 86%, var(--nb-front)) 85%, #000);
+  --clay-line:color-mix(in srgb, var(--clay) 62%, var(--ink));
   & :is(path, rect, circle, ellipse, polygon):not(.slab, .slab-grid, .zone-hatch, .tile-line, .floor-grid, .zone, .zone-edge, .zone-badge, .door-arc) {
-    fill:var(--nb-side) !important; fill-opacity:1 !important; filter:none !important;
-    stroke:var(--nb-line, var(--struct-line)) !important; stroke-opacity:var(--nb-line-a, .6) !important; }
-  & .face:not(.slab, .zone, .top, .side) { fill:var(--nb-front) !important; }
-  & .face.top:not(.slab, .zone) { fill:var(--nb-top) !important; }
-  & :is(.glass, .face.pane, .face.frost-glass) { fill:var(--nb-glass) !important; fill-opacity:.85 !important; }
-  /* the glass's own blue (outline, mullions, door leaves) goes too: everything in the building's line */
-  & :is(.face.pane, .face.frost-glass, .door-panel) { stroke:var(--nb-line, var(--struct-line)) !important; stroke-opacity:var(--nb-line-a, .6) !important; }
-  & :is(line, .mullion, .frost-mullion, .grain, .drawer-line) { stroke:var(--nb-line, var(--struct-line)) !important; stroke-opacity:var(--nb-line-a, .6) !important; }
-  & :is(.cast-shadow, .ao, .shadow-slice, .monitor-ray, .glass-behind) { display:none; }
+    fill:var(--clay-side) !important; stroke:var(--clay-line) !important; stroke-opacity:.5 !important; }
+  & .face:not(.slab, .zone, .top, .side) { fill:var(--clay-front) !important; }
+  & .face.top:not(.slab, .zone) { fill:var(--clay-top) !important; }
+  & :is(line, .mullion, .grain, .drawer-line) { stroke:var(--clay-line) !important; stroke-opacity:.5 !important; }
+  /* the glass keeps its see-through, frosted look (its own opacity), in a neutral clear instead of its blue */
+  & :is(.glass, .face.pane, .face.frost-glass) { fill:color-mix(in srgb, #ffffff 55%, var(--clay)) !important; }
+  & .frost-mullion { stroke:#ffffff !important; }
+  /* the light stays: cast and contact shadows as they were */
+  & :is(.ao, .shadow-slice, .cast-shadow) :is(path, rect, polygon, ellipse) { fill:var(--shadow) !important; stroke:none !important; }
 }
-/* focus: the unit being edited is the only solid, shaded, coloured thing on screen; its resting neighbours (and
-   the core by them) are an outline-only line drawing — blank surfaces, one light line — the same look as the
-   floor view's unit focus (data-dock-unit), so they give the place without competing with it. Hovered (to glide
-   over to it), a neighbour comes back in the building's finish at full strength. Set on the pieces themselves,
-   so it wins over the sky's --nb-* cast (index.css). */
-:is(.nb:not(.core, .hot), .it.nbc, svg:not([data-hot="A"]) .it.nbi[data-unit="A"], svg:not([data-hot="B"]) .it.nbi[data-unit="B"],
-    svg:not([data-hot="C"]) .it.nbi[data-unit="C"], svg:not([data-hot="D"]) .it.nbi[data-unit="D"]) {
-  --nb-top:var(--panel); --nb-side:var(--panel); --nb-front:var(--panel); --nb-glass:var(--panel);
-  --nb-line:color-mix(in srgb, var(--ink) 32%, var(--panel)); --nb-line-a:1; }
+/* …in a unit, the units round it (and the shared core by them) are plain clay shapes at full strength without
+   a single line — walls, pillars, partitions, glass walls and doors, desks, chairs, monitors, their floor's tile
+   grid and slab edges — calm masses round the unit; floor 4's empty units A and B (their shells) and, in Team view, every other team
+   the same way.
+   (Ranked over the clay rule above, which lines its pieces.)
+   Hovered (to glide over), a neighbour stays as it is: only its floor lights up (.nb.hot, below). */
+:root:root:root:root:root:root:root:root:root:root:root:root :is(.nb:not(.core), .it.nbc, .glass-behind :is(.nbi, .nbc), .it.faded, .shell-units, .it.team-off, svg[data-team] .glass-behind,
+    .it.nbi)
+  :is(path, rect, circle, ellipse, polygon, line) { stroke:none !important; }
+/* …and their room floors keep no colour either (a meeting room in use, the WeCafe): plain floor, like the rest */
+:root:root:root:root:root:root:root:root:root:root:root:root :is(.nb:not(.core), .it.nbc, .glass-behind :is(.nbi, .nbc), .it.faded, .shell-units, .it.team-off, svg[data-team] .glass-behind,
+    .it.nbi)
+  .face.zone { fill:transparent !important; }
 .nb .it { cursor:pointer; }
-.nb.core { opacity:1; pointer-events:none; }   /* the building core round a unit: shown at full strength, not a target */
+/* Team / Department view (lib/teamView): the team picked keeps its colour (.team-off: the rest, above); its own
+   areas are washed in the accent with a fine accent edge. Only the team's labels show: the other areas' names
+   and people's cards (.team-hide), the neighbouring units' names and the floor's unit titles go. */
+.it.team-on .face.zone { fill:color-mix(in srgb, var(--accent) 10%, transparent) !important; }
+.it.team-on .zone-edge { stroke:var(--accent) !important; stroke-width:1.5; stroke-opacity:.85; vector-effect:non-scaling-stroke; }
+svg[data-team] :is(.desk-callout.team-hide, .tag.team-hide, .tag:not([data-zone]), .nb .tag, .nb text, .unit-name, .unit-sub) { display:none; }
+.nb.core { pointer-events:none; }   /* the building core inside a unit: in colour, not a target */
+.nb.core-out { pointer-events:none; cursor:default; }   /* …and round it (grayscale, above): not a target either */
 .it.core-faded { pointer-events:none; }   /* …its walls and fixtures (WCs, lifts, storage), sorted in with the unit's own items */
 .it.core-faded[data-tip] { pointer-events:auto; cursor:default; }   /* …the ones with a hover tip take the pointer (a press on them still pans) */
-/* a neighbouring unit's pieces near this one, sorted in with its items: in the building's finish like the rest of that unit (above), in colour on hover */
-.it.nbi { cursor:pointer; }
+.it.nbi { cursor:pointer; }   /* a neighbouring unit's pieces near this one, sorted in with its items: in colour on hover */
+.it.faded { pointer-events:none; }   /* units a floor does not rent (floor 4: A and B): their shell, not a target */
 
-/* units a floor does not rent (floor 4: A and B): their shell only, faded, not a target */
-.shell-units { opacity:.3; }
-.it.faded { opacity:.3; pointer-events:none; }   /* their walls and pillars, depth-sorted in with the floor */
 /* floor tile grid: exactly 10% stroke alpha, drawn once per edge (see renderPlate) */
 .slab-grid { fill:none; stroke:var(--line); stroke-opacity:.22; stroke-width:1; vector-effect:non-scaling-stroke; }
 /* every grid-like line on a floor (tiles, room hatching, restroom tiles, tower paving): same colour, 10% */
@@ -272,15 +295,15 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 .it.locked { cursor:default; }
 /* every glass wall (meeting rooms, partitions, storage rooms) is frosted: dense milky white that only
    lets a faint smudge of what is behind through; see .frost-glass below */
-/* …the glass walls in the unit entrance doors' blue glass, frosted: a light blue pane over a blurred copy of
-   what stands behind it (render.glassBackdrops: .glass-behind, the plain floor as its backdrop) */
-.face.pane { fill:color-mix(in srgb, var(--struct-lit) 80%, var(--accent) 20%); fill-opacity:.72; stroke:var(--struct-line); stroke-width:.6; }
-.face.pane.side { fill-opacity:.78; }
+/* …the glass walls and doors: bright white frosted glass (--glass-white, index.css), a white pane over a blurred
+   copy of what stands behind it (render.glassBackdrops: .glass-behind, the plain floor as its backdrop) */
+.face.pane { fill:var(--glass-white, #fff); fill-opacity:.66; stroke:var(--glass-line, var(--struct-line)); stroke-width:.6; }
+.face.pane.side { fill-opacity:.72; }
 .glass-behind { pointer-events:none; }
 .glass-backdrop { fill:var(--floor); }
 /* the plans' floor: the deck's white (--floor, worked out on the slab itself so it follows every theme's /
    style's deck; the sky's cast is mixed into it in index.css) */
-:is(.face.slab, .glass-backdrop, .face.zone-core) { --floor:var(--deck); }
+:is(.face.slab, .glass-backdrop) { --floor:var(--deck); }
 .face.tile { fill:var(--recess); }
 /* sanitary fixtures (toilets, urinals) and basins in the core WCs */
 /* sanitary fittings (toilets, urinals, basin counters, stall partitions): the building's neutral white /
@@ -290,14 +313,11 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 .face.fixture.counter.side, .face.fixture.partition.side { fill:var(--struct-lit); }
 /* frosted glass (storage rooms): dense milky panes; the contents inside are drawn blurred and faded
    (.frosted-inside), so what shows through is soft and out of focus */
-.face.frost-glass { fill:color-mix(in srgb, #ffffff 72%, var(--struct-glass)); fill-opacity:.86; stroke:var(--struct-line); stroke-width:.6; }
+.face.frost-glass { fill:var(--glass-white, #fff); fill-opacity:.86; stroke:var(--glass-line, var(--struct-line)); stroke-width:.6; }
 .face.frost-glass.side { fill-opacity:.9; }
 .face.frost-glass.top { fill-opacity:.82; }
 .frosted-inside { filter:url(#frost-blur); opacity:.55; }
-:root:not([data-theme="light"]) .face.frost-glass {
-  fill:color-mix(in srgb, #9aa7b6 30%, var(--struct-glass)); }
-:root:not([data-theme="light"]) .frost-mullion { stroke:#7f8a97; }
-.frost-mullion { fill:none; stroke:#ffffff; stroke-width:1.2; vector-effect:non-scaling-stroke; opacity:.9; }
+.frost-mullion { fill:none; stroke:var(--glass-line, #fff); stroke-width:1.2; vector-effect:non-scaling-stroke; opacity:.9; }
 /* WC wall lights: in daylight just the fitting; at night each throws a warm beam down the wall */
 .wc-lamp { fill:var(--struct-shade); stroke:var(--struct-line); stroke-width:.4; vector-effect:non-scaling-stroke; }
 .wc-beam { display:none; pointer-events:none; }
@@ -305,9 +325,10 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 :root:not([data-theme="light"]) .wc-lamp { fill:var(--night-light-hi); stroke:none; filter:url(#soft); }
 :root:not([data-theme="light"]) .wc-beam { display:inline; mix-blend-mode:screen; }
 .basin { fill:color-mix(in srgb, var(--struct-shade) 60%, var(--struct-glass)); stroke:var(--struct-line); stroke-width:.6; vector-effect:non-scaling-stroke; }
-/* building-core zones (corridor, lift lobby, WCs, stairwells): painted as the floor itself (--floor, with the
-   sky's tint in index.css) — the unit editor draws them without a slab under them — never a grey of their own */
-.face.zone.zone-core { fill:var(--floor); }
+/* building-core zones (corridor, lift lobby, WCs, stairwells): see-through like every room area — the building's
+   floor lies under them in every view (the floor's plate; round a unit, its core plate), so the ground and its
+   tile grid are one and the same everywhere, the grid showing all over or nowhere (Floor Grid) */
+.face.zone.zone-core { fill:transparent; }
 .face.carpet { fill:var(--deck); }
 .tile-line { opacity:.6; }
 
@@ -475,22 +496,9 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
    pillar, desk and partition, without an outline: the floor view tints its area in the scene's floor layer
    (.unit-floor-hi in renderScene's .floor-hi slot); the unit editor tints that unit's slab (own or neighbour) */
 .unit-floor-hi { fill:var(--accent); fill-opacity:.12; stroke:none; pointer-events:none; }
-/* the floor view, hovering a unit's button in the dock: the other units (and the core round them) fade back
-   as a line drawing at full strength — every surface above the floor blank, every edge a light grey line, no shadows, no glass
-   blur; the floor and the room areas keep their colour; the hovered unit as it is */
-:is(.floor-ov[data-dock-unit="A"] .it:not(.u-A, .faded), .floor-ov[data-dock-unit="B"] .it:not(.u-B, .faded),
-    .floor-ov[data-dock-unit="C"] .it:not(.u-C, .faded), .floor-ov[data-dock-unit="D"] .it:not(.u-D, .faded),
-    .floor-ov[data-spot="meet"] .it:not(.faded), .floor-ov[data-spot="stair"] .it:not(.t-stair, .faded),
-    .floor-ov[data-spot="lift"] .it:not(.t-elevator, .faded), .floor-ov[data-spot="wcW"] .it:not(.t-wc.g-f, .faded),
-    .floor-ov[data-spot="wcM"] .it:not(.t-wc.g-m, .faded)) {
-  & :is(path, rect, circle, ellipse, polygon):not(.slab, .slab-grid, .zone, .zone-edge, .zone-badge, .zone-hatch, .tile-line, .floor-grid) {
-    fill:var(--panel) !important; fill-opacity:1 !important; filter:none !important;
-    stroke:color-mix(in srgb, var(--ink) 32%, var(--panel)) !important; stroke-opacity:1 !important; }
-  & :is(line, .mullion, .grain, .drawer-line) { stroke:color-mix(in srgb, var(--ink) 32%, var(--panel)) !important; stroke-opacity:1 !important; }
-  & :is(.glass-behind, .monitor-ray) { display:none; }
-}
+/* the floor view, hovering a unit's button in the dock (or a place button): the rest in grayscale (see Out of focus) */
 
-:is(.own-plate.hot, .nb.dock-hot) .face.slab.top { fill:color-mix(in srgb, var(--accent) 14%, var(--floor)) !important; }
+:is(.own-plate.hot, .nb.dock-hot, .nb.hot) .face.slab.top { fill:color-mix(in srgb, var(--accent) 14%, var(--floor)) !important; }
 .unit-name { fill:var(--ink-hi); font-family:var(--font); font-weight:500; letter-spacing:4px; opacity:.75; paint-order:stroke; stroke:var(--panel); stroke-width:4px; }
 .unit-sub { fill:var(--ink); font-family:var(--font); paint-order:stroke; stroke:var(--panel); stroke-width:3px; }
 .foot.bad { fill:color-mix(in srgb, var(--warn) 18%, transparent); stroke:var(--warn); }
@@ -767,7 +775,7 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 .face.stair-step.s10 { fill:color-mix(in srgb, var(--struct-lit) 40%, #000); stroke:var(--struct-line); stroke-width:.5; vector-effect:non-scaling-stroke; }
 .face.stair-step.s11 { fill:color-mix(in srgb, var(--struct-lit) 34%, #000); stroke:var(--struct-line); stroke-width:.5; vector-effect:non-scaling-stroke; }
 /* welcome door swing (iso/doorSwing.js): upright door leaves on the entrance doors */
-.door-panel { fill:color-mix(in srgb, var(--struct-lit) 80%, var(--accent) 20%); stroke:var(--struct-line); stroke-width:.8; vector-effect:non-scaling-stroke; }
+.door-panel { fill:var(--glass-white, #fff); fill-opacity:.72; stroke:var(--glass-line, var(--struct-line)); stroke-width:.8; vector-effect:non-scaling-stroke; }
 .door-panel-edge { stroke:var(--ink-hi); stroke-width:1.2; vector-effect:non-scaling-stroke; }
 .car-face.xray { fill-opacity:.22; }
 :root { --seat:#6d737b; --seat-dk:#3b3f45; }

@@ -10,7 +10,9 @@ import { elevatorParts, LAYER } from '../model/catalog.js';
 import { renderParts } from '../iso/parts.js';
 import { footprint } from '../iso/grid.js';
 import { person } from '../iso/scenes.js';
-import { exportPng } from '../lib/exportPng.js';
+import { exportPng, shownBox } from '../lib/exportPng.js';
+import { useShot } from '../lib/shotStore.js';
+import { teamList, teamScope, teamBounds, markTeamItems, markTeamLabels } from '../lib/teamView.js';
 import IsoDefs from './IsoDefs.jsx';
 import { focusBox, useSvgCamera } from '../lib/svgCamera.js';
 import { keep } from '../lib/keep.js';
@@ -19,7 +21,7 @@ import { ghostBuilding, frameOf } from '../iso/ghost.js';
 import { reportDepth, usePlanZoom } from '../lib/planZoom.js';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
 import SceneButton, { icon } from './SceneButton.jsx';
-import { ViewTools, Divider, FloorUnitButtons, StatusLine, ViewModeButton, sentence } from './ViewTools.jsx';
+import { ViewTools, Divider, FloorUnitButtons, StatusLine, TeamPicker, ViewModeButton, sentence } from './ViewTools.jsx';
 import { CornerMenu, DockMenuContext } from './DockMenu.jsx';
 import MenuPanel from './MenuPanel.jsx';
 import { useT } from '../lib/i18n.js';
@@ -235,6 +237,25 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     if (focus) cam.glideTo(focusBox(K, focus, VB0, { h: 60 }), { delay: fresh ? 250 : 0 });
   }, [focus, floor]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Team / Department view (the dock's team button): one team across the floor's units, the rest stepping
+  // back; the scene is one string, so its pieces and labels are marked in place (lib/teamView)
+  const [team, setTeam] = useState(null);
+  useEffect(() => { setTeam(null); }, [floor]);
+  const teams = useMemo(() => teamList(floorItems.filter((it) => it.unit)), [floorItems]);
+  const teamOn = teams.find((x) => x.label === team) || null;
+  const scope = useMemo(() => (teamOn ? teamScope(floorItems, teamOn) : null), [floorItems, teamOn]);
+  useLayoutEffect(() => { markTeamItems(svgRef.current, scope); markTeamLabels(svgRef.current, scope); }, [scope, scene]);
+  useEffect(() => {
+    if (!active || !team) return undefined;
+    const esc = (e) => { if (e.key === 'Escape' && !e.target.closest?.('input, textarea, select, [role="menu"]')) setTeam(null); };
+    window.addEventListener('keydown', esc);
+    return () => window.removeEventListener('keydown', esc);
+  }, [active, team]);
+  const showTeam = (label) => {
+    setTeam(label);
+    const x = label && teams.find((y) => y.label === label), b = x && teamBounds(x);
+    if (b) cam.glideTo(focusBox(K, b, VB0, { minW: VB0.w * 0.35 }));
+  };
   const unitStats = useMemo(() => Object.fromEntries(plan.units.map((u) => [u.unit, stats(plans[u.id])])), [plan, plans]);
   const overlay = useMemo(() => {
     const taken = [];   // each title kept clear of the ones placed before it
@@ -376,6 +397,14 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
 
   const total = Object.values(unitStats).reduce((a, b) => ({ desks: a.desks + b.desks, assigned: a.assigned + b.assigned }), { desks: 0, assigned: 0 });
 
+  // the screenshot button: the view exactly as it shows, at twice the screen's size (at least 2400 px wide)
+  const shoot = async () => {
+    const svg = svgRef.current;
+    const name = `wefloor-floor-${floor}${team ? `-${team.replace(/[\\/:*?"<>|\s·]+/g, '-')}` : ''}${top ? '-2d' : ''}.png`;
+    try { return await exportPng(svg, { filename: name, viewBox: shownBox(svg), width: Math.min(4800, Math.max(2400, Math.round(svg.parentElement.clientWidth * 2))), shot: true, save: false }); }
+    catch (err) { setMsg(['screenshot failed: {e}', { e: err.message }]); return null; }
+  };
+  useShot(active, shoot);   // the zoom dock's screenshot button takes this view while it is on screen
   const exportFloor = async () => {
     try { await exportPng(svgRef.current, { filename: `floor-${floor}-all-units.png`, viewBox: K.viewBox }); setMsg(['exported png']); }
     catch (err) { setMsg(['export failed: {e}', { e: err.message }]); }
@@ -418,6 +447,10 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
       <FloorUnitButtons floor={floor} onFloor={onFloor} onUnit={onUnit} onHoverUnit={(u) => { setHoverUnit(u); setDockUnit(u); }} />
       <Divider />
       <ViewModeButton top={top} onChange={(v) => shared?.setPref('top', v)} />
+      {teams.length > 0 && <>
+        <Divider />
+        <TeamPicker teams={teams} team={team} onTeam={showTeam} />
+      </>}
       <Divider />
       <SceneButton place="above" compact docked label={t(showMeet ? 'Hide rooms' : 'Meeting rooms')} active={showMeet} onClick={() => setShowMeet((v) => !v)}
         onPointerEnter={() => setSpotHover('meet')} onPointerLeave={() => setSpotHover(null)}
@@ -442,7 +475,8 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
           <svg
             ref={svgRef}
             className="floor-ov office-lit cam-over select-none touch-none" data-dock-unit={dockUnit || undefined} data-spot={spotHover || undefined}
-            data-fu={(focusLabels && (hoverUnit || dockUnit)) || undefined}
+            data-fu={(focusLabels && !team && (hoverUnit || dockUnit)) || undefined}
+            data-team={team ? 'on' : undefined}
             viewBox={cam.box}
             role="img"
             aria-label={t('Isometric plan of floor {n} with units {u}. Click a unit to open it.', { n: floor, u: plan.units.map((u) => u.unit).join(' · ') })}
@@ -469,7 +503,7 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
             {msg ? <div className="text-accent-hi">{sentence(t(msg))}</div> : null}
             {kosign && <div className="text-accent-hi">{kosign.path ? t('Follow the line to {r}', { r: kosign.room.label }) : t('No route to KOSIGN on this floor')}</div>}
             <div className="text-ink-hi">
-              {hoverUnit ? t('Unit {u} · Click to open', { u: hoverUnit }) : t('Floor {n} · {a} of {d} seats taken', { n: floor, a: total.assigned, d: total.desks })}
+              {hoverUnit ? t('Unit {u} · Click to open', { u: hoverUnit }) : teamOn ? [t('Team view'), teamOn.label, t('{n} people', { n: teamOn.people })].join(' · ') : t('Floor {n} · {a} of {d} seats taken', { n: floor, a: total.assigned, d: total.desks })}
             </div>
           </StatusLine>
           {/* Export sits in the app header beside the Labels / Dark mode switches, as tall as they are */}

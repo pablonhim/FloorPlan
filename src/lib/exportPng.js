@@ -35,14 +35,44 @@ async function embeddedFonts() {
   return fontFaces;
 }
 
-export async function exportPng(svg, { filename, viewBox, width = 2400 }) {
+/**
+ * The part of `svg` showing on screen, as a viewBox string: its holder's box (the stage, which clips it) taken
+ * back through the svg's screen transform, so a camera move resting as a CSS transform is caught as it shows.
+ */
+export function shownBox(svg) {
+  const ctm = svg.getScreenCTM?.(), r = svg.parentElement.getBoundingClientRect();
+  if (!ctm || !(r.width > 1 && r.height > 1)) return svg.dataset.view || svg.getAttribute('viewBox');
+  const inv = ctm.inverse(), at = (x, y) => new DOMPoint(x, y).matrixTransform(inv);
+  const a = at(r.left, r.top), b = at(r.right, r.bottom);
+  return `${a.x.toFixed(2)} ${a.y.toFixed(2)} ${(b.x - a.x).toFixed(2)} ${(b.y - a.y).toFixed(2)}`;
+}
+
+// what a screenshot leaves out: the pointer's and the editor's marks (hover and selection outlines, the piece
+// being placed, the camera's pointer shield) and the labels of what is only there for context (the units round
+// the one shown, the building core, the ghosted building) — the drawing itself stays as it is on screen
+const UI_ONLY = '[data-ui], .cam-shield, .it.ghost, .foot, .cellhint';
+const CONTEXT_LABELS = ':is(.nb, .nbi, .nbc, .core-faded, .faded) :is(text, .tag, foreignObject)';
+
+/**
+ * Rasterises `svg` to a PNG download. `viewBox`: the part to draw (default: the camera's view, data-view).
+ * `shot`: a screenshot of the view as it shows — the context round it kept, only the labels that belong to
+ * the view (see UI_ONLY, CONTEXT_LABELS); otherwise everything marked data-noexport goes too (a clean plan).
+ * `save`: download it (default), or return { blob, url, filename, width, height } for the caller to show.
+ */
+export async function exportPng(svg, { filename, viewBox, width = 2400, shot = false, save = true }) {
   const root = document.documentElement;
   const cs = getComputedStyle(root);
   const clone = svg.cloneNode(true);
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   // the view itself, not the overscanned box the camera draws (svgCamera's setBox)
   if (viewBox || svg.dataset.view) clone.setAttribute('viewBox', viewBox || svg.dataset.view);
-  clone.querySelectorAll('[data-noexport]').forEach((n) => n.remove());
+  if (shot) {
+    clone.querySelectorAll(UI_ONLY).forEach((n) => n.remove());
+    clone.querySelectorAll(CONTEXT_LABELS).forEach((n) => n.remove());
+    clone.querySelectorAll('.hot, .dock-hot, .tip-hot, .lifted').forEach((n) => n.classList.remove('hot', 'dock-hot', 'tip-hot', 'lifted'));
+    clone.classList.remove('cam-moving');
+    clone.removeAttribute('data-hot');
+  } else clone.querySelectorAll('[data-noexport]').forEach((n) => n.remove());
   clone.querySelectorAll('.sel').forEach((n) => n.classList.remove('sel'));
 
   const [vx, vy, vw, vh] = clone.getAttribute('viewBox').trim().split(/[\s,]+/).map(Number);
@@ -75,6 +105,9 @@ export async function exportPng(svg, { filename, viewBox, width = 2400 }) {
   canvas.getContext('2d').drawImage(img, 0, 0, width, height);
   const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
   const url = URL.createObjectURL(blob);
+  // save: false — handed back instead of downloaded (the screenshot preview offers the download itself; it
+  // revokes the url when it closes)
+  if (!save) return { blob, url, filename, width, height };
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;

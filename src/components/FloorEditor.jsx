@@ -4,13 +4,15 @@
 // the floor plane z = 0) → cell (floor) → origin (minus grab offset, clamped) → validate().
 // Nothing is stored unless it passes validate(), so placement is 100% grid-snapped.
 import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { CELL, CUT_H } from '../iso/units.js';
+import { CELL, CUT_H, TILE } from '../iso/units.js';
 import { cellRect, centerGrab, collides, footprint, normRot, rotateItem, snapOrigin, validate, worldToCell, onPlate } from '../iso/grid.js';
 import { sortFor } from '../iso/depth.js';
 import { planFrame, itemNode, renderCell, renderFoot, renderItem, renderPlate, renderZoneTag, renderShadows, renderScene, renderDeskCallouts, edgeItems, cafeIds, tipData, glassBackdrops, tagCls } from '../iso/render.js';
 import { isLive, leadCls, describe, defaults, LAYER, CORE } from '../model/catalog.js';
 import { PLANS, UNITS, stats, floorPlan, coreItems, toFloor, newId } from '../model/floors.js';
-import { exportPng } from '../lib/exportPng.js';
+import { exportPng, shownBox } from '../lib/exportPng.js';
+import { useShot } from '../lib/shotStore.js';
+import { teamList, teamScope, teamBounds, markTeamLabels } from '../lib/teamView.js';
 import IsoDefs from './IsoDefs.jsx';
 import { entryDoors, roomDoorIds, useDoorSwing, leafNode } from '../iso/doorSwing.js';
 import { focusBox, overlaps, useSvgCamera } from '../lib/svgCamera.js';
@@ -23,7 +25,7 @@ import DeskCard from './DeskCard.jsx';
 import { useCustomObjects } from '../lib/customObjects.js';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
 import SceneButton, { icon } from './SceneButton.jsx';
-import { ViewTools, Divider, FloorUnitButtons, QuickJump, StatusLine, ViewModeButton, sentence } from './ViewTools.jsx';
+import { ViewTools, Divider, FloorUnitButtons, QuickJump, StatusLine, TeamPicker, ViewModeButton, sentence } from './ViewTools.jsx';
 import { useT, why } from '../lib/i18n.js';
 import { CornerMenu, DockMenuContext } from './DockMenu.jsx';
 import MenuPanel from './MenuPanel.jsx';
@@ -118,16 +120,36 @@ function unitNeighbours(pid, plans, top = false) {
 // flat parts (zones, door swings) lie under the unit; its walls, lifts and fixtures are depth-sorted in
 // with the unit's own items (see solidNodes): the WC pocket sits inside the unit's outline, behind some of
 // its walls and in front of others, so drawing the core as one block over or under the unit was wrong
+/** Does item `it` (in unit `plan`'s cells) stand wholly on the unit's own floor: every tile it covers on the
+ *  outline? (The shared corridor and the stairwell only touch the units' edges: they are the building's.) */
+const ownTile = (plan, it) => {
+  const f = footprint(it);
+  for (let ty = Math.floor(it.gy / TILE); ty < Math.ceil((it.gy + f.d) / TILE); ty++)
+    for (let tx = Math.floor(it.gx / TILE); tx < Math.ceil((it.gx + f.w) / TILE); tx++) if (plan.mask[ty]?.[tx] !== '1') return false;
+  return true;
+};
+
 function unitCore(pid, top = false) {
   const plan = PLANS[pid], K = unitFrame(pid, top);
   return keep(`unit-core:${pid}:${top}`, [], () => {
     const me = floorPlan(plan.floor).units.find((u) => u.id === pid);
     if (!me) return null;
     const its = toFloor(coreItems(), -me.ox, -me.oy);
+    // a core piece is the unit's own only where it stands on the unit's floor (its outline's tiles, not its
+    // bounding box: units C and D are L-shaped, and the stairs and the shared corridor sit in the notch)
     const flat = its.filter((it) => LAYER[it.type] === 'floor');
+    // the building's own floor under the core (the corridor round the lifts and storage rooms, the WC pockets,
+    // the stair cores): the floor's tiles no unit has, as a plate of its own, where it lies round this unit
+    const fp = floorPlan(plan.floor), taken = new Set();
+    for (const u of fp.units) u.mask.forEach((row, ty) => [...row].forEach((c, tx) => { if (c === '1') taken.add(`${u.oy / TILE + ty},${u.ox / TILE + tx}`); }));
+    const coreMask = fp.mask.map((row, ty) => [...row].map((c, tx) => (c === '1' && !taken.has(`${ty},${tx}`) ? '1' : '0')).join(''));
+    const [gx, gy] = K.D(-me.ox * CELL, -me.oy * CELL, 0);
+    const ground = `<g transform="translate(${gx.toFixed(2)} ${gy.toFixed(2)})">${renderPlate(K, { mask: coreMask }).replace(/<text class="tick"[^>]*>[^<]*<\/text>/g, '')}</g>`;
     return {
-      flat: renderScene(K, plan, flat, { bare: true }),
-      solid: its.filter((it) => LAYER[it.type] !== 'floor'),
+      ground,
+      flat: renderScene(K, plan, flat.filter((it) => ownTile(plan, it)), { bare: true }),
+      flatOut: renderScene(K, plan, flat.filter((it) => !ownTile(plan, it)), { bare: true }),
+      solid: its.filter((it) => LAYER[it.type] !== 'floor').map((it) => ({ it, mine: ownTile(plan, it) })),
     };
   });
 }
@@ -184,6 +206,12 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
 
   const sel = items.find((i) => i.id === selected) || null;
   const st = stats(items);
+  // Team / Department view (the dock's team button): one team shown, the rest stepping back (lib/teamView)
+  const [team, setTeam] = useState(null);
+  useEffect(() => { setTeam(null); }, [pid]);   // another unit: every team again
+  const teams = useMemo(() => teamList(items), [items]);
+  const teamOn = teams.find((x) => x.label === team) || null;
+  const scope = useMemo(() => (teamOn ? teamScope(items, teamOn) : null), [items, teamOn]);
   const cutH = cut ? CUT_H : Infinity;
 
   // switching floor or unit isolates the new unit: no selection, hover, drag or ghost carries over
@@ -417,6 +445,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     const onKey = (e) => {
       if (e.target.closest?.('input, textarea, select')) return;
       const k = e.key;
+      if (k === 'Escape' && team && !selected && !placing && !drag.current) { setTeam(null); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'z') { dispatch({ type: 'undo' }); setMsg(['undo']); }
       else if (k === 'r' || k === 'R') rotate();
       else if (k === ']') layer(1);
@@ -436,14 +465,14 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [rotate, remove, layer, nudge, placing, dispatch, active]);
+  }, [rotate, remove, layer, nudge, placing, dispatch, active, team, selected]);
 
   // ---------- scene ----------
   const plate = unitPlate(pid, top);
   const cafe = useMemo(() => cafeIds(allItems), [allItems]);
   const swung = useMemo(() => roomDoorIds(allItems), [allItems]);
   const lifted = ghost?.mode === 'move' ? drag.current?.base?.id : null;
-  const clsOf = (it) => `it${isLive(it) ? ' live' : ''}${leadCls(it)}${cafe.has(it.id) ? ' cafe' : ''}${swung.has(it.id) ? ' swung' : ''}${it.id === selected ? ' sel' : ''}${it.id === lifted ? ' lifted' : ''}${it.locked ? ' locked' : ''}`;
+  const clsOf = (it) => `it${isLive(it) ? ' live' : ''}${leadCls(it)}${cafe.has(it.id) ? ' cafe' : ''}${swung.has(it.id) ? ' swung' : ''}${it.id === selected ? ' sel' : ''}${it.id === lifted ? ' lifted' : ''}${it.locked ? ' locked' : ''}${scope ? (scope.ids.has(it.id) ? (scope.zones.has(it.id) ? ' team-on' : '') : ' team-off') : ''}`;
 
   const neighbours = unitNeighbours(pid, plans, top);
   const core = unitCore(pid, top);
@@ -454,18 +483,17 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     .sort((a, b) => (a.layer || 0) - (b.layer || 0) || (a.type === b.type ? area(b) - area(a) : a.type === 'zone' ? -1 : 1)), [items]);
   const solidNodes = useMemo(() => {
     const list = [...items.filter((it) => LAYER[it.type] !== 'floor'), ...edges]
-      .map((it) => ({ ...itemNode(it), it, cls: it.id.startsWith('edge-') ? 'it edge' : clsOf(it) }));
+      .map((it) => ({ ...itemNode(it), it, cls: it.id.startsWith('edge-') ? `it edge${scope ? ' team-off' : ''}` : clsOf(it) }));
     // the building core: the pieces inside this unit's outline (its WC pocket) at full strength; the rest —
     // the lifts, storerooms, WCs and stairs by the other units — faded like those units (.nbc)
-    for (const it of core?.solid || []) {
-      const r = cellRect(it), mine = r.x0 < plan.cols && r.x1 > 0 && r.y0 < plan.rows && r.y1 > 0;
+    for (const { it, mine } of core?.solid || []) {
       list.push({ ...itemNode(it), it, faded: true, cls: mine ? 'it core-faded' : 'it core-faded nbc' });
     }
     for (const n of neighbours) for (const it of n.near) list.push({ ...itemNode(it), it, faded: true, unit: n.unit, cls: 'it nbi' });
     if (ghost) list.push({ ...itemNode(ghost.item), it: ghost.item, ghost: true, cls: `it ghost${isLive(ghost.item) ? ' live' : ''}${ghost.ok ? '' : ' bad'}` });
     for (const d of swingDoors) list.push({ ...leafNode(d), slot: d.id });   // the swinging door leaves' slots
     return sortFor(K)(list);
-  }, [K, items, edges, ghost, selected, lifted, core, neighbours, swingDoors]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [K, items, edges, ghost, selected, lifted, core, neighbours, swingDoors, scope]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const shadows = useMemo(() => renderShadows(K, plan, items, edges), [K, plan, items, edges]);
   // frosted glass walls: what stands behind each one, blurred, drawn just under it (glassBackdrops)
@@ -492,6 +520,13 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     svg.querySelectorAll('.desk-callouts .desk-callout').forEach((c) => c.classList.toggle('unfocus', !!dept && !members.has(c.dataset.for)));
     svg.querySelectorAll('.zone-tags .tag.team').forEach((c) => c.classList.toggle('unfocus', !!dept && c.dataset.zone !== dept.id));
   }, [dept, items, callouts, tags]);
+  // team view: only the team's people's name cards and its areas' names
+  useLayoutEffect(() => { markTeamLabels(svgRef.current, scope); }, [scope, callouts, tags]);
+  const showTeam = (label) => {
+    setTeam(label);
+    const x = label && teams.find((y) => y.label === label), b = x && teamBounds(x);
+    if (b) { setSelected(null); cam.glideTo(focusBox(K, b, VB0, { minW: VB0.w * 0.4 })); }
+  };
 
   const [hoverUnit, setHoverUnit] = useState(null);
   const [dockUnit, setDockUnit] = useState(null);
@@ -526,12 +561,22 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     (ghost ? renderFoot(K, ghost.item, `foot${ghost.ok ? '' : ' bad'}`) : '') +
     (hover && !ghost && !hovered ? renderCell(K, hover.cx, hover.cy) : '');
 
+  // the screenshot button: the view exactly as it shows, at twice the screen's size (at least 2400 px wide)
+  const shoot = async () => {
+    const svg = svgRef.current;
+    const name = `wefloor-floor-${plan.floor}-unit-${plan.unit}${team ? `-${team.replace(/[\\/:*?"<>|\s·]+/g, '-')}` : ''}${top ? '-2d' : ''}.png`;
+    try { return await exportPng(svg, { filename: name, viewBox: shownBox(svg), width: Math.min(4800, Math.max(2400, Math.round(svg.parentElement.clientWidth * 2))), shot: true, save: false }); }
+    catch (err) { setMsg(['screenshot failed: {e}', { e: err.message }]); return null; }
+  };
+  useShot(active, shoot);   // the zoom dock's screenshot button takes this view while it is on screen
   const exportPlan = async () => {
     try { await exportPng(svgRef.current, { filename: `floor-${plan.floor}-unit-${plan.unit}.png`, viewBox: K.viewBox }); setMsg(['exported png']); }
     catch (err) { setMsg(['export failed: {e}', { e: err.message }]); }
   };
 
-  const status = hoverUnit ? t('Unit {u} · Click to open', { u: hoverUnit }) : [
+  const status = hoverUnit ? t('Unit {u} · Click to open', { u: hoverUnit }) : teamOn ? [
+    t('Team view'), teamOn.label, t('{n} people', { n: teamOn.people }),
+  ].join(' · ') : [
     t('Floor {n}, Unit {u}', { n: plan.floor, u: plan.unit }),
     t('{a} of {d} seats taken', { a: st.assigned, d: st.desks }),
     savedAt ? t('Saved {time}', { time: savedAt }) : t('Not saved'),
@@ -606,6 +651,11 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
         onUnit={(f, u) => glide(u)} />
       <Divider />
       <ViewModeButton top={top} onChange={(v) => shared?.setPref('top', v)} />
+      {/* Team / Department view: this unit's teams */}
+      {teams.length > 0 && <>
+        <Divider />
+        <TeamPicker teams={teams} team={team} onTeam={showTeam} />
+      </>}
       {/* this unit's meeting rooms (none: no slot, and no divider) */}
       {jumps.rooms.length > 0 && <>
         <Divider />
@@ -640,6 +690,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
             ref={svgRef}
             className="office-lit cam-over select-none touch-none"
             data-hot={hoverUnit || undefined}
+            data-team={team ? 'on' : undefined}
             style={{ cursor: placing ? 'copy' : undefined }}
             viewBox={cam.box}
             role="img"
@@ -657,13 +708,17 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
           >
             <IsoDefs light={light} />
             <g pointerEvents="none" data-noexport="" dangerouslySetInnerHTML={{ __html: bldGhost.below }} />
+            {/* the building's floor under the core round the unit (the corridor by the lifts and storage rooms …) */}
+            {core?.ground && <g data-noexport="" className="nb core-out" pointerEvents="none" dangerouslySetInnerHTML={{ __html: core.ground }} />}
             {neighbours.filter(nearby).map(nbG('flat'))}
             {core && <g data-noexport="" className="nb core" dangerouslySetInnerHTML={{ __html: core.flat }} />}
+            {/* the core's floors outside the unit (the shared corridor, the stairs' landings): faded like the neighbours */}
+            {core?.flatOut && <g data-noexport="" className="nb core-out" pointerEvents="none" dangerouslySetInnerHTML={{ __html: core.flatOut }} />}
             {neighbours.filter(nearby).map(nbG('behind'))}
             <Html html={plate} className={dockUnit === plan.unit ? 'own-plate hot' : 'own-plate'} />
             {floorNodes.map((it) => <ItemG key={it.id} K={K} item={it} cls={clsOf(it)} cut={cutH} />)}
             <Html html={shadows} className="shell-shadows" />
-            <Html html={feet} data-noexport="" />
+            <Html html={feet} data-noexport="" data-ui="" />
             {solidNodes.map((n) => {
               if (n.slot) return <g key={`slot:${n.slot}`} className="door-slot" data-door={n.slot} pointerEvents="none" data-noexport="" />;
               const key = n.ghost ? 'ghost' : n.faded ? `f:${n.it.id}` : n.it.id, back = !n.ghost && frost.get(n.it.id);

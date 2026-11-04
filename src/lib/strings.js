@@ -5,6 +5,18 @@
 const km = {
   // the dock's ⋯ menu
   More: 'បន្ថែម',
+  // screenshot and team view
+  Screenshot: 'រូបថតអេក្រង់',
+  'Save this view as a picture, without the buttons and panels': 'រក្សាទុកទិដ្ឋភាពនេះជារូបភាព ដោយគ្មានប៊ូតុង និងផ្ទាំង',
+  'screenshot saved': 'បានរក្សាទុករូបថតអេក្រង់',
+  'screenshot failed': 'ថតអេក្រង់មិនបានសម្រេច',
+  'screenshot failed: {e}': 'ថតអេក្រង់មិនបានសម្រេច៖ {e}',
+  'Team view': 'ទិដ្ឋភាពក្រុម',
+  'Team view: {x}': 'ទិដ្ឋភាពក្រុម៖ {x}',
+  'All teams': 'ក្រុមទាំងអស់',
+  Download: 'ទាញយក',
+  Discard: 'បោះបង់',
+  '{n} people': '{n} នាក់',
   Labels: 'ស្លាក',
   'Dynamic Background': 'ផ្ទៃខាងក្រោយថាមវន្ត',
   'Floor Grid': 'ក្រឡាជាន់',
@@ -327,6 +339,18 @@ const km = {
 const ko = {
   // the dock's ⋯ menu
   More: '더보기',
+  // screenshot and team view
+  Screenshot: '스크린샷',
+  'Save this view as a picture, without the buttons and panels': '버튼과 패널 없이 현재 화면을 이미지로 저장',
+  'screenshot saved': '스크린샷을 저장했습니다',
+  'screenshot failed': '스크린샷 저장 실패',
+  'screenshot failed: {e}': '스크린샷 저장 실패: {e}',
+  'Team view': '팀 보기',
+  'Team view: {x}': '팀 보기: {x}',
+  'All teams': '모든 팀',
+  Download: '다운로드',
+  Discard: '삭제',
+  '{n} people': '{n}명',
   Labels: '라벨',
   'Dynamic Background': '다이내믹 배경',
   'Floor Grid': '바닥 그리드',

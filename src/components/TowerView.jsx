@@ -18,7 +18,8 @@ import { ViewTools, Divider } from './ViewTools.jsx';
 import { vehicle, VEHICLE_DEFS } from '../iso/vehicles.js';
 import { leg, cubicLeg, pose, person, planPath, duration } from '../iso/scenes.js';
 import { showVia, setBox } from '../lib/svgCamera.js';
-import { exportPng } from '../lib/exportPng.js';
+import { exportPng, shownBox } from '../lib/exportPng.js';
+import { useShot } from '../lib/shotStore.js';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
 import { CornerMenu } from './DockMenu.jsx';
 import { factorOf, fracOf, onZoomCommand, setZoom } from '../lib/zoomStore.js';
@@ -1335,6 +1336,12 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
 
   // follow camera: while something moves, the view eases in on the newest actor and tracks it; when the
   // last one is done it eases back out to the whole site (exponential smoothing on the viewBox)
+  // the zoom dock's screenshot button: the building as it shows, at twice the screen's size
+  useShot(active, () => {
+    const el = svgRef.current;
+    return exportPng(el, { filename: 'wefloor-building.png', viewBox: shownBox(el), width: Math.min(4800, Math.max(2400, Math.round(el.parentElement.clientWidth * 2))), shot: true, save: false })
+      .catch(() => { setMsg('screenshot failed'); return null; });
+  });
   const cam = useRef(null);
   const camSettled = useRef(false);
   // the viewBox last written on the svg (null: the full view) and the svg's size while the camera moves:

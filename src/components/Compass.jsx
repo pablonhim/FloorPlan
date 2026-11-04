@@ -39,8 +39,7 @@ export default function Compass({ size = 40 }) {
   return (
     <span role="img" aria-label="Compass: north is up and to the right" title="North" className="pointer-events-auto shrink-0 relative block" style={{ width: size, height: size }}>
       <svg viewBox="-20 -20 40 40" width={size} height={size} aria-hidden="true" className="absolute inset-0">
-        {/* the ring: a soft white line, so it reads as light catching the edge rather than a grey outline */}
-        <circle r="18.5" fill="none" stroke="rgb(255 255 255 / .6)" strokeWidth="1.2" />
+        {/* no ring: just the N and the needle */}
         {/* N stays upright, at north's place on the ring */}
         <text x={Math.cos(-Math.PI / 6) * 14} y={Math.sin(-Math.PI / 6) * 14} textAnchor="middle" dominantBaseline="middle"
           fontSize="7" fontWeight="600" fill="var(--ink-hi)">N</text>

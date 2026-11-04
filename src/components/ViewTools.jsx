@@ -23,6 +23,76 @@ export function ViewTools({ children, menu = null, after = null, left = '1rem' }
   );
 }
 
+const TEAM_ICON = icon(<><circle cx="6" cy="5.5" r="2.2" /><path d="M2 13c.4-2.3 2-3.6 4-3.6s3.6 1.3 4 3.6" /><path d="M10.5 3.6a2 2 0 0 1 0 3.8M12 9.7c1.1.5 1.8 1.6 2 3.3" /></>);
+
+/**
+ * Team / Department view, in the dock: a round button whose menu (opening upward) lists the view's teams
+ * with how many people sit in each; picking one shows only that team (its people, desks and areas), the rest
+ * stepping back; "All teams" (or Escape) goes back. teams: teamList(); team: the label shown, or null.
+ */
+export function TeamPicker({ teams, team, onTeam, onHover }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  useOneOpen(open, () => setOpen(false));
+  const box = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const away = (e) => { if (!box.current?.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('pointerdown', away);
+    document.addEventListener('keydown', esc);
+    (box.current?.querySelector('[aria-checked="true"]') || box.current?.querySelector('[role^="menuitem"]'))?.focus();
+    return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  const onMenuKey = (e) => {
+    const list = [...box.current.querySelectorAll('[role^="menuitem"]')], i = list.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); list[(i + 1) % list.length]?.focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); list[(i - 1 + list.length) % list.length]?.focus(); }
+  };
+  if (!teams.length) return null;
+  const pick = (label) => { setOpen(false); onHover?.(null); onTeam(label); };
+  const row = 'menu-item flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1 text-left leading-4 outline-none';
+  const check = <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" /></svg>;
+  return (
+    <div ref={box} className="group relative">
+      <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label={team ? t('Team view: {x}', { x: team }) : t('Team view')}
+        onClick={() => setOpen((o) => !o)}
+        className={`relative flex h-8 items-center gap-1 rounded-full transition-colors ${team ? 'pl-2 pr-2.5' : 'w-8 justify-center'} ${open || team ? 'bg-accent-dim text-accent' : 'text-ink-hi hover:bg-[color-mix(in_srgb,var(--ink)_12%,transparent)]'}`}>
+        <span className="ico">{TEAM_ICON}</span>
+        {team && <span className="max-w-[9rem] truncate text-[11.5px] font-semibold">{team}</span>}
+      </button>
+      {!open && (
+        <span role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 -translate-x-1/2 whitespace-nowrap rounded-full frost-panel frost-edge px-2.5 py-1 text-[11px] font-medium leading-none text-ink-hi opacity-0 group-hover:opacity-100">
+          {t('Team view')}
+        </span>
+      )}
+      {open && (
+        <div role="menu" aria-label={t('Team view')} onKeyDown={onMenuKey}
+          className="menu-frost no-scrollbar absolute bottom-full left-1/2 z-30 mb-2 max-h-[50vh] min-w-[200px] max-w-[280px] -translate-x-1/2 overflow-y-auto rounded-[10px] p-0.5">
+          <div className="px-2 pb-1 pt-1 text-[10px] uppercase tracking-[.16em] text-ink">{t('Team view')}</div>
+          <button type="button" role="menuitemradio" aria-checked={!team} onClick={() => pick(null)}
+            className={`${row} ${!team ? 'text-accent-hi' : 'text-ink-hi'}`}>
+            <span className="flex-1 truncate text-[12px]">{t('All teams')}</span>
+            {!team && check}
+          </button>
+          {teams.map((x) => (
+            <button key={x.label} type="button" role="menuitemradio" aria-checked={x.label === team} onClick={() => pick(x.label)}
+              onPointerEnter={() => onHover?.(x.label)} onPointerLeave={() => onHover?.(null)}
+              className={`${row} ${x.label === team ? 'text-accent-hi' : 'text-ink-hi'}`}>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-[12px]">{x.label}</span>
+                {x.en && x.en !== x.label && <span className="truncate text-[10.5px] text-ink">{x.en}</span>}
+              </span>
+              <span className="shrink-0 text-[11px] tabular-nums text-ink">{t('{n} people', { n: x.people })}</span>
+              {x.label === team && check}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** A view's status line (and any message below it), centred at the top on the header's line. */
 export function StatusLine({ children }) {
   return (

@@ -107,12 +107,13 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 .paver-joint { stroke: color-mix(in srgb, var(--line) 55%, var(--paving)); }
 :root:not([data-theme="light"]) .vip-bay { stroke: color-mix(in srgb, var(--line) 85%, transparent); }
 .door-leaf, .door-panel-edge, .entry-handle { stroke: color-mix(in srgb, var(--line) 55%, var(--ink-hi)); }
-/* the glass — glass walls (their panes and mullions) and the unit entrance's glass door leaves — lined in the
-   glass's own blue rather than grey */
-:root { --glass-line: color-mix(in srgb, var(--accent) 55%, var(--struct-shade)); }
-:root:not([data-theme="light"]) { --glass-line: color-mix(in srgb, var(--accent-hi) 60%, var(--struct-shade)); }
+/* the glass — glass walls (their panes and mullions), the glass door leaves and the storage rooms' frosted
+   panes — one bright white frosted glass (--glass-white, over the blurred copy of what stands behind it), lined
+   in a soft white-grey of the same shade (--glass-line), no blue */
+:root { --glass-white: #ffffff; --glass-line: #d5d9de; }
+:root:not([data-theme="light"]) { --glass-white: #e4e8ed; --glass-line: #9ea6b0; }
 .it .face.pane, .door-panel { stroke: var(--glass-line) !important; stroke-opacity: .85 !important; }
-.it:has(.face.pane) .mullion { stroke: var(--glass-line); stroke-opacity: .7; }
+.it:has(.face.pane) .mullion { stroke: var(--glass-line); stroke-opacity: .9; }
 
 /* time of day on the drawing's faces, by the way each one faces (kernel.box tags them): east faces (.side, +x,
    lower right on screen) and south faces (.front, +y, lower left) take the low sun differently. Morning:
@@ -156,15 +157,15 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
    (the sun is in the south-west); night: a deep cool blue on the tops and east faces. The Corten fins and the
    floors' hover tint keep their own fills. */
 :root[data-sky="morning"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap), :root[data-sky="morning"] .cam-over .it.it :is(.face.furn, .face.tableTop).top { fill: color-mix(in srgb, var(--struct-top) 91%, #ffdc8f); }
-:root[data-sky="morning"] .cam-over :is(.face.slab.top, .glass-backdrop, .face.zone-core) { fill: color-mix(in srgb, var(--floor) 94%, #ffdc8f); }
+:root[data-sky="morning"] .cam-over :is(.face.slab.top, .glass-backdrop) { fill: color-mix(in srgb, var(--floor) 94%, #ffdc8f); }
 :root[data-sky="morning"] .cam-over :is(.face.struct, .face.slab, .face.fixture).side:not(.band), :root[data-sky="morning"] .cam-over .it.it :is(.face.furn, .face.tableTop).side { fill: color-mix(in srgb, var(--struct-lit) 90%, #ffd27a); }
 :root[data-sky="morning"] .twr .fl:not(:hover, .cursor) .face.band.side { fill: color-mix(in srgb, var(--struct-lit) 90%, #ffd27a); }
 :root[data-sky="evening"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap), :root[data-sky="evening"] .cam-over .it.it :is(.face.furn, .face.tableTop).top { fill: color-mix(in srgb, var(--struct-top) 89%, #ffb77a); }
-:root[data-sky="evening"] .cam-over :is(.face.slab.top, .glass-backdrop, .face.zone-core) { fill: color-mix(in srgb, var(--floor) 93%, #ffb77a); }
+:root[data-sky="evening"] .cam-over :is(.face.slab.top, .glass-backdrop) { fill: color-mix(in srgb, var(--floor) 93%, #ffb77a); }
 :root[data-sky="evening"] .cam-over :is(.face.struct, .face.slab, .face.fixture).front:not(.band), :root[data-sky="evening"] .cam-over .it.it :is(.face.furn, .face.tableTop).front { fill: color-mix(in srgb, var(--struct-shade) 87%, #ffa560); }
 :root[data-sky="evening"] .twr .fl:not(:hover, .cursor) .face.band.front { fill: color-mix(in srgb, var(--struct-shade) 87%, #ffa560); }
 :root[data-sky="night"] .cam-over :is(.face.struct, .face.fixture).top:not(.cap), :root[data-sky="night"] .cam-over .it.it :is(.face.furn, .face.tableTop).top { fill: color-mix(in srgb, var(--struct-top) 86%, #4f72b8); }
-:root[data-sky="night"] .cam-over :is(.face.slab.top, .glass-backdrop, .face.zone-core) { fill: color-mix(in srgb, var(--floor) 90%, #4f72b8); }
+:root[data-sky="night"] .cam-over :is(.face.slab.top, .glass-backdrop) { fill: color-mix(in srgb, var(--floor) 90%, #4f72b8); }
 :root[data-sky="night"] .cam-over :is(.face.struct, .face.slab, .face.fixture).side:not(.band), :root[data-sky="night"] .cam-over .it.it :is(.face.furn, .face.tableTop).side { fill: color-mix(in srgb, var(--struct-lit) 88%, #3e5c9a); }
 :root[data-sky="night"] .twr .fl:not(:hover, .cursor) .face.band.side { fill: color-mix(in srgb, var(--struct-lit) 88%, #3e5c9a); }
 /* the neighbouring units' building finish (iso.css --nb-*) takes the sky's cast like the building's own */
@@ -183,13 +184,13 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 /* …and in the floor and unit views (.office-lit), a clearer cast on the floor, the walls and the pillars — their
    tops (the grey caps too), their sun-facing sides and, in the evening, their south faces — whatever the
    material style, so the plans take the time of day as the building does */
-:root:root[data-sky="morning"] .office-lit :is(.face.slab.top, .glass-backdrop, .face.zone-core) { fill: color-mix(in srgb, var(--floor) 90%, #ffdc8f); }
+:root:root[data-sky="morning"] .office-lit :is(.face.slab.top, .glass-backdrop) { fill: color-mix(in srgb, var(--floor) 90%, #ffdc8f); }
 :root:root[data-sky="morning"] .office-lit .it :is(.face.wall, .face.pillar).top { fill: color-mix(in srgb, var(--struct-cap) 86%, #ffdc8f); }
 :root:root[data-sky="morning"] .office-lit .it :is(.face.wall, .face.pillar).side { fill: color-mix(in srgb, var(--struct-lit) 84%, #ffd27a); }
-:root:root[data-sky="evening"] .office-lit :is(.face.slab.top, .glass-backdrop, .face.zone-core) { fill: color-mix(in srgb, var(--floor) 88%, #ffb77a); }
+:root:root[data-sky="evening"] .office-lit :is(.face.slab.top, .glass-backdrop) { fill: color-mix(in srgb, var(--floor) 88%, #ffb77a); }
 :root:root[data-sky="evening"] .office-lit .it :is(.face.wall, .face.pillar).top { fill: color-mix(in srgb, var(--struct-cap) 84%, #ffb77a); }
 :root:root[data-sky="evening"] .office-lit .it :is(.face.wall, .face.pillar):not(.top, .side) { fill: color-mix(in srgb, var(--struct-shade) 82%, #ffa560); }
-:root:root[data-sky="night"] .office-lit :is(.face.slab.top, .glass-backdrop, .face.zone-core) { fill: color-mix(in srgb, var(--floor) 86%, #4f72b8); }
+:root:root[data-sky="night"] .office-lit :is(.face.slab.top, .glass-backdrop) { fill: color-mix(in srgb, var(--floor) 86%, #4f72b8); }
 :root:root[data-sky="night"] .office-lit .it :is(.face.wall, .face.pillar).top { fill: color-mix(in srgb, var(--struct-cap) 84%, #4f72b8); }
 :root:root[data-sky="night"] .office-lit .it :is(.face.wall, .face.pillar).side { fill: color-mix(in srgb, var(--struct-lit) 84%, #3e5c9a); }
 
@@ -429,3 +430,18 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 
 /* Khmer: no letter-spacing (it pulls the stacked vowels and subscripts apart) */
 html:lang(km) [class*="tracking-"] { letter-spacing: normal; }
+
+/* the screenshot button while the picture is being made: a soft pulse */
+.shot-busy .ico { animation: shot-pulse .7s ease-in-out infinite alternate; }
+@keyframes shot-pulse { from { opacity: 1; } to { opacity: .35; } }
+
+/* the screenshot: a quick white flash as it is taken, then the photo floating over the blurred page */
+.shot-flash { background: #fff; animation: shot-flash .45s ease-out forwards; }
+@keyframes shot-flash { from { opacity: .85; } to { opacity: 0; } }
+.shot-backdrop { background: color-mix(in srgb, #0b0d10 28%, transparent); backdrop-filter: blur(14px) saturate(1.1); animation: shot-fade .2s ease-out; }
+.shot-photo { box-shadow: 0 24px 60px rgb(0 0 0 / .32), 0 2px 8px rgb(0 0 0 / .18); animation: shot-pop .32s cubic-bezier(.2, .9, .3, 1.2); }
+@keyframes shot-fade { from { opacity: 0; } }
+@keyframes shot-pop { from { opacity: 0; transform: scale(.92) translateY(8px); } }
+.shot-btn { transition: transform .12s ease, filter .12s ease; }
+.shot-btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+@media (prefers-reduced-motion: reduce) { .shot-flash, .shot-backdrop, .shot-photo { animation: none; } .shot-flash { display: none; } }
