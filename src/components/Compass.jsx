@@ -1,9 +1,13 @@
 // A bare compass at the end of the zoom bar, after Fit (`size` in px). Every view draws the site the same way round: north (world −y)
 // runs up and to the right on screen, 30° above the horizontal, so that is where the needle rests. It is live:
 // dragging or zooming the drawing swings the needle like a real one, and it settles back to north on a spring.
+// The needle is its own little <svg> layer, turned with a CSS transform: the spring then moves it on the
+// compositor. (Turned by an SVG transform attribute it re-laid out and repainted, and so re-layerized the whole
+// page, on every frame of every drag and zoom.)
 import { useEffect, useRef } from 'react';
 
 const ROT = 60;   // the needle is drawn pointing straight up; north on screen is 60° clockwise from that
+const turn = (el, a) => { if (el) el.style.transform = `rotate(${a.toFixed(2)}deg)`; };
 
 export default function Compass({ size = 40 }) {
   const needle = useRef(null);
@@ -13,8 +17,8 @@ export default function Compass({ size = 40 }) {
       const dt = Math.min(0.05, (t - (s.last || t)) / 1000); s.last = t;
       s.v += (-90 * s.a - 7 * s.v) * dt;   // a lightly damped spring back to north
       s.a += s.v * dt;
-      needle.current?.setAttribute('transform', `rotate(${(ROT + s.a).toFixed(2)})`);
-      if (Math.abs(s.a) < 0.05 && Math.abs(s.v) < 0.05) { s.a = s.v = 0; s.raf = 0; s.last = 0; needle.current?.setAttribute('transform', `rotate(${ROT})`); return; }
+      turn(needle.current, ROT + s.a);
+      if (Math.abs(s.a) < 0.05 && Math.abs(s.v) < 0.05) { s.a = s.v = 0; s.raf = 0; s.last = 0; turn(needle.current, ROT); return; }
       s.raf = requestAnimationFrame(step);
     };
     const kick = (dv) => {
@@ -33,18 +37,20 @@ export default function Compass({ size = 40 }) {
     };
   }, []);
   return (
-    <svg viewBox="-20 -20 40 40" width={size} height={size} role="img" aria-label="Compass: north is up and to the right" className="pointer-events-auto shrink-0">
-      <title>North</title>
-      {/* the ring: a soft white line, so it reads as light catching the edge rather than a grey outline */}
-      <circle r="18.5" fill="none" stroke="rgb(255 255 255 / .6)" strokeWidth="1.2" />
-      <g ref={needle} transform={`rotate(${ROT})`}>
+    <span role="img" aria-label="Compass: north is up and to the right" title="North" className="pointer-events-auto shrink-0 relative block" style={{ width: size, height: size }}>
+      <svg viewBox="-20 -20 40 40" width={size} height={size} aria-hidden="true" className="absolute inset-0">
+        {/* the ring: a soft white line, so it reads as light catching the edge rather than a grey outline */}
+        <circle r="18.5" fill="none" stroke="rgb(255 255 255 / .6)" strokeWidth="1.2" />
+        {/* N stays upright, at north's place on the ring */}
+        <text x={Math.cos(-Math.PI / 6) * 14} y={Math.sin(-Math.PI / 6) * 14} textAnchor="middle" dominantBaseline="middle"
+          fontSize="7" fontWeight="600" fill="var(--ink-hi)">N</text>
+      </svg>
+      <svg ref={needle} viewBox="-20 -20 40 40" width={size} height={size} aria-hidden="true" className="absolute inset-0"
+        style={{ transform: `rotate(${ROT}deg)`, transformOrigin: '50% 50%', willChange: 'transform' }}>
         <path d="M0 -10 L2.8 0 L-2.8 0 Z" fill="var(--ink-hi)" />
         <path d="M0 10 L2.8 0 L-2.8 0 Z" fill="none" stroke="var(--ink)" strokeWidth="1" strokeLinejoin="round" />
         <circle r="1.2" fill="var(--ink)" />
-      </g>
-      {/* N stays upright, at north's place on the ring */}
-      <text x={Math.cos(-Math.PI / 6) * 14} y={Math.sin(-Math.PI / 6) * 14} textAnchor="middle" dominantBaseline="middle"
-        fontSize="7" fontWeight="600" fill="var(--ink-hi)">N</text>
-    </svg>
+      </svg>
+    </span>
   );
 }

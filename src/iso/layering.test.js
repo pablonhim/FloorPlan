@@ -71,3 +71,22 @@ describe('layering', () => {
     expect([...new Set(out)]).toEqual([]);
   });
 });
+
+describe('plate rulers', () => {
+  // every metre tick stands just outside the slab's own edge (within a tile of a slab tile), never out in the
+  // air where a stepped outline's bounding box runs past the building
+  const TW = 3 * CELL;
+  const plans = [...Object.entries(PLANS), ...RENTED.map((f) => [`floor ${f}`, floorPlan(f)])];
+  for (const [id, plan] of plans) it(`${id}: ticks hug the outline`, async () => {
+    const { renderPlate } = await import('./render.js');
+    const { kernel } = await import('./kernel.js');
+    const svg = renderPlate(kernel(0, 0), plan), on = (tx, ty) => plan.mask[ty]?.[tx] === '1', out = [];
+    for (const [, x, y] of svg.matchAll(/<text class="tick" x="(-?[\d.]+)" y="(-?[\d.]+)"/g)) {
+      const tx = Math.floor(Number(x) / TW), ty = Math.floor(Number(y) / TW);
+      let near = false;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) near ||= on(tx + dx, ty + dy);
+      if (!near) out.push(`${x},${y}`);
+    }
+    expect(out).toEqual([]);
+  });
+});

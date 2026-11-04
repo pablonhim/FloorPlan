@@ -397,7 +397,7 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 
 /* the viewer count's eye blinks like a real one: open, a quick close-and-open every few seconds, now and
    then twice in a row (a 7 s loop: a blink at ~3 s, a double blink at the end) */
-.eye-blink { transform-box: fill-box; transform-origin: center; animation: eye-blink 7s ease-in-out infinite; }
+.eye-blink { transform-origin: center; animation: eye-blink 7s ease-in-out infinite; }
 @keyframes eye-blink {
   0%, 40%, 44.5%, 88%, 91%, 93%, 96%, 100% { transform: scaleY(1); }
   42%, 89.5%, 94.5% { transform: scaleY(.08); }

@@ -140,7 +140,7 @@ export function tipData(item) {
 // card in a foreignObject, with backdrop-filter), no border; a rounded-square profile picture with the name
 // under it. Every card is the same width, wrapped tight round the picture; a long name shrinks to fit.
 const CALLOUT = { rise: 2, pad: 3.6, pic: 32, gap: 2.4, fs: 9.5, nameH: 11, notch: 5, notchW: 12 };
-const textW = (s, fs) => [...s].reduce((w, c) => w + (/[\u1100-\uffff]/.test(c) ? 1.02 : 0.6) * fs, 0);
+export const textW = (s, fs) => [...s].reduce((w, c) => w + (/[\u1100-\uffff]/.test(c) ? 1.02 : 0.6) * fs, 0);
 /** Until real photos come, each person's profile picture is an animal — their own, picked by their name (a
  *  stable hash, so it never changes between visits) — shown on its own, no tile behind it. */
 /** Real profile photos, by the name on the desk (public/photos): shown instead of the animal. */
@@ -160,6 +160,16 @@ function chairTop(it) {
   const w = placeRect(seat, W0, D0, it.rot, it.gx * CELL, it.gy * CELL);
   return [w.x + w.w / 2, w.y + w.d / 2, Math.max(seat.z + seat.h, ...backs.map((b) => b.z + b.h))];
 }
+/** The screen rect ({ x0, y0, x1, y1 }) of every desk's name card (as renderDeskCallouts places them). */
+export function calloutRects(K, items) {
+  const { rise, pad, pic, gap, nameH, notch } = CALLOUT;
+  const W = pic + 2 * pad, H = pad + pic + gap + nameH + pad * 0.6;
+  return items.filter((it) => it.type === 'desk' && (it.name || '').trim()).map((it) => {
+    const [ax, ay] = K.P(...chairTop(it)), y1 = ay - rise;
+    return { x0: ax - W / 2, x1: ax + W / 2, y0: y1 - notch - H, y1 };
+  });
+}
+
 export function renderDeskCallouts(K, items) {
   const { rise, pad, pic, gap, fs, nameH, notch, notchW } = CALLOUT;
   const W = pic + 2 * pad, H = pad + pic + gap + nameH + pad * 0.6;
@@ -239,10 +249,20 @@ export function renderPlate(K, plan) {
     }
   }
   s += `<g transform="${TOP(0, 0, 0)}"><path class="slab-grid" d="${[...edges].join('')}"/>`;
-  // metre ticks every 5 tiles (3 m) along the back edges
-  const cols = plan.mask[0].length, rows = plan.mask.length;
-  for (let tx = 0; tx <= cols; tx += 5) s += `<text class="tick" x="${tx * TW}" y="-5" font-size="9" text-anchor="middle">${(tx * 0.6).toFixed(0)}m</text>`;
-  for (let ty = 5; ty <= rows; ty += 5) s += `<text class="tick" x="-5" y="${ty * TW + 3}" font-size="9" text-anchor="end">${(ty * 0.6).toFixed(0)}m</text>`;
+  // metre ticks every 5 tiles (3 m) along the back edges — each just outside the slab's own first tile in
+  // its column (row), so on a stepped outline it stays against the floor instead of floating in the air
+  // where the bounding box runs past the building
+  const M = plan.mask, on = (tx, ty) => M[ty]?.[tx] === '1';
+  const cols = Math.max(...M.map((r) => r.length)), rows = M.length;
+  for (let tx = 0; tx <= cols; tx += 5) {
+    const ty = M.findIndex((_, y) => on(tx, y) || on(tx - 1, y));
+    if (ty >= 0) s += `<text class="tick" x="${tx * TW}" y="${ty * TW - 5}" font-size="9" text-anchor="middle">${(tx * 0.6).toFixed(0)}m</text>`;
+  }
+  for (let ty = 5; ty <= rows; ty += 5) {
+    let tx = 0;
+    while (tx < cols && !on(tx, ty) && !on(tx, ty - 1)) tx++;
+    if (tx < cols) s += `<text class="tick" x="${tx * TW - 5}" y="${ty * TW + 3}" font-size="9" text-anchor="end">${(ty * 0.6).toFixed(0)}m</text>`;
+  }
   s += `</g>`;
   return s;
 }

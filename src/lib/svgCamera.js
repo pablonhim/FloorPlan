@@ -2,6 +2,9 @@
 // non-scaling strokes and labels: ~30 ms a write), so while the camera moves — wheel, drag, a glide —
 // the <svg> is only moved with a CSS transform (the compositor scales what is already painted), and the
 // viewBox is written once, when the move settles. Ambient loops pause while it moves (.cam-moving).
+// A move that ends at the drawn scale and inside the overscan (a pan) is not written at all: the translate already
+// shows it pixel for pixel, so the drawing just rests there, transformed (and the ~50–100 ms relayout of a write
+// is saved on every drag). Only a zoom, or a pan out past the painted margin, writes the viewBox.
 // The <svg> is drawn bigger than its holder, OVER of the holder's size past every edge (.cam-over; the holder
 // clips it), so a drag or a zoom-out shows drawing that is already painted instead of a blank edge until the
 // move settles.
@@ -45,8 +48,12 @@ export function camTransform(W, H, from, to) {
   return `translate(${tx.toFixed(2)}px, ${ty.toFixed(2)}px) scale(${s.toFixed(5)})`;
 }
 
-/** Shows viewBox `to` on `el` (drawn with `from`; size: its holder's) by a CSS transform, or clears it (to = null). */
-export function showVia(el, size, from, to) {
+/**
+ * Shows viewBox `to` on `el` (drawn with `from`; size: its holder's) by a CSS transform, or clears it (to = null).
+ * `rest`: the move is over and the transform stays (a pan kept without a write): the ambient loops and the
+ * pointer come back.
+ */
+export function showVia(el, size, from, to, rest = false) {
   if (!el) return;
   if (!to) {
     el.style.transform = ''; el.style.willChange = '';
@@ -55,7 +62,21 @@ export function showVia(el, size, from, to) {
   }
   el.style.transformOrigin = '0 0';
   el.style.willChange = 'transform';
-  el.classList.add('cam-moving');
+  if (rest) el.classList.remove('cam-moving');
+  else if (!el.classList.contains('cam-moving')) {
+    // the pointer shield (iso.css .cam-shield): the svg's topmost child while the camera moves, so a hit test
+    // stops at it instead of walking every shape; put back on top at each move's start (a view may have
+    // added children since)
+    let s = el.querySelector(':scope > .cam-shield');
+    if (!s) {
+      s = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      s.setAttribute('class', 'cam-shield');
+      for (const [k, v] of [['x', -1e6], ['y', -1e6], ['width', 2e6], ['height', 2e6]]) s.setAttribute(k, v);
+      s.setAttribute('data-noexport', '');
+    }
+    if (el.lastElementChild !== s) el.appendChild(s);
+    el.classList.add('cam-moving');
+  }
   el.style.transform = camTransform(size[0], size[1], from, to);
 }
 
@@ -79,6 +100,7 @@ export const overlaps = (a, b, pad = 0) => a.x < b.x + b.w * (1 + pad) && b.x - 
 /**
  * The camera of one plan view (svg filling its parent); onView(view) hears of every view it shows.
  * - vb: the committed view (React state); box: the viewBox to render for it (overscanned: see overBox)
+ * - view: the view the camera last came to rest on (state: vb, or a pan resting on it without a write)
  * - live: ref to the view shown right now (vb, or where a move has got to)
  * - move(next | fn, settle = 140): show `next` at once (transform); commit it once quiet (see watch)
  * - jump(next): commit at once (no animation); glideTo(to, { ms, delay, onDone, commit }); cancel()
@@ -87,6 +109,7 @@ export const overlaps = (a, b, pad = 0) => a.x < b.x + b.w * (1 + pad) && b.x - 
  */
 export function useSvgCamera(svgRef, VB0, onView) {
   const [vb, setVb] = useState(VB0);
+  const [view, setView] = useState(VB0);
   const seen = useRef(onView);   // onView(view): told every view shown (e.g. the zoom rail's depth)
   seen.current = onView;
   const live = useRef(VB0), drawn = useRef(VB0), size = useRef([1, 1]);
@@ -107,23 +130,39 @@ export function useSvgCamera(svgRef, VB0, onView) {
     const r = svgRef.current?.parentElement?.getBoundingClientRect();
     if (r && r.width && r.height) size.current = [r.width, r.height];
   };
-  const apply = () => showVia(svgRef.current, size.current, drawn.current, live.current === drawn.current ? null : live.current);
+  const apply = (rest = false) => showVia(svgRef.current, size.current, drawn.current, live.current === drawn.current ? null : live.current, rest);
   // a committed viewBox has rendered: drop the transform in the same frame (or keep one for a move since)
-  useLayoutEffect(() => { drawn.current = vb; apply(); }, [vb]); // eslint-disable-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => { drawn.current = vb; apply(!quiet.current.id && !raf.current); }, [vb]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** Can view v be left on the drawn one as a transform? Same scale, and moved less than most of the overscan. */
+  const keepable = (v) => {
+    const d = drawn.current, [W, H] = size.current;
+    if (Math.abs(v.w / d.w - 1) > 1e-6 || Math.abs(v.h / d.h - 1) > 1e-6 || !(W > 1 && H > 1)) return false;
+    const k = Math.min(W / d.w, H / d.h);
+    return Math.abs(v.x - d.x) * k < 0.7 * OVER * W && Math.abs(v.y - d.y) * k < 0.7 * OVER * H;
+  };
   const stopQuiet = () => { cancelAnimationFrame(quiet.current.id); quiet.current.id = 0; };
-  const commit = useCallback(() => { stopQuiet(); setVb(live.current); }, []);
+  // a move is over: a pan within the painted margin rests as it is; anything else writes the viewBox
+  const settle = () => {
+    const v = live.current;
+    setView(v);
+    if (v !== drawn.current && keepable(v)) apply(true);
+    else setVb(v);
+  };
+  const commit = useCallback(() => { stopQuiet(); settle(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // the holder resized: a resting transform was worked out for the old size, so write the view
+  useLayoutEffect(() => { if (live.current !== drawn.current && !raf.current && !quiet.current.id) setVb(live.current); }, [hold]); // eslint-disable-line react-hooks/exhaustive-deps
   // a move has settled once it has been quiet for `settle` ms *and* 3 frames: where frames are slow (a big
   // drawing zoomed in, a weak GPU) the next wheel step can come later than `settle` ms, and committing in the
   // middle of a gesture would re-lay out the whole drawing again and again
   const watch = (now) => {
     const q = quiet.current;
     q.frames++;
-    if (q.frames >= 3 && now - q.at >= q.settle) { q.id = 0; setVb(live.current); }
+    if (q.frames >= 3 && now - q.at >= q.settle) { q.id = 0; settle(); }
     else q.id = requestAnimationFrame(watch);
   };
   const move = useCallback((next, settle = 140) => {
-    if (!svgRef.current?.style.transform) measure();
+    if (!svgRef.current?.classList.contains('cam-moving')) measure();
     live.current = typeof next === 'function' ? next(live.current) : next;
     apply();
     seen.current?.(live.current);
@@ -132,7 +171,7 @@ export function useSvgCamera(svgRef, VB0, onView) {
     if (settle != null) { Object.assign(q, { at: performance.now(), frames: 0, settle }); q.id = requestAnimationFrame(watch); }
   }, [commit]); // eslint-disable-line react-hooks/exhaustive-deps
   const cancel = useCallback(() => { cancelAnimationFrame(raf.current); raf.current = 0; }, []);
-  const jump = useCallback((next) => { cancel(); stopQuiet(); live.current = next; setVb(next); seen.current?.(next); }, [cancel]);
+  const jump = useCallback((next) => { cancel(); stopQuiet(); live.current = next; setVb(next); setView(next); seen.current?.(next); }, [cancel]);
   const glideTo = useCallback((to, { ms = 900, delay = 0, onDone, commit: keep = true } = {}) => {
     cancel();
     if (reduced()) { if (keep) jump(to); onDone?.(); return; }
@@ -165,5 +204,5 @@ export function useSvgCamera(svgRef, VB0, onView) {
   }, [svgRef]);
 
   const box = overBox(vb, hold[0], hold[1]);
-  return { vb, box, live, move, jump, glideTo, cancel, commit, toSvg, scale };
+  return { vb, view, box, live, move, jump, glideTo, cancel, commit, toSvg, scale };
 }

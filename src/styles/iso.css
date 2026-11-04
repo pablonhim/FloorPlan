@@ -102,20 +102,29 @@
   --nb-front:color-mix(in srgb, var(--struct-shade) 94%, var(--ink)); --nb-glass:var(--struct-glass); }
 .nb { cursor:pointer; }
 /* …a little faded; the hovered one comes up to full strength (still in the building's finish) */
-:is(.nb:not(.core), .it.nbi, .it.nbc) { opacity:.55; transition:opacity .2s ease; }
+:is(.nb:not(.core), .it.nbi, .it.nbc) { opacity:.8; transition:opacity .2s ease; }
 :is(.nb.hot, svg[data-hot="A"] .nbi[data-unit="A"], svg[data-hot="B"] .nbi[data-unit="B"], svg[data-hot="C"] .nbi[data-unit="C"], svg[data-hot="D"] .nbi[data-unit="D"]) { opacity:1; }
 :is(.nb:not(.core), .it.nbi, .it.nbc) {
   & :is(path, rect, circle, ellipse, polygon):not(.slab, .slab-grid, .zone-hatch, .tile-line, .floor-grid, .zone, .zone-edge, .zone-badge, .door-arc) {
     fill:var(--nb-side) !important; fill-opacity:1 !important; filter:none !important;
-    stroke:var(--struct-line) !important; stroke-opacity:.6 !important; }
+    stroke:var(--nb-line, var(--struct-line)) !important; stroke-opacity:var(--nb-line-a, .6) !important; }
   & .face:not(.slab, .zone, .top, .side) { fill:var(--nb-front) !important; }
   & .face.top:not(.slab, .zone) { fill:var(--nb-top) !important; }
   & :is(.glass, .face.pane, .face.frost-glass) { fill:var(--nb-glass) !important; fill-opacity:.85 !important; }
   /* the glass's own blue (outline, mullions, door leaves) goes too: everything in the building's line */
-  & :is(.face.pane, .face.frost-glass, .door-panel) { stroke:var(--struct-line) !important; stroke-opacity:.6 !important; }
-  & :is(line, .mullion, .frost-mullion) { stroke:var(--struct-line) !important; stroke-opacity:.6 !important; }
+  & :is(.face.pane, .face.frost-glass, .door-panel) { stroke:var(--nb-line, var(--struct-line)) !important; stroke-opacity:var(--nb-line-a, .6) !important; }
+  & :is(line, .mullion, .frost-mullion, .grain, .drawer-line) { stroke:var(--nb-line, var(--struct-line)) !important; stroke-opacity:var(--nb-line-a, .6) !important; }
   & :is(.cast-shadow, .ao, .shadow-slice, .monitor-ray, .glass-behind) { display:none; }
 }
+/* focus: the unit being edited is the only solid, shaded, coloured thing on screen; its resting neighbours (and
+   the core by them) are an outline-only line drawing — blank surfaces, one light line — the same look as the
+   floor view's unit focus (data-dock-unit), so they give the place without competing with it. Hovered (to glide
+   over to it), a neighbour comes back in the building's finish at full strength. Set on the pieces themselves,
+   so it wins over the sky's --nb-* cast (index.css). */
+:is(.nb:not(.core, .hot), .it.nbc, svg:not([data-hot="A"]) .it.nbi[data-unit="A"], svg:not([data-hot="B"]) .it.nbi[data-unit="B"],
+    svg:not([data-hot="C"]) .it.nbi[data-unit="C"], svg:not([data-hot="D"]) .it.nbi[data-unit="D"]) {
+  --nb-top:var(--panel); --nb-side:var(--panel); --nb-front:var(--panel); --nb-glass:var(--panel);
+  --nb-line:color-mix(in srgb, var(--ink) 32%, var(--panel)); --nb-line-a:1; }
 .nb .it { cursor:pointer; }
 .nb.core { opacity:1; pointer-events:none; }   /* the building core round a unit: shown at full strength, not a target */
 .it.core-faded { pointer-events:none; }   /* …its walls and fixtures (WCs, lifts, storage), sorted in with the unit's own items */
@@ -428,10 +437,22 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 @keyframes rack-scan { to { transform:translateY(var(--run)); } }
 @keyframes rack-blink { 0%, 100% { opacity:1; } 50% { opacity:.15; } 75% { opacity:.35; } }
 @media (prefers-reduced-motion: reduce) { .rack-led, .rack-scan { animation:none; } .rack-scan { display:none; } }
-/* while the camera moves (svgCamera: the drawing is only transformed), the ambient loops hold still, so
-   the compositor can move what is already painted without the drawing being repainted under it */
+/* while the camera moves (svgCamera: the drawing is only transformed) nothing inside the drawing may repaint:
+   any repaint makes the browser re-layerize the whole page (every desk card's frosted backdrop is a layer of
+   its own), which is what turned a smooth drag into 100–400 ms hitches. So, until the move settles:
+   - every loop holds still — the plans' screens, racks and highlights and the tower's fireflies, pool, ATM
+     and beacons (named one by one: a catch-all `.cam-moving *` would restyle all ~10 000 shapes each time
+     the class flips, a 600 ms stall of its own), and
+   - the pointer meets one transparent shield laid over the whole drawing (.cam-shield, svgCamera.showVia) instead
+     of the pieces: a drag or wheel over ~10 000 shapes no longer hit-tests each of them on every event, and
+     nothing under the pointer lights up (hover tips, :hover tints) and repaints. The shield sits inside the svg,
+     so the drag, wheel and click handlers on it carry on. (Not pointer-events:none on the pieces: flipping an
+     inherited property restyles the whole subtree, 600 ms each time.) */
 .cam-moving .monitor-ray, .cam-moving .rack-led, .cam-moving .rack-scan, .cam-moving .meet-hi, .cam-moving .meet-glow,
-.cam-moving .route-glint, .cam-moving .route-pulse { animation-play-state:paused; }
+.cam-moving .route-glint, .cam-moving .route-pulse, .cam-moving .firefly, .cam-moving .pool-ripple, .cam-moving .atm-screen,
+.cam-moving .gate-beacon, .cam-moving .beacon, .cam-moving .beacon-halo { animation-play-state:paused; }
+.cam-shield { display:none; fill:transparent; stroke:none; pointer-events:all; }
+.cam-moving > .cam-shield { display:inline; }
 /* massage chair: the same neutral building finish as the WeCafe furniture (white / grey, grey linework) */
 .it.live .face.pane { fill:color-mix(in srgb, var(--accent) 14%, #ffffff); fill-opacity:.86; stroke:var(--accent); }
 .it.live .glass.hot { filter:url(#soft); }
@@ -643,10 +664,12 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 }
 :root:not([data-theme="light"]) {
   --car-body:color-mix(in srgb, var(--struct-top) 80%, #fff); --car-body-dk:color-mix(in srgb, var(--struct-shade) 75%, #000);
-  --glass-car:#4a515a; --glass-car-dk:#262b31;
-  --glass-side:#1b1f24; --glass-side-dk:#0d0f12;
+  /* night glass: deep and cool, well below the body, so a parked car still reads as body + glass the way it
+     does by day (at #4a515a the screens and roof merged into the slate body and the cars went flat) */
+  --glass-car:#2b323b; --glass-car-dk:#161a20;
+  --glass-side:#13171c; --glass-side-dk:#08090b;
   --tyre:#2a2d31; --tyre-dk:#121417;
-  --car-rim:#80878f; --car-well:#060708; --car-edge:rgba(175,185,200,.22);
+  --car-rim:#80878f; --car-well:#060708; --car-edge:rgba(175,185,200,.3);
 }
 :root { --paint-white:var(--car-body); --paint-white-dk:var(--car-body-dk); --paint-black:var(--car-body); --paint-black-dk:var(--car-body-dk);
   --paint-red:var(--car-body); --paint-red-dk:var(--car-body-dk); --paint-steel:var(--car-body); --paint-steel-dk:var(--car-body-dk);

@@ -48,9 +48,10 @@ export default function LiveViewers() {
       title={offline ? t('Viewers: the live count is not reachable right now') : t(n === 1 ? '{n} person is viewing now (you included)' : '{n} people are viewing now (you included)', { n })}
       className="pointer-events-auto inline-flex items-center gap-1 tabular-nums">
       <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
-        className={n > 0 ? 'text-accent' : ''}>
-        {/* it blinks now and then, like a real eye (CSS eye-blink) */}
-        <g className="eye-blink"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" /><circle cx="8" cy="8" r="2" /></g>
+        className={`eye-blink${n > 0 ? ' text-accent' : ''}`}>
+        {/* it blinks now and then, like a real eye (CSS eye-blink, on the <svg> itself: an HTML-level transform
+            animation runs on the compositor; on an inner <g> it restyled and repainted the page every frame) */}
+        <path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" /><circle cx="8" cy="8" r="2" />
       </svg>
       {n}
     </span>

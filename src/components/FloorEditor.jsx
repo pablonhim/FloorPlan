@@ -167,7 +167,6 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
   const cam = useSvgCamera(svgRef, VB0, reportDepth(K, ZOOM.min, ZOOM.max));
   // wheel / zoom rail: this unit's own zoom range
   const zoomBy = usePlanZoom(cam, K, { ...ZOOM, active });
-  const vb = cam.vb;
   const [placing, setPlacing] = useState(null); // { type, rot, via, preset?, key? } (preset, key: a saved object)
   const [custom, saveCustom, removeCustom] = useCustomObjects();   // My objects (Save to Object Panel)
   const [selected, setSelected] = useState(null);
@@ -507,7 +506,8 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     cam.glideTo(nb.to, { ms: 700, commit: false, onDone: () => { gliding.current = false; onSwitch(plan.floor, unit); } });
   };
   // only the neighbours near the view are drawn (zoomed in on a corner, the far units are skipped)
-  const nearby = (n) => overlaps(vb, n.to, 0.25);
+  // (the view the camera rests on: a pan can rest without writing the viewBox, so not cam.vb)
+  const nearby = (n) => overlaps(cam.view, n.to, 0.25);
   // one part of a neighbouring unit drawn as a block: its floor ('flat'), or its far pieces ('behind', 'ahead')
   const nbG = (part) => (n) => n[part] && (
     <g key={`${part}-${n.unit}`} data-unit={n.unit} data-noexport="" className={`nb${hoverUnit === n.unit ? ' hot' : ''}${dockUnit === n.unit ? ' dock-hot' : ''}`} dangerouslySetInnerHTML={{ __html: n[part] }} />

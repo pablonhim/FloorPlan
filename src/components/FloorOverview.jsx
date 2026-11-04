@@ -2,11 +2,11 @@
 // Click a unit (or its tab) to open that unit's isolated, editable layout.
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { CELL, TILE } from '../iso/units.js';
-import { planFrame, renderScene, renderPlate, edgeItems } from '../iso/render.js';
+import { planFrame, renderScene, renderPlate, edgeItems, calloutRects, itemNode, textW } from '../iso/render.js';
 import { meetingRooms, routeToKosign } from '../model/wayfinding.js';
 import { esc } from '../iso/kernel.js';
 import { floorPlan, toFloor, coreItems, stats, RENTED, PLANS, CORE, shellUnits } from '../model/floors.js';
-import { elevatorParts } from '../model/catalog.js';
+import { elevatorParts, LAYER } from '../model/catalog.js';
 import { renderParts } from '../iso/parts.js';
 import { footprint } from '../iso/grid.js';
 import { person } from '../iso/scenes.js';
@@ -94,12 +94,42 @@ function unitAreaD(K, u) {
   return d;
 }
 
-function unitOverlay(K, u, s) {
+/**
+ * Where a unit's title (UNIT X + its subtitle, lying on the floor) goes: on the unit's own floor, where its
+ * screen box covers the least of the desks' name cards (which float above the desks and would hide it) and of
+ * the furniture, nearest the unit's middle among equals. Only the unit's open floor tiles are tried, and the
+ * whole title must lie on them. `taken`: titles already placed on this floor (screen rects), kept clear too.
+ */
+function titleSpot(K, u, items, sub, taken = []) {
+  const hw = Math.max(6 * 34 * 0.62, textW(sub, 12)) / 2, v0 = -30, v1 = 24;   // the title's half-width, its depth (TOP-plane units)
+  const on = (x, y) => u.mask[Math.floor(y / TW - u.oy / TILE)]?.[Math.floor(x / TW - u.ox / TILE)] === '1';
+  const box = (pts) => { const p = pts.map((q) => K.P(...q)); return { x0: Math.min(...p.map((a) => a[0])), x1: Math.max(...p.map((a) => a[0])), y0: Math.min(...p.map((a) => a[1])), y1: Math.max(...p.map((a) => a[1])) }; };
+  const cut = (a, b) => Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) * Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
+  const cards = calloutRects(K, items);
+  const solids = items.filter((it) => LAYER[it.type] !== 'floor').map((it) => { const n = itemNode(it); return box([[n.x0, n.y0, n.z1], [n.x1, n.y0, n.z1], [n.x0, n.y1, n.z1], [n.x1, n.y1, n.z1], [n.x0, n.y1, 0], [n.x1, n.y1, 0], [n.x1, n.y0, 0]]); });
+  const mid = [(u.ox + u.cols / 2) * CELL, (u.oy + u.rows * 0.5) * CELL], M = K.P(mid[0], mid[1], 0);
+  let best = { at: mid, score: Infinity, rect: null };
+  for (let ty = 0; ty < u.mask.length; ty++) for (let tx = 0; tx < u.mask[ty].length; tx++) {
+    const cx = u.ox * CELL + (tx + 0.5) * TW, cy = u.oy * CELL + (ty + 0.5) * TW;
+    const corners = [[cx - hw, cy + v0], [cx + hw, cy + v0], [cx - hw, cy + v1], [cx + hw, cy + v1], [cx, cy + v0], [cx, cy + v1]];
+    if (!corners.every(([x, y]) => on(x, y))) continue;
+    const r = box(corners.map(([x, y]) => [x, y, 0])), P = K.P(cx, cy, 0);
+    const score = cards.reduce((a, c) => a + cut(r, c), 0) * 4 + solids.reduce((a, c) => a + cut(r, c), 0) +
+      taken.reduce((a, c) => a + cut(r, c), 0) * 8 + 0.4 * Math.hypot(P[0] - M[0], P[1] - M[1]) ** 2 / 10;
+    if (score < best.score) best = { at: [cx, cy], score, rect: r };
+  }
+  return best;
+}
+
+function unitOverlay(K, u, s, items = [], taken = []) {
   const d = unitAreaD(K, u);
-  const cx = (u.ox + u.cols / 2) * CELL, cy = (u.oy + u.rows * 0.5) * CELL;
+  const sub = `${PLANS[u.id].subtitle} · ${s.assigned}/${s.desks} seats`;
+  const spot = titleSpot(K, u, items, sub, taken);
+  if (spot.rect) taken.push(spot.rect);
+  const [cx, cy] = spot.at;
   return `<g class="unit-hit" data-unit="${u.unit}"><path class="unit-area" d="${d}"/>` +
     `<g transform="${K.TOP(cx, cy, 0)}"><text class="unit-name" x="0" y="0" font-size="34" text-anchor="middle">UNIT ${u.unit}</text>` +
-    `<text class="unit-sub" x="0" y="20" font-size="12" text-anchor="middle">${esc(PLANS[u.id].subtitle)} · ${s.assigned}/${s.desks} seats</text></g></g>`;
+    `<text class="unit-sub" x="0" y="20" font-size="12" text-anchor="middle">${esc(sub)}</text></g></g>`;
 }
 
 // icons for the view tools (16 × 16, stroked in the current colour)
@@ -206,7 +236,10 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
   }, [focus, floor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const unitStats = useMemo(() => Object.fromEntries(plan.units.map((u) => [u.unit, stats(plans[u.id])])), [plan, plans]);
-  const overlay = useMemo(() => plan.units.map((u) => unitOverlay(K, u, unitStats[u.unit])).join(''), [K, plan, unitStats]);
+  const overlay = useMemo(() => {
+    const taken = [];   // each title kept clear of the ones placed before it
+    return plan.units.map((u) => unitOverlay(K, u, unitStats[u.unit], floorItems.filter((it) => it.unit === u.unit), taken)).join('');
+  }, [K, plan, unitStats, floorItems]);
   // the hovered unit (on the floor, or its button in the dock) lights up on the floor only: its area tinted in
   // the scene's floor layer (renderScene's .floor-hi slot), under every wall, pillar, desk and partition, with
   // no outline
