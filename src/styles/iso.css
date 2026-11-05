@@ -93,6 +93,9 @@
 /* …everything but furniture (walls, the core's lifts, WCs and storerooms, the site's features …) only a touch */
 .tip-hot:not(:has(.face.furn)) { filter:brightness(1.04) saturate(1.05); }
 :root:not([data-theme="light"]) .tip-hot:not(:has(.face.furn)) { filter:brightness(1.14) saturate(1.06); }
+/* the frosted storage rooms (white glass, shelving inside): only a hint brighter, or the glass flares */
+.tip-hot:has(.face.frost-glass) { filter:brightness(1.03) saturate(1.04); }
+:root:not([data-theme="light"]) .tip-hot:has(.face.frost-glass) { filter:brightness(1.08) saturate(1.04); }
 /* Out of focus — one look in every view: whatever is not the part being viewed stays at full strength as a white
    clay model: every surface in one matte clay white, but still lit — its top, east and south faces in their own
    tones (with the time of day's cast, the --nb-* tones in index.css), its cast and contact shadows, and its glass
@@ -110,12 +113,7 @@
 /* (raised over every material's own colours — the leaders' birch desks and wooden chairs, the office chairs,
    the screens — which are set with high-priority rules of their own) */
 :root:root:root:root:root:root:root:root :is(.nb:not(.core), .it.nbc, .it.team-off, .it.faded, .shell-units, svg[data-team] .glass-behind,
-    .it.nbi,
-    .floor-ov[data-dock-unit="A"] .it:not(.u-A, .faded), .floor-ov[data-dock-unit="B"] .it:not(.u-B, .faded),
-    .floor-ov[data-dock-unit="C"] .it:not(.u-C, .faded), .floor-ov[data-dock-unit="D"] .it:not(.u-D, .faded),
-    .floor-ov[data-spot="meet"] .it:not(.faded), .floor-ov[data-spot="stair"] .it:not(.t-stair, .faded),
-    .floor-ov[data-spot="lift"] .it:not(.t-elevator, .faded), .floor-ov[data-spot="wcW"] .it:not(.t-wc.g-f, .faded),
-    .floor-ov[data-spot="wcM"] .it:not(.t-wc.g-m, .faded)) {
+    .it.nbi) {
   --clay-top:color-mix(in srgb, var(--clay) 86%, var(--nb-top));
   --clay-side:color-mix(in srgb, color-mix(in srgb, var(--clay) 86%, var(--nb-side)) 93%, #000);
   --clay-front:color-mix(in srgb, color-mix(in srgb, var(--clay) 86%, var(--nb-front)) 85%, #000);
@@ -124,9 +122,14 @@
     fill:var(--clay-side) !important; stroke:var(--clay-line) !important; stroke-opacity:.5 !important; }
   & .face:not(.slab, .zone, .top, .side) { fill:var(--clay-front) !important; }
   & .face.top:not(.slab, .zone) { fill:var(--clay-top) !important; }
-  & :is(line, .mullion, .grain, .drawer-line) { stroke:var(--clay-line) !important; stroke-opacity:.5 !important; }
+  /* (sides too, at a rank over the materials' own side colours — the lead desks' wooden sides and legs) */
+  & .face.side:not(.slab, .zone) { fill:var(--clay-side) !important; }
+  & :is(line, .mullion, .drawer-line) { stroke:var(--clay-line) !important; stroke-opacity:.5 !important; }
+  /* no wood grain on the plain clay (a lead's desk, the leads' drawers): the grain strokes would otherwise be
+     filled in by the rule above and still read as a pattern */
+  & .grain { display:none !important; }
   /* the glass keeps its see-through, frosted look (its own opacity), in a neutral clear instead of its blue */
-  & :is(.glass, .face.pane, .face.frost-glass) { fill:color-mix(in srgb, #ffffff 55%, var(--clay)) !important; }
+  & :is(.glass, .face.pane, .face.frost-glass, .door-panel) { fill:color-mix(in srgb, #ffffff 55%, var(--clay)) !important; }
   & .frost-mullion { stroke:#ffffff !important; }
   /* the light stays: cast and contact shadows as they were */
   & :is(.ao, .shadow-slice, .cast-shadow) :is(path, rect, polygon, ellipse) { fill:var(--shadow) !important; stroke:none !important; }
@@ -139,17 +142,20 @@
    Hovered (to glide over), a neighbour stays as it is: only its floor lights up (.nb.hot, below). */
 :root:root:root:root:root:root:root:root:root:root:root:root :is(.nb:not(.core), .it.nbc, .glass-behind :is(.nbi, .nbc), .it.faded, .shell-units, .it.team-off, svg[data-team] .glass-behind,
     .it.nbi)
-  :is(path, rect, circle, ellipse, polygon, line) { stroke:none !important; }
+  :is(path, rect, circle, ellipse, polygon, line):not(.face.pane, .door-panel) { stroke:none !important; }
+/* …except glass: a pane in the plain clay is near-white on a near-white floor, so it keeps a soft clay edge or
+   it vanishes (the glass beside an entrance's doors, the meeting rooms' glass walls) */
+:root:root:root:root:root:root:root:root:root:root:root:root :is(.nb:not(.core), .it.nbc, .glass-behind :is(.nbi, .nbc), .it.faded, .shell-units, .it.team-off, svg[data-team] .glass-behind,
+    .it.nbi) :is(.face.pane, .door-panel) { stroke:var(--clay-line) !important; stroke-opacity:.55 !important; stroke-width:.6; }
 /* …and their room floors keep no colour either (a meeting room in use, the WeCafe): plain floor, like the rest */
 :root:root:root:root:root:root:root:root:root:root:root:root :is(.nb:not(.core), .it.nbc, .glass-behind :is(.nbi, .nbc), .it.faded, .shell-units, .it.team-off, svg[data-team] .glass-behind,
     .it.nbi)
   .face.zone { fill:transparent !important; }
 .nb .it { cursor:pointer; }
 /* Team / Department view (lib/teamView): the team picked keeps its colour (.team-off: the rest, above); its own
-   areas are washed in the accent with a fine accent edge. Only the team's labels show: the other areas' names
-   and people's cards (.team-hide), the neighbouring units' names and the floor's unit titles go. */
-.it.team-on .face.zone { fill:color-mix(in srgb, var(--accent) 10%, transparent) !important; }
-.it.team-on .zone-edge { stroke:var(--accent) !important; stroke-width:1.5; stroke-opacity:.85; vector-effect:non-scaling-stroke; }
+   areas keep their plain floor (no wash or edge on them: the rest stepping back is the highlight). Only the
+   team's labels show: the other areas' names and people's cards (.team-hide), the neighbouring units' names and
+   the floor's unit titles go. */
 svg[data-team] :is(.desk-callout.team-hide, .tag.team-hide, .tag:not([data-zone]), .nb .tag, .nb text, .unit-name, .unit-sub) { display:none; }
 .nb.core { pointer-events:none; }   /* the building core inside a unit: in colour, not a target */
 .nb.core-out { pointer-events:none; cursor:default; }   /* …and round it (grayscale, above): not a target either */
@@ -401,6 +407,10 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
   --struct-lit:color-mix(in srgb, var(--accent) 86%, #000);
   --struct-shade:color-mix(in srgb, var(--accent) 74%, #000); }
 .it.it:has(.face.deskTop) .face.furn:is(.monitor-stand, .monitor-body) { stroke:var(--accent-hi); }
+/* …but on a lead's wooden desk the monitor is a dark charcoal (casing, neck, foot and back), not the blue */
+.it.it.lead:has(.face.deskTop) .face.furn:is(.monitor-stand, .monitor-body) {
+  --struct-top:#3a3d43; --struct-lit:#2f3237; --struct-shade:#26282c; stroke:#16171a; }
+:root:root .it.lead .monitor-back { fill:#2a2c31; stroke:#16171a; stroke-opacity:.7; }
 /* …their line in a deeper blue, a touch darker than the other furniture's */
 .it.it:has(.face.deskTop) .face.furn:not(.chair, .chair-base, .monitor-stand, .monitor-body) { stroke:var(--accent-hi); }
 /* the desks and their monitors in more contrast: their grey faces deeper and their line lighter (the white
@@ -989,3 +999,70 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 @media (prefers-reduced-motion: reduce) { .face.pwc-door { transition:none; } }
 .pwc-doorway { fill:#3b4048; opacity:0; transition:opacity .25s ease-out; }
 .pwc-doorway.open { opacity:1; }
+
+/* ---------- the newer objects (catalog: tvStand … glassDoor) ---------- */
+/* TV stand in walnut; the wall TV a black panel with a faint sheen and a red standby light */
+:root:root:root .it.it .face.tvstand.furn { fill:#7a5a40; stroke:#5b412d; stroke-opacity:.6; }
+:root:root:root .it.it .face.tvstand.furn.side { fill:#8a6a4e; }
+:root:root:root .it.it .face.tvstand.furn.top { fill:#9c7b5c; }
+.face.tv { fill:#25272c; stroke:#3a3d43; } .face.tv.side { fill:#2e3136; } .face.tv.top { fill:#3a3d43; }
+.tv-screen { fill:#101216; stroke:none; }
+.tv-sheen { fill:#ffffff; fill-opacity:.07; stroke:none; }
+.tv-led { fill:#e5484d; stroke:none; }
+/* the TV on wheels: a brushed-metal stand on black castors */
+.face.tv-cart { fill:#9aa0a8; stroke:#7b818a; stroke-opacity:.7; } .face.tv-cart.side { fill:#8a9098; } .face.tv-cart.top { fill:#b3b8bf; }
+.face.castor { fill:#2b2d31; stroke:#16181b; } .face.castor.top { fill:#3a3d42; }
+/* flower pot: terracotta, a bush in three greens */
+.face.pot { fill:#c4673f; stroke:#9e4f2e; stroke-opacity:.6; } .face.pot.side { fill:#b25a35; } .face.pot.top { fill:#5a3b28; }
+.face.leaf { fill:#4e9a5a; stroke:#3b7d46; stroke-opacity:.55; } .face.leaf.side { fill:#438b4f; } .face.leaf.top { fill:#68b273; }
+:root:not([data-theme="light"]) .face.leaf { fill:#3f7d49; } :root:not([data-theme="light"]) .face.leaf.top { fill:#55965f; }
+/* curtain: warm linen with soft folds */
+.face.curtain { fill:#e3d6bf; stroke:#bfae8f; stroke-opacity:.6; } .face.curtain.side { fill:#d7c8ae; } .face.curtain.top { fill:#efe5d3; }
+.curtain-fold { stroke:#a8936e; stroke-opacity:.45; stroke-width:.5; vector-effect:non-scaling-stroke; }
+:root:not([data-theme="light"]) .face.curtain { fill:#8e8270; } :root:not([data-theme="light"]) .face.curtain.top { fill:#a49784; }
+/* floor mat (កម្រាលជើង): red, a darker woven border */
+.face.rug { fill:#c8313a; stroke:#9b2129; stroke-opacity:.7; } .face.rug.top { fill:#d23a43; }
+.rug-edge { fill:none; stroke:#8f1f26; stroke-width:.8; stroke-dasharray:1.6 1; vector-effect:non-scaling-stroke; }
+/* wall clock: a dark rim round a white face, black hands, a red centre pin */
+.clock-rim { fill:#2b2d31; } .clock-face { fill:#fbfaf7; }
+.clock-tick { stroke:#2b2d31; stroke-width:.5; vector-effect:non-scaling-stroke; }
+.clock-hand { stroke:#1c1d20; stroke-width:1; stroke-linecap:round; vector-effect:non-scaling-stroke; }
+.clock-pin { fill:#e5484d; }
+/* printers: light grey bodies, a dark paper slot, a green ready light, white paper, a blue touch screen */
+.face.printer { fill:#eceeef; stroke:#b9bdc2; stroke-opacity:.8; } .face.printer.side { fill:#dfe2e5; } .face.printer.top { fill:#f6f7f8; }
+:root:not([data-theme="light"]) .face.printer { fill:#5b6068; stroke:#7b8089; } :root:not([data-theme="light"]) .face.printer.side { fill:#50555c; } :root:not([data-theme="light"]) .face.printer.top { fill:#6a7078; }
+.face.printer-panel { fill:#3d4148; stroke:#2a2d32; } .face.printer-panel.top { fill:#474b52; }
+.printer-slot { fill:#3b3f45; stroke:none; } .printer-led { fill:#34d27b; stroke:none; }
+.printer-screen { fill:#2f7be5; fill-opacity:.85; stroke:none; }
+.face.paper { fill:#ffffff; stroke:#c9cdd2; } .face.paper.top { fill:#ffffff; }
+/* glass doors: aluminium posts and frames, long bar handles; the cabinet room's glass frosted */
+.face.door-post { fill:#a7adb5; stroke:#868c95; } .face.door-post.side { fill:#959ba4; } .face.door-post.top { fill:#bcc1c8; }
+.door-frame { fill:none; stroke:#8e959f; stroke-width:.8; vector-effect:non-scaling-stroke; }
+.door-bar { stroke:#7d848e; stroke-width:1.8; stroke-linecap:round; vector-effect:non-scaling-stroke; }
+.face.pane.frosted-door { fill:#ffffff; fill-opacity:.72; }
+:root:not([data-theme="light"]) .face.pane.frosted-door { fill:#c9ced6; fill-opacity:.35; }
+/* café stools in a colour (item.color): the seat painted, its sides a shade darker, its top a touch lighter */
+:root:root:root .it.it .face.seat.c-red { --sc:#e0484d; } :root:root:root .it.it .face.seat.c-yellow { --sc:#f2c230; }
+:root:root:root .it.it .face.seat.c-green { --sc:#3fa66b; } :root:root:root .it.it .face.seat.c-blue { --sc:#2f7be5; }
+:root:root:root .it.it .face.seat.c-black { --sc:#2b2d31; }
+:root:root:root .it.it .face.seat[class*=" c-"] { fill:var(--sc); stroke:color-mix(in srgb, var(--sc) 70%, #000); stroke-opacity:.7; }
+:root:root:root .it.it .face.seat[class*=" c-"].side { fill:color-mix(in srgb, var(--sc) 82%, #000); }
+:root:root:root .it.it .face.seat[class*=" c-"].top { fill:color-mix(in srgb, var(--sc) 88%, #fff); }
+/* top-down, the people's names (render.renderDeskCallouts): a frosted badge floating over each chair, what is
+   under it blurred through it, with a small notch pointing to the person's desk (n-t / n-b / n-l / n-r) and a
+   thin translucent outline (.top-badge-edge) */
+.top-badge { position:absolute; box-sizing:border-box; display:flex; align-items:center; justify-content:center; padding:0 .45em;
+  border-radius:.55em; background:rgb(255 255 255 / .55); -webkit-backdrop-filter:blur(2.5px) saturate(1.4); backdrop-filter:blur(2.5px) saturate(1.4);
+  color:#1f2933; font-family:var(--font); font-weight:600; line-height:1; white-space:nowrap; pointer-events:none; }
+.top-badge span { overflow:hidden; text-overflow:clip; }
+.top-badge::after { content:""; position:absolute; width:calc(var(--n) * 2.2); height:var(--n); background:inherit;
+  -webkit-backdrop-filter:inherit; backdrop-filter:inherit; clip-path:polygon(0 0, 100% 0, 50% 100%); }
+.top-badge.n-b::after { left:50%; top:100%; translate:-50% 0; }
+.top-badge.n-t::after { left:50%; bottom:100%; translate:-50% 0; rotate:180deg; }
+.top-badge.n-r::after { top:50%; left:100%; translate:calc(var(--n) * -.6) -50%; rotate:-90deg; }
+.top-badge.n-l::after { top:50%; right:100%; translate:calc(var(--n) * .6) -50%; rotate:90deg; }
+:root:not([data-theme="light"]) .top-badge { background:rgb(28 32 38 / .5); color:#eef1f5; }
+/* …no shadow under it: a thin translucent line round it instead, the notch included (one traced shape) */
+.top-badge-edge { position:absolute; left:0; top:0; overflow:visible; pointer-events:none; }
+.top-badge-edge path { fill:none; stroke:rgb(31 41 51 / .22); stroke-width:.8; stroke-linejoin:round; }
+:root:not([data-theme="light"]) .top-badge-edge path { stroke:rgb(255 255 255 / .22); }

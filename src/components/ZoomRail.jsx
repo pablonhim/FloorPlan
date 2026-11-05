@@ -31,7 +31,23 @@ export default function ZoomRail({ stage, right = '3.75rem' }) {
     if (busy || !shot) return;
     setBusy(true);
     setFlash((n) => n + 1);
-    try { const r = await shot(); if (r?.url) setTaken(r); } finally { setBusy(false); }
+    // the screen is "snapped": it flashes and the whole page shrinks a little while the picture is taken, then
+    // springs back behind the preview, which drops in as the paper photo (index.css .shot-snap, .shot-photo)
+    // (it shrinks first and only then is the picture made — the making blocks the page, which would stutter the
+    // shrink — with scrolling locked throughout, so nothing ever scrolls or shows a scrollbar)
+    const root = document.getElementById('root'), html = document.documentElement;
+    const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    html.classList.add('shot-lock');
+    root?.classList.add('shot-snap');
+    if (!calm) await new Promise((res) => setTimeout(res, 300));
+    let kept = false;
+    try { const r = await shot(); if (r?.url) { setTaken(r); kept = true; } } finally {
+      root?.classList.remove('shot-snap');
+      // (still locked while the preview is open — its photo pops in a touch larger than the window — and
+      // unlocked when it closes; without a picture, once the page is back)
+      if (!kept) setTimeout(() => html.classList.remove('shot-lock'), 450);
+      setBusy(false);
+    }
   };
   const fracAt = (e) => { const r = track.current.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left - 4) / (r.width - 8))); };
   const onDown = (e) => {
@@ -76,7 +92,7 @@ export default function ZoomRail({ stage, right = '3.75rem' }) {
       )}
       <span className="grid size-8 place-items-center"><Compass size={28} /></span>
       <ShotFlash n={flash} />
-      {taken && <ShotPreview shot={taken} onClose={() => setTaken(null)} />}
+      {taken && <ShotPreview shot={taken} onClose={() => { setTaken(null); document.documentElement.classList.remove('shot-lock'); }} />}
     </div>
   );
 }

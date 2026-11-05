@@ -125,7 +125,7 @@ export const toFloor = (items, ox, oy = 0) => items.map((it) => ({ ...it, gx: it
 let seq = 0;
 export const newId = (type) => `${type}-${Date.now().toString(36)}-${(seq++).toString(36)}`;
 
-const STR = { name: 60, team: 60, label: 40, en: 60, note: 40, kind: 16, gender: 1, doorSide: 1 };
+const STR = { name: 60, team: 60, label: 40, en: 60, note: 40, kind: 16, gender: 1, doorSide: 1, color: 12 };   // color: a stool's (STOOL_COLORS)
 
 /** Drop anything malformed, off-grid, off the plate or colliding (first one wins). */
 export function sanitize(raw, plan) {
@@ -307,9 +307,18 @@ export function load() {
         const pp = raw.v >= 8 ? cafe : addSeeded(cafe, id, (it) => it.id === '4D-zone-046');   // v7 → v8: the Phnom Penh meeting room
         // v8 → v9: the official layout of 2026-11-04 — every desk (seats, names, teams) and area (renamed
         // departments) as it gives them, and the WeCafe's tables, stools and round tables re-laid once
-        if (raw.v >= 9) return pp;
-        const seated = resetSeeded(pp, id, (it) => it.type === 'desk' || it.type === 'zone');
-        return id !== '4D' ? seated : resetSeeded(seated, id, (it) => ['table', 'stool', 'roundTable'].includes(it.type));
+        let v9 = pp;
+        if (raw.v < 9) {
+          const seated = resetSeeded(pp, id, (it) => it.type === 'desk' || it.type === 'zone');
+          v9 = id !== '4D' ? seated : resetSeeded(seated, id, (it) => ['table', 'stool', 'roundTable'].includes(it.type));
+        }
+        // v9 → v10: nothing locked by default any more; the walls as the seed lays them (the 4C meeting room's
+        // wall one cell over, walls no longer running into a unit's outline) with the 4C meeting room's area;
+        // 뿌이, 리티니아 and 쏘펜 (2B) in IT 인프라
+        if (raw.v >= 10) return v9;
+        const unlocked = v9.map(({ locked, ...it }) => it);   // eslint-disable-line no-unused-vars
+        const walls = resetSeeded(unlocked, id, (it) => it.type === 'wall' || it.id === '4C-zone-048');
+        return resetSeeded(walls, id, (it) => ['2B-desk-070', '2B-desk-072', '2B-desk-073'].includes(it.id));
       };
       return Object.fromEntries(Object.keys(PLANS).map((id) => [id, Array.isArray(raw.plans[id]) ? fix(sanitize(raw.plans[id], PLANS[id]), id) : seedPlan(id)]));
     }
@@ -319,7 +328,7 @@ export function load() {
 
 export function save(plans) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ v: 9, savedAt: new Date().toISOString(), plans }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ v: 10, savedAt: new Date().toISOString(), plans }));
     return true;
   } catch {
     return false;

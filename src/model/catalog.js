@@ -33,6 +33,17 @@ export const SIZES = {
   wc:           { w: 32, d: 18, h: 40, label: 'WC', kr: '화장실', sizable: 'wd' },
   cabinet:      { w: 6, d: 3, h: 34, label: 'Storage cabinet', kr: '수납장' },
   storeroom:    { w: 18, d: 9, h: 56, label: 'Storage room', kr: '스토리지' }, // two lift shafts side by side
+  tvStand:      { w: 8, d: 2, h: 22, label: 'TV stand', kr: 'TV 스탠드', km: 'ធ្នើទូរទស្សន៍' },
+  wallTv:       { w: 5, d: 1, h: 34, label: 'Wall TV', kr: '벽걸이 TV', km: 'ទូរទស្សន៍ព្យួរជញ្ជាំង', note: 'hangs on a wall or pillar' },
+  tvCart:       { w: 6, d: 3, h: 56, label: 'TV on wheels', kr: '이동식 TV', km: 'ទូរទស្សន៍មានកង់', note: 'a 55-inch screen on a rolling stand' },
+  plant:        { w: 2, d: 2, h: 38, label: 'Flower pot', kr: '화분', km: 'ផើងផ្កា' },
+  closet:       { w: 5, d: 3, h: 56, label: 'Closet', kr: '옷장', km: 'ទូ', note: '100 × 60 cm, 1.8 m (shown cut)' },
+  curtain:      { w: 10, d: 1, h: WALL_H, label: 'Curtain', kr: '커튼', km: 'វាំងនន', sizable: 'w' },
+  rug:          { w: 4, d: 3, h: 0.5, label: 'Floor mat', kr: '발매트', km: 'កម្រាលជើង', sizable: 'wd' },
+  wallClock:    { w: 2, d: 1, h: 35, label: 'Wall clock', kr: '벽시계', km: 'នាឡិកាព្យួរ', note: 'hangs on a wall or pillar' },
+  printer:      { w: 3, d: 2, h: 12, label: 'Printer', kr: '프린터', km: 'ម៉ាស៊ីនព្រីន', note: 'portable' },
+  copier:       { w: 4, d: 4, h: 56, label: 'Large printer', kr: '복합기', km: 'ម៉ាស៊ីនព្រីនធំ', note: 'multifunction copier, 80 × 80 cm' },
+  glassDoor:    { w: 5, d: 1, h: WALL_H, label: 'Glass door', kr: '유리문', km: 'ទ្វារកញ្ចក់', sizable: 'w' },
 };
 
 /**
@@ -48,10 +59,18 @@ export const AMBIENT_TICK = 0.15;
 
 export const CORE = new Set(['elevator', 'restroom', 'stair', 'wc', 'cabinet', 'storeroom']);
 
-/** Collision layer per type (see grid.collides). */
+/** Things hung on a wall or pillar: placed only with one right behind them (grid.validate). */
+export const MOUNTED = new Set(['wallTv', 'wallClock']);
+
+/**
+ * Collision layer per type (see grid.collides): floor (rooms, door swings, mats) never collides; structure
+ * (walls, glass, glass doors, partitions, pillars) may meet itself at joints; wall-hung pieces (mount) stand
+ * clear of structure and of each other but hang over furniture; furniture collides with everything solid.
+ */
 export const LAYER = Object.fromEntries(Object.keys(SIZES).map((t) => [t,
-  t === 'zone' || t === 'door' ? 'floor'
-    : ['wall', 'glass', 'partition', 'pillar'].includes(t) ? 'structure' : 'furniture']));
+  t === 'zone' || t === 'door' || t === 'rug' ? 'floor'
+    : MOUNTED.has(t) ? 'mount'
+      : ['wall', 'glass', 'partition', 'pillar', 'glassDoor'].includes(t) ? 'structure' : 'furniture']));
 
 export const ZONE_KINDS = {
   dept: 'Department',
@@ -74,13 +93,32 @@ export const ZONE_KINDS = {
  */
 export const NEUTRAL_TYPES = new Set(['stool', 'table', 'roundTable', 'counter']);
 
-/** Palette order and grouping. */
+/** The stool's colours (item.color; none = the café's neutral finish), offered as swatches in the objects menu. */
+export const STOOL_COLORS = [
+  { color: '', label: 'Natural', swatch: '#ece8df' },
+  { color: 'red', label: 'Red', swatch: '#e0484d' },
+  { color: 'yellow', label: 'Yellow', swatch: '#f2c230' },
+  { color: 'green', label: 'Green', swatch: '#3fa66b' },
+  { color: 'blue', label: 'Blue', swatch: '#2f7be5' },
+  { color: 'black', label: 'Black', swatch: '#2b2d31' },
+];
+
+/**
+ * Palette order and grouping. An entry is a type, or a ready-made variant of one: { key, type, label, preset }
+ * (placed with the preset's fields, e.g. the three glass doors). 'door' (a plain swing) is no longer offered:
+ * the layouts' own doors stay, and new openings take a glass door.
+ */
 export const PALETTE = [
   { group: 'Seating', types: ['desk', 'drawer', 'stool', 'massageChair'] },
   { group: 'Tables', types: ['table', 'roundTable', 'meetingTable', 'counter'] },
-  { group: 'Equipment', types: ['serverRack'] },
-  { group: 'Structure', types: ['pillar', 'wall', 'glass', 'partition', 'door'] },
-  { group: 'Zones', types: ['zone'] },
+  { group: 'Storage', types: ['closet', 'tvStand'] },
+  { group: 'Equipment', types: ['serverRack', 'copier', 'printer', 'wallTv', 'tvCart'] },
+  { group: 'Decor', types: ['plant', 'rug', 'curtain', 'wallClock'] },
+  { group: 'Structure', types: ['pillar', 'wall', 'glass', 'partition',
+    { key: 'door-entrance', type: 'glassDoor', label: 'Entrance glass door', preset: { type: 'glassDoor', w: 8, kind: 'entrance' } },
+    { key: 'door-room', type: 'glassDoor', label: 'Room glass door', preset: { type: 'glassDoor', w: 5, kind: 'room' } },
+    { key: 'door-cabinet', type: 'glassDoor', label: 'Cabinet glass door', preset: { type: 'glassDoor', w: 4, kind: 'cabinet' } }] },
+  { group: 'Zones', types: ['zone'], panel: false },   // not in the Objects panel (rooms come with the layout); still a swap target
   { group: 'Building core', core: true, types: ['elevator', 'storeroom', 'wc', 'cabinet', 'restroom', 'stair'] },
 ];
 
@@ -88,6 +126,7 @@ export const PALETTE = [
 export function defaults(type) {
   if (type === 'zone') return { kind: 'dept', label: 'New zone' };
   if (type === 'counter') return { on: true };
+  if (type === 'glassDoor') return { kind: 'room' };
   return {};
 }
 
@@ -146,7 +185,7 @@ export const tipLang = getLang;
  * One language only: words the catalog lacks in Korean or Khmer fall back to English.
  */
 // desks have none: their name cards float over them, and a click opens the desk card (DeskCard)
-const NO_TIP = new Set(['zone', 'door', 'wall', 'glass', 'partition', 'desk']);
+const NO_TIP = new Set(['zone', 'door', 'wall', 'glass', 'partition', 'desk', 'rug', 'curtain', 'glassDoor']);
 export function tipFor(item, lang = 'en') {
   if (!item || NO_TIP.has(item.type)) return null;
   const s = SIZES[item.type], ko = lang === 'ko', km = lang === 'km';
@@ -216,6 +255,9 @@ function grain(w, h, along, seed) {
   return s;
 }
 
+/** A desk kept for a remote PC (its note says so: 원격 PC / remote PC): no extension table. */
+const REMOTE_PC = /원격\s*PC|remote\s*PC/i;
+
 function desk(item, W, D) {
   const live = isLive(item);
   const lead = isLead(item), seed = [...String(item.id || '')].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 11);
@@ -253,7 +295,9 @@ function desk(item, W, D) {
     // desks of a row, and back-to-back pairs, meet without a gap), and the panel legs are exactly as deep as
     // the worktop and flush with its ends — one under the extension's outer end, one under the seam (its face
     // continuing the seam line straight down), one at the far end — so nothing overhangs
-    ...(EXT ? [
+    // (a desk marked as a remote PC (its note) has no extension: just the desk itself, where it stands, the
+    // extension's end left open)
+    ...(EXT && !REMOTE_PC.test(item.note || '') ? [
       { x: 0, y: 0, z: 0, w: 2, d: top, h: 36, cls: 'furn desk-leg', ...woodFaces },
       { x: 0, y: 0, z: 36, w: EXT, d: top, h: 2, cls: 'deskExt furn', ...woodFaces, top: topGrain },
     ] : []),
@@ -264,25 +308,29 @@ function desk(item, W, D) {
       top: (w, d, rot = 0) => {
         // the employee's name floats above the desk in a callout (render.renderDeskCallouts); an unassigned
         // desk keeps its small note on the worktop
-        if (!name) return topGrain(w, d, rot) + ray(rot) + `<text class="label desk-name" x="${w / 2}" y="${d / 2 + 2}" font-size="5" text-anchor="middle">${esc(item.note || '—')}</text>`;
+        // (no screen light either: an empty desk has no monitor)
+        if (!name) return topGrain(w, d, rot) + `<text class="label desk-name" x="${w / 2}" y="${d / 2 + 2}" font-size="5" text-anchor="middle">${esc(item.note || '—')}</text>`;
         return topGrain(w, d, rot) + ray(rot);
       },
     },
     // the monitor on its stand: a flat foot on the worktop, a neck rising at the back, and the screen
     // held up on it (the boxes never interpenetrate, so the part depth sort stays exact)
-    // set a little in from the back edge, toward the sitter
+    // set a little in from the back edge, toward the sitter; only on a desk someone sits at — an
+    // unassigned desk stands bare (the desk and its chair)
+    ...(name ? [
     { x: mid - 5.5, y: 8.5, z: 38, w: 11, d: 6, h: 0.8, r: 1.5, cls: 'furn monitor-stand' },       // foot
     { x: mid - 1.25, y: 9.5, z: 38.8, w: 2.5, d: 1.5, h: 6.2, cls: 'furn monitor-stand' },        // neck
     {
       x: mid - 15, y: 11, z: 45, w: 30, d: 1.5, h: 18, cls: 'furn monitor-body',                 // screen, facing the chair
       deco: {
-        // every desk's screen is on, assigned or not, facing its own chair; from behind (a desk turned
+        // the screen is on, facing its own chair; from behind (a desk turned
         // away) the monitor shows its back, with the screen's glow spilling round its edge
         '+y': screen,
         '-y': (w, h) => `<rect class="monitor-halo" x="-.5" y="-.5" width="${w + 1}" height="${h + 1}" rx="1.5"/>` +
           `<rect class="monitor-back" x="0" y="0" width="${w}" height="${h}"/>`,                       // frameless back, edge to edge
       },
     },
+    ] : []),
     ...officeChair(mid - 14, top + 3, 28, Math.min(22, D - top - 4), '-y', live),   // wide, as deep as the chair zone allows
   ].map((p) => (flip ? { ...p, x: W - p.x - p.w } : p));
 }
@@ -297,7 +345,8 @@ function drawer(item) {
   return [{ x: 1, y: 1, z: 0, w: 18, d: 18, h: 30, cls: 'drawer furn', deco: { '+y': face, '+x': face, '-y': wood, '-x': wood }, top: (w, d) => grain(w, d, 'u', seed) }];
 }
 
-const stool = () => seat(2, 2, false);
+// a café stool; item.color paints its seat (STOOL_COLORS, CSS .c-<colour>)
+const stool = (item) => seat(2, 2, false).map((p) => (item?.color && /\bseat\b/.test(p.cls) ? { ...p, cls: `${p.cls} c-${item.color}` } : p));
 
 /**
  * Server rack (60 × 120 cm, 42U), front door facing +y: a charcoal cabinet with a stack of server units
@@ -604,7 +653,150 @@ function storeroom(item, W, D) {
   ];
 }
 
-const BUILD = { desk, drawer, stool, massageChair, serverRack, table, roundTable, meetingTable, counter, pillar, wall, glass, partition, door, zone, elevator, restroom, stair, wc, cabinet, storeroom };
+// ---------- living and office extras (TV, plants, storage, printers, wall pieces, glass doors) ----------
+
+/** TV stand (160 × 40 cm): a low two-door cabinet on short legs, a drawer seam and two handles on its front. */
+function tvStand(item, W) {
+  const front = (w, h) => `<line class="drawer-line" x1="${w / 2}" y1="1.5" x2="${w / 2}" y2="${h - 1.5}"/>` +
+    `<line class="drawer-line" x1="1.5" y1="${h * 0.32}" x2="${w - 1.5}" y2="${h * 0.32}"/>` +
+    `<rect class="drawer-line" x="${w / 4 - 3}" y="${h * 0.58}" width="6" height="1.1"/><rect class="drawer-line" x="${(3 * w) / 4 - 3}" y="${h * 0.58}" width="6" height="1.1"/>`;
+  const leg = (x, y) => ({ x, y, z: 0, w: 2, d: 2, h: 3, cls: 'furn' });
+  return [leg(3, 4), leg(W - 5, 4), leg(3, 14), leg(W - 5, 14),
+    { x: 1, y: 2, z: 3, w: W - 2, d: 16, h: 19, cls: 'tvstand furn', deco: { '+y': front } }];
+}
+
+/**
+ * Wall TV (100 cm wide), screen facing +y, its back against the wall or pillar behind its cell (placing
+ * insists on one: grid.validate): a thin black panel hung at eye height, a faint sheen across the glass.
+ */
+// a TV's front: the black glass, a faint sheen across it and a red standby light under it
+const tvScreen = (w, h) => `<rect class="tv-screen" x="1" y="1" width="${w - 2}" height="${h - 2.6}" rx=".4"/>` +
+  `<path class="tv-sheen" d="M${w * 0.55} 1L${w * 0.75} 1L${w * 0.35} ${h - 1.6}L${w * 0.15} ${h - 1.6}Z"/>` +
+  `<circle class="tv-led" cx="${w / 2}" cy="${h - 0.8}" r=".45"/>`;
+
+function wallTv(item, W) {
+  return [{ x: 1, y: 0, z: 9, w: W - 2, d: 2, h: 25, cls: 'tv', deco: { '+y': tvScreen } }];
+}
+
+/**
+ * TV on wheels (120 × 60 cm): a 55-inch screen (facing +y) on a rolling stand — two feet on four castors, a
+ * crossbar, a centre pole with a small shelf on it, the screen held at its top. Shown cut like the pillars.
+ */
+function tvCart(item, W) {
+  const castor = (x, y) => ({ x, y, z: 0, w: 4, d: 4, h: 3, r: 2, cls: 'castor' });
+  const mid = W / 2;
+  return [
+    castor(8, 2), castor(8, 24), castor(W - 12, 2), castor(W - 12, 24),
+    { x: 8, y: 2, z: 3, w: 4, d: 26, h: 2, cls: 'tv-cart' },                  // feet
+    { x: W - 12, y: 2, z: 3, w: 4, d: 26, h: 2, cls: 'tv-cart' },
+    { x: 12, y: 13, z: 3, w: W - 24, d: 4, h: 2, cls: 'tv-cart' },            // crossbar
+    { x: mid - 2, y: 13, z: 5, w: 4, d: 4, h: 15, cls: 'tv-cart' },           // pole, under the shelf
+    { x: mid - 9, y: 9, z: 20, w: 18, d: 8, h: 1.5, cls: 'tv-cart' },         // shelf (in front of the pole)
+    { x: mid - 2, y: 13, z: 21.5, w: 4, d: 4, h: 4.5, cls: 'tv-cart' },       // pole, above it
+    { x: 2, y: 17, z: 22, w: W - 4, d: 2.5, h: 34, cls: 'tv', deco: { '+y': tvScreen } },
+  ];
+}
+
+/** Flower pot (40 × 40 cm): a terracotta pot and a round bush of leaves stacked in three soft tiers. */
+function plant() {
+  return [
+    { x: 4, y: 4, z: 0, w: 12, d: 12, h: 10, r: 4, cls: 'pot' },
+    { x: 2, y: 2, z: 10, w: 16, d: 16, h: 12, r: 8, cls: 'leaf' },
+    { x: 4, y: 4, z: 22, w: 12, d: 12, h: 10, r: 6, cls: 'leaf' },
+    { x: 6.5, y: 6.5, z: 32, w: 7, d: 7, h: 6, r: 3.5, cls: 'leaf' },
+  ];
+}
+
+/** Closet (100 × 60 cm, 1.8 m, shown cut like the walls): two tall doors with bar handles, a plinth seam. */
+function closet(item, W) {
+  const doors = (w, h) => `<line class="drawer-line" x1="${w / 2}" y1="1.2" x2="${w / 2}" y2="${h - 4}"/>` +
+    `<line class="drawer-line" x1="1.2" y1="${h - 4}" x2="${w - 1.2}" y2="${h - 4}"/>` +
+    `<line class="entry-handle" x1="${w / 2 - 2.5}" y1="${h * 0.38}" x2="${w / 2 - 2.5}" y2="${h * 0.56}"/>` +
+    `<line class="entry-handle" x1="${w / 2 + 2.5}" y1="${h * 0.38}" x2="${w / 2 + 2.5}" y2="${h * 0.56}"/>`;
+  return [{ x: 0.5, y: 0.5, z: 0, w: W - 1, d: 29, h: 56, cls: 'closet furn', deco: { '+y': doors } }];
+}
+
+/** Curtain (any length), hung from a rail: soft folds down both faces, the rail along its top. */
+function curtain(item, W) {
+  const folds = (w, h) => slits(2.5, w - 0.5, 4, 0.5, h - 0.5, true, 'curtain-fold');
+  return [
+    { x: 0, y: 4, z: 0, w: W, d: 2, h: WALL_H - 1.5, cls: 'curtain', deco: { '+y': folds, '-y': folds } },
+    { x: 0, y: 3.5, z: WALL_H - 1.5, w: W, d: 3, h: 1.5, cls: 'furn' },
+  ];
+}
+
+/** Floor mat (កម្រាលជើង): a thin red mat with a darker border woven round it. */
+function rug(item, W, D) {
+  return [{ x: 1, y: 1, z: 0, w: W - 2, d: D - 2, h: 0.5, cls: 'rug',
+    top: (w, d) => `<rect class="rug-edge" x="2" y="2" width="${w - 4}" height="${d - 4}" rx="1"/>` }];
+}
+
+/** Wall clock (30 cm), its face toward +y and its back on the wall or pillar behind (grid.validate). */
+function wallClock() {
+  const face = (w, h) => {
+    const cx = w / 2, cy = h / 2, r = Math.min(w, h) / 2 - 0.4;
+    let s = `<circle class="clock-rim" cx="${cx}" cy="${cy}" r="${r}"/><circle class="clock-face" cx="${cx}" cy="${cy}" r="${r - 1.1}"/>`;
+    for (let k = 0; k < 12; k++) {
+      const a = (k * Math.PI) / 6, r0 = r - (k % 3 ? 2.2 : 2.9), r1 = r - 1.6;
+      s += `<line class="clock-tick" x1="${(cx + r0 * Math.sin(a)).toFixed(2)}" y1="${(cy - r0 * Math.cos(a)).toFixed(2)}" x2="${(cx + r1 * Math.sin(a)).toFixed(2)}" y2="${(cy - r1 * Math.cos(a)).toFixed(2)}"/>`;
+    }
+    return s + `<line class="clock-hand" x1="${cx}" y1="${cy}" x2="${cx + r * 0.32}" y2="${cy - r * 0.3}"/>` +
+      `<line class="clock-hand" x1="${cx}" y1="${cy}" x2="${cx - r * 0.12}" y2="${cy - r * 0.62}"/><circle class="clock-pin" cx="${cx}" cy="${cy}" r=".6"/>`;
+  };
+  return [{ x: 2.5, y: 0, z: 20, w: 15, d: 1.2, h: 15, cls: 'bare', deco: { '+y': face } }];
+}
+
+/** Portable printer (60 × 40 cm): a low rounded body, a paper stack standing in its feed at the back. */
+function printer() {
+  const front = (w, h) => `<rect class="printer-slot" x="4" y="${h * 0.42}" width="${w - 8}" height="1.4" rx=".5"/>` +
+    `<circle class="printer-led" cx="${w - 3}" cy="2.2" r=".6"/>`;
+  return [
+    { x: 6, y: 3, z: 9, w: 18, d: 4, h: 3, cls: 'paper' },
+    { x: 2, y: 3, z: 0, w: 26, d: 14, h: 9, r: 1.5, cls: 'printer', deco: { '+y': front } },
+  ];
+}
+
+/**
+ * Large multifunction printer / copier (80 × 80 cm, shown cut at 1.1 m): paper-tray cabinet, the print body,
+ * its output tray out front, the scanner lid with the document feeder on top and a tilted control panel.
+ */
+function copier() {
+  const trays = (w, h) => [0.25, 0.5, 0.75].map((f) => `<line class="drawer-line" x1="1.5" y1="${h * f}" x2="${w - 1.5}" y2="${h * f}"/>` +
+    `<rect class="drawer-line" x="${w / 2 - 4}" y="${h * f - 3.4}" width="8" height="1"/>`).join('');
+  const body = (w, h) => `<rect class="printer-slot" x="4" y="${h * 0.45}" width="${w - 8}" height="1.6" rx=".5"/>`;
+  const panel = (w, d) => `<rect class="printer-screen" x="2" y="1.2" width="${w * 0.45}" height="${d - 2.4}" rx=".5"/>` +
+    `<circle class="printer-led" cx="${w - 3}" cy="${d / 2}" r=".7"/>`;
+  return [
+    { x: 2, y: 4, z: 0, w: 36, d: 32, h: 26, cls: 'printer', deco: { '+y': trays } },
+    { x: 2, y: 4, z: 26, w: 36, d: 32, h: 16, cls: 'printer', deco: { '+y': body } },
+    { x: 8, y: 36, z: 30, w: 22, d: 3, h: 1.5, cls: 'paper' },
+    { x: 3, y: 5, z: 42, w: 34, d: 30, h: 4, cls: 'printer' },
+    { x: 6, y: 7, z: 46, w: 24, d: 16, h: 6, cls: 'printer' },
+    { x: 18, y: 27, z: 46, w: 18, d: 7, h: 2.5, cls: 'printer-panel', top: panel },
+  ];
+}
+
+/**
+ * Glass door in a wall opening (any width), set in a thin metal frame: one leaf, or two meeting in the middle
+ * from 140 cm (the entrance's), each clear glass with a long bar handle (the holder) by its free edge.
+ * `kind: 'cabinet'` frosts the glass (a cabinet room's door).
+ */
+function glassDoor(item, W) {
+  const two = W >= 70, frost = item?.kind === 'cabinet';
+  const face = (w, h) => {
+    const leaf = (x0, x1, hand) => `<rect class="door-frame" x="${x0 + 0.6}" y="0.6" width="${x1 - x0 - 1.2}" height="${h - 1.2}"/>` +
+      `<line class="door-bar" x1="${hand}" y1="${h * 0.3}" x2="${hand}" y2="${h * 0.72}"/>`;
+    return two ? leaf(0, w / 2, w / 2 - 3) + leaf(w / 2, w, w / 2 + 3) : leaf(0, w, w - 4);
+  };
+  return [
+    { x: 0, y: 3, z: 0, w: 1, d: 4, h: WALL_H, cls: 'door-post' },
+    { x: 1, y: 3.5, z: 0, w: W - 2, d: 3, h: WALL_H, cls: frost ? 'pane frosted-door' : 'pane', deco: { '+y': face, '-y': face } },
+    { x: W - 1, y: 3, z: 0, w: 1, d: 4, h: WALL_H, cls: 'door-post' },
+  ];
+}
+
+const BUILD = { desk, drawer, stool, massageChair, serverRack, table, roundTable, meetingTable, counter, pillar, wall, glass, partition, door, zone, elevator, restroom, stair, wc, cabinet, storeroom,
+  tvStand, wallTv, tvCart, plant, closet, curtain, rug, wallClock, printer, copier, glassDoor };
 
 /** Parts for an item in its local frame plus its local footprint size in world units. */
 export function partsFor(item) {

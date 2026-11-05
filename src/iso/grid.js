@@ -5,8 +5,9 @@
 // A plan is { cols, rows, mask } where mask[ty][tx] === '1' marks a tile (TILE × TILE cells)
 // that belongs to the floor plate, so L-shaped units snap only onto real floor.
 
-import { SIZES, LAYER } from '../model/catalog.js';
+import { SIZES, LAYER, MOUNTED } from '../model/catalog.js';
 import { CELL, ROTATIONS, TILE } from './units.js';
+import { rotPoint } from './parts.js';
 
 export const normRot = (r) => ((((Math.round(r / 90) * 90) % 360) + 360) % 360);
 
@@ -43,13 +44,30 @@ export function onPlate(r, plan) {
 }
 
 /**
- * Collision layers: floor items (zones, door swings) never collide; structure (walls, glass,
- * partitions, pillars) may meet each other at joints; furniture collides with furniture and structure.
+ * Collision layers: floor items (zones, door swings, mats) never collide; structure (walls, glass,
+ * partitions, pillars, glass doors) may meet each other at joints; wall-hung pieces (mount) hang over
+ * furniture but not into structure or each other; furniture collides with furniture and structure.
  */
 export function collides(a, b) {
   const la = LAYER[a.type], lb = LAYER[b.type];
   if (la === 'floor' || lb === 'floor' || (la === 'structure' && lb === 'structure')) return false;
+  if ((la === 'mount' && lb === 'furniture') || (la === 'furniture' && lb === 'mount')) return false;
   return overlaps(cellRect(a), cellRect(b));
+}
+
+/**
+ * The cells right behind a wall-hung item (its local -y side, one cell deep, turned with it), and whether a
+ * wall or pillar fills them: its middle one and at least half of them (a TV may be wider than a pillar).
+ */
+export function backed(items, cand) {
+  const { w, d } = baseSize(cand), W0 = w * CELL, D0 = d * CELL;
+  const cells = Array.from({ length: w }, (_, i) => {
+    const [x, y] = rotPoint((i + 0.5) * CELL, -CELL / 2, W0, D0, cand.rot);
+    return { x: cand.gx + Math.floor(x / CELL), y: cand.gy + Math.floor(y / CELL) };
+  });
+  const solid = items.filter((it) => it.id !== cand.id && (it.type === 'wall' || it.type === 'pillar')).map(cellRect);
+  const hit = cells.map((c) => solid.some((r) => c.x >= r.x0 && c.x < r.x1 && c.y >= r.y0 && c.y < r.y1));
+  return hit[Math.floor((w - 1) / 2)] && hit.filter(Boolean).length * 2 >= w;
 }
 
 /** Why `cand` cannot be placed, or null when it fits. `cand.id` is ignored as a collider. */
@@ -61,7 +79,9 @@ export function validate(items, cand, plan) {
   if (!Number.isInteger(w) || !Number.isInteger(d) || w < 1 || d < 1) return 'size must be whole cells';
   if (!onPlate(cellRect(cand), plan)) return 'outside the floor plate';
   const hit = items.find((it) => it.id !== cand.id && collides(cand, it));
-  return hit ? `collides with ${(hit.name || SIZES[hit.type].label).toLowerCase()}` : null;
+  if (hit) return `collides with ${(hit.name || SIZES[hit.type].label).toLowerCase()}`;
+  if (MOUNTED.has(cand.type) && !backed(items, cand)) return 'needs a wall or pillar behind it';
+  return null;
 }
 
 /** World point (on the floor plane) → the cell containing it. */

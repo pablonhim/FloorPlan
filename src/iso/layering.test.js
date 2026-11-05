@@ -72,6 +72,22 @@ describe('layering', () => {
   });
 });
 
+describe('walls and the unit outline', () => {
+  // a wall running into the outline (the unit's own outer wall, or the one it shares with the next unit) shares
+  // its cells: two boxes in one place have no depth order, so the outline would be drawn wholly behind it
+  it('stop at the outline, never run into it', async () => {
+    const { overlaps } = await import('./grid.js');
+    const { cellRect } = await import('./grid.js');
+    const out = [];
+    for (const id of Object.keys(PLANS)) {
+      const edges = edgeItems(PLANS[id]).map(cellRect);
+      for (const w of seedPlan(id).filter((i) => ['wall', 'glass', 'partition'].includes(i.type)))
+        if (edges.some((e) => overlaps(cellRect(w), e))) out.push(`${id} ${w.id}`);
+    }
+    expect(out).toEqual([]);
+  });
+});
+
 describe('plate rulers', () => {
   // every metre tick stands just outside the slab's own edge (within a tile of a slab tile), never out in the
   // air where a stepped outline's bounding box runs past the building

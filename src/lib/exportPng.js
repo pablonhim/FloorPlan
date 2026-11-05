@@ -47,6 +47,38 @@ export function shownBox(svg) {
   return `${a.x.toFixed(2)} ${a.y.toFixed(2)} ${(b.x - a.x).toFixed(2)} ${(b.y - a.y).toFixed(2)}`;
 }
 
+/** A floor or unit screenshot's size: 2800 × 2400 px (tightBox frames to its shape). */
+export const SHOT_W = 2800, SHOT_H = 2400;
+
+/**
+ * A screenshot's frame, tight round its subject: the union of `parts`' drawn boxes (the floor, or the unit with
+ * its names) with a small margin, cut down to what is on screen (`shown`, a viewBox string). So the picture
+ * follows the drawing's own shape — no wide band of empty sky either side — while the context that falls inside
+ * the frame stays. Falls back to `shown` when nothing measurable is there.
+ */
+export function tightBox(parts, shown, pad = 0.035, aspect = SHOT_W / SHOT_H) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const el of parts) {
+    let b;
+    try { b = el.getBBox(); } catch { continue; }
+    if (!b || !(b.width > 0 && b.height > 0)) continue;
+    x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); x1 = Math.max(x1, b.x + b.width); y1 = Math.max(y1, b.y + b.height);
+  }
+  const [sx, sy, sw, sh] = String(shown).trim().split(/[\s,]+/).map(Number);
+  if (!Number.isFinite(x0) || ![sx, sy, sw, sh].every(Number.isFinite)) return shown;
+  const m = pad * Math.max(x1 - x0, y1 - y0);
+  let ax = Math.max(sx, x0 - m), ay = Math.max(sy, y0 - m), bx = Math.min(sx + sw, x1 + m), by = Math.min(sy + sh, y1 + m);
+  // exactly the picture's shape (`aspect`, width / height): the frame grows taller for a wide subject or wider
+  // for a tall one (taking in more of the plan round it — past the screen's edges if need be: the drawing goes
+  // on there), so every screenshot comes out the same size
+  const w = bx - ax, h = by - ay;
+  if (w / h > aspect) { const g = w / aspect - h; ay -= g / 2; by += g / 2; }
+  else { const g = h * aspect - w; ax -= g / 2; bx += g / 2; }
+
+  if (bx - ax < sw * 0.05 || by - ay < sh * 0.05) return shown;   // (the subject is off screen: the view as it is)
+  return `${ax.toFixed(2)} ${ay.toFixed(2)} ${(bx - ax).toFixed(2)} ${(by - ay).toFixed(2)}`;
+}
+
 // what a screenshot leaves out: the pointer's and the editor's marks (hover and selection outlines, the piece
 // being placed, the camera's pointer shield) and the labels of what is only there for context (the units round
 // the one shown, the building core, the ghosted building) — the drawing itself stays as it is on screen

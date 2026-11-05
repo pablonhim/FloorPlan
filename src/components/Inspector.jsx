@@ -75,7 +75,7 @@ function ReplacePicker({ item, custom, showCore, onReplace }) {
       <select value="" className={inputCls} disabled={item.locked} title={tr(item.locked ? 'Unlock it to replace it' : 'Swap it for another object, in place')}
         onChange={(e) => {
           const v = e.target.value;
-          if (v) onReplace(v.startsWith('c:') ? { key: v.slice(2) } : { type: v.slice(2) });
+          if (v) onReplace(v.startsWith('c:') ? { key: v.slice(2) } : v.startsWith('p:') ? { variant: v.slice(2) } : { type: v.slice(2) });
         }}>
         <option value="">{tr(item.locked ? 'Locked' : 'Choose an object')}</option>
         {custom.length > 0 && (
@@ -85,7 +85,9 @@ function ReplacePicker({ item, custom, showCore, onReplace }) {
         )}
         {groups.map((g) => (
           <optgroup key={g.group} label={tr(g.group)}>
-            {g.types.filter((t) => t !== item.type).map((t) => <option key={t} value={`t:${t}`}>{tr(SIZES[t].label)}</option>)}
+            {g.types.filter((t) => t !== item.type).map((t) => (typeof t === 'string'
+              ? <option key={t} value={`t:${t}`}>{tr(SIZES[t].label)}</option>
+              : <option key={t.key} value={`p:${t.key}`}>{tr(t.label)}</option>))}
           </optgroup>
         ))}
       </select>

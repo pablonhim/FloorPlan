@@ -9,7 +9,7 @@ import { flushSync } from 'react-dom';
 const KEY = 'floorplan.view';
 // blocks: the rooms', regions' and units' names; focus: only the active unit's or department's labels;
 // top: the floor and unit views as a flat top-down plan instead of isometric 3D
-const DEFAULTS = { weather: true, grid: true, depts: true, blocks: true, focus: true, top: false };
+const DEFAULTS = { weather: true, grid: false, depts: true, blocks: true, focus: true, top: false };
 /** Material styles: none any more (the architectural model's colours are the one look). */
 const STYLES = [];
 const read = () => {

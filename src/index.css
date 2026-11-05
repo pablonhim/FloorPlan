@@ -258,6 +258,24 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 /* no glow halos inside (a dropdown opened from a frost-thin bar would inherit the bar's) */
 :root .menu-frost, :root .menu-frost * { text-shadow: none; }
 :root .menu-frost svg { filter: none; }
+/* a see-through frost (the desk card): what is behind shows through, blurred; no border */
+.menu-frost.see-through { background: rgb(255 255 255 / .58); border-color: transparent; }
+/* the desk card opens with the hover tips' elastic wobble (tip-pop), out of the desk's side; on the `scale`
+   property, since its `translate` carries the position that follows the desk */
+.desk-pop { animation: desk-pop .42s ease-out both; }
+@keyframes desk-pop {
+  0%   { scale: .6 .6;    opacity: 0; }
+  40%  { scale: 1.04 .97; opacity: 1; }
+  70%  { scale: .99 1.01; }
+  100% { scale: 1 1; }
+}
+/* …and closing, it shrinks back into the desk's side */
+.desk-unpop { animation: desk-unpop .2s ease-in both; }
+@keyframes desk-unpop { to { scale: .6 .6; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .desk-pop, .desk-unpop { animation: none; } }
+/* the grown bubble's tip, under its middle, in the card's own frost (as the name bubbles' notch) */
+.bubble-notch { position: absolute; left: 50%; top: 100%; width: 16px; height: 7px; translate: -50% 0; background: inherit;
+  clip-path: path('M0 0C4.5 0 6 7 8 7C10 7 11.5 0 16 0Z'); }
 .menu-item { transition: background-color .15s, color .15s; }
 /* every list row in a dropdown or panel: the ⋯ menu's rounded grey highlight on hover, keyboard focus or when
    it is the current one (.on) */
@@ -344,8 +362,14 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 /* the dock's More menu opens with a small springy pop (as the edit buttons), staying a column */
 .dock-menu { animation: dock-menu-in .18s cubic-bezier(.34, 1.56, .64, 1); transform-origin: calc(100% - 20px) 100%; }
 @keyframes dock-menu-in { from { opacity: 0; scale: .85; } }
-/* the Objects panel collapsed to its icons: smaller thumbnails, so the column stays slim */
-.pal-min svg.office-lit { width: 2.75rem; height: 2rem; }
+/* the objects menu's thumbnails (Palette): filling their slot, with the objects' lines a little darker than
+   on the floor so the pale pieces read clearly on the menu (the floor and the drag ghost keep their own) */
+.pal-thumb svg.office-lit { width: 100%; height: 100%; }
+/* the larger thumbnail beside the menu eases in as the hovered row changes */
+.peek-in { animation: peek-in .16s ease-out; }
+@keyframes peek-in { from { opacity: 0; scale: .9; } }
+@media (prefers-reduced-motion: reduce) { .peek-in { animation: none; } }
+:root[data-theme="light"] .pal-thumb svg.office-lit { --line: #6c7178; --furn-edge: rgba(0, 0, 0, .34); --struct-line: rgba(25, 25, 25, .58); }
 
 
 /* view settings (lib/prefs, switched in the dock's ⋯ menu) */
@@ -394,7 +418,9 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 
 /* the hamburger menus open the same way, out of their button at the bottom right */
 .menu-pop { animation: dock-menu-in .18s cubic-bezier(.34, 1.56, .64, 1); transform-origin: 20px 100%; }
-@media (prefers-reduced-motion: reduce) { .dock-menu, .menu-pop { animation: none; } }
+/* the dock's dropdowns (floor, team view, quick jumps) pop the same way, up out of their button's middle */
+.menu-pop-up { animation: dock-menu-in .18s cubic-bezier(.34, 1.56, .64, 1); transform-origin: 50% 100%; }
+@media (prefers-reduced-motion: reduce) { .dock-menu, .menu-pop, .menu-pop-up { animation: none; } }
 
 /* the viewer count's eye blinks like a real one: open, a quick close-and-open every few seconds, now and
    then twice in a row (a 7 s loop: a blink at ~3 s, a double blink at the end) */
@@ -441,7 +467,36 @@ html:lang(km) [class*="tracking-"] { letter-spacing: normal; }
 .shot-backdrop { background: color-mix(in srgb, #0b0d10 28%, transparent); backdrop-filter: blur(14px) saturate(1.1); animation: shot-fade .2s ease-out; }
 .shot-photo { box-shadow: 0 24px 60px rgb(0 0 0 / .32), 0 2px 8px rgb(0 0 0 / .18); animation: shot-pop .32s cubic-bezier(.2, .9, .3, 1.2); }
 @keyframes shot-fade { from { opacity: 0; } }
-@keyframes shot-pop { from { opacity: 0; transform: scale(.92) translateY(8px); } }
+@keyframes shot-pop { from { opacity: 0; transform: scale(1.1); } 60% { opacity: 1; transform: scale(.985); } }   /* the snapped screen settling into the paper */
+/* while the picture is taken the whole page shrinks a little into a rounded card, then springs back */
+#root { transition: scale .3s cubic-bezier(.2, .8, .3, 1), border-radius .3s ease; }
+#root.shot-snap { scale: .955; border-radius: 18px; overflow: hidden; }
+/* (no overshoot past full size on the way back, and scrolling locked meanwhile: the page never scrolls) */
+html.shot-lock, html.shot-lock body { overflow: hidden; }
 .shot-btn { transition: transform .12s ease, filter .12s ease; }
 .shot-btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
-@media (prefers-reduced-motion: reduce) { .shot-flash, .shot-backdrop, .shot-photo { animation: none; } .shot-flash { display: none; } }
+@media (prefers-reduced-motion: reduce) { .shot-flash, .shot-backdrop, .shot-photo { animation: none; } .shot-flash { display: none; } #root.shot-snap { scale: 1; } }
+
+
+/* animated icons (AnimatedIcons.jsx): they move while the button round them is hovered or keyboard-focused,
+   with the springs of the original (motion) versions as eased curves; the bin is always red */
+.ai { display: block; overflow: visible; }
+.ai :is(g, path, line) { transform-box: view-box; }
+.ai-delete { color: #e5484d; }
+.ai-delete :is(.ai-lid, .ai-slot) { transition: translate .26s cubic-bezier(.3, 1.45, .5, 1); }
+.ai-delete .ai-bin { transition: d .26s cubic-bezier(.3, 1.45, .5, 1); }
+:is(button, a, [role="button"]):is(:hover, :focus-visible) .ai-delete .ai-lid { translate: 0 -1.1px; }
+:is(button, a, [role="button"]):is(:hover, :focus-visible) .ai-delete .ai-slot { translate: 0 .5px; }
+:is(button, a, [role="button"]):is(:hover, :focus-visible) .ai-delete .ai-bin { d: path("M19 9v12c0 1-1 2-2 2H7c-1 0-2-1-2-2V9"); }
+.ai-download .ai-arrow { transition: translate .5s cubic-bezier(.34, 1.9, .5, 1); }
+:is(button, a, [role="button"]):is(:hover, :focus-visible) .ai-download .ai-arrow { translate: 0 2px; }
+.ai-frame line { transition: translate .5s cubic-bezier(.34, 1.55, .5, 1); }
+:is(button, a, [role="button"]):is(:hover, :focus-visible) .ai-frame .ai-top { translate: 0 -4px; }
+:is(button, a, [role="button"]):is(:hover, :focus-visible) .ai-frame .ai-bottom { translate: 0 4px; }
+:is(button, a, [role="button"]):is(:hover, :focus-visible) .ai-frame .ai-left { translate: -4px 0; }
+:is(button, a, [role="button"]):is(:hover, :focus-visible) .ai-frame .ai-right { translate: 4px 0; }
+@media (prefers-reduced-motion: reduce) { .ai :is(g, path, line) { transition: none !important; } }
+/* the grip: on hover its dots dim to 30% and back one after another (a wave, once per hover) */
+:is(button, a, [role="button"]):is(:hover, :focus-visible) .ai-grip circle { animation: ai-grip 1.1s calc(var(--i) * .07s) both; }
+@keyframes ai-grip { 0%, 100% { opacity: 1; } 20%, 80% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .ai-grip circle { animation: none !important; } }

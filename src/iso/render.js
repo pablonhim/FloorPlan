@@ -3,7 +3,7 @@ import { CELL, TILE, PILLAR_H, SLAB } from './units.js';
 import { esc, frame } from './kernel.js';
 import { footprint } from './grid.js';
 import { renderParts, placeRect } from './parts.js';
-import { partsFor, SIZES, zoneTag, LAYER, isLive, leadCls, tipFor, TIP_LANGS, NEUTRAL_TYPES } from '../model/catalog.js';
+import { partsFor, SIZES, zoneTag, LAYER, isLive, leadCls, isLead, tipFor, TIP_LANGS, NEUTRAL_TYPES } from '../model/catalog.js';
 import { sortFor } from './depth.js';
 import { shadowLayer, rectsPath, hull } from './shadow.js';
 import { roomDoorIds, entryDoors, leafNode, leafSlot } from './doorSwing.js';
@@ -101,9 +101,14 @@ export function glassBackdrops(K, nodes, html, cut = Infinity) {
   return out;
 }
 
+// the office chairs' parts (desk and meeting-table chairs: their foot, column, seat and backrest)
+const CHAIR = /\bchair\b|\bchair-base\b/;
 export function renderItem(K, item, cut = Infinity) {
   const { W0, D0, parts } = partsFor(item);
-  return renderParts(K, parts, { W0, D0, rot: item.rot, ox: item.gx * CELL, oy: item.gy * CELL, z0: 0, cut });
+  // top-down, no chairs: the plan reads by its desks and tables (the people's name badges float where the chairs
+  // stood); the café stools stay
+  const shown = K.top ? parts.filter((q) => !CHAIR.test(q.cls || '')) : parts;
+  return renderParts(K, shown, { W0, D0, rot: item.rot, ox: item.gx * CELL, oy: item.gy * CELL, z0: 0, cut });
 }
 
 /**
@@ -162,6 +167,7 @@ function chairTop(it) {
 }
 /** The screen rect ({ x0, y0, x1, y1 }) of every desk's name card (as renderDeskCallouts places them). */
 export function calloutRects(K, items) {
+  if (K.top) return topNames(K, items).map((n) => n.rect);   // top-down: the names written on the worktops
   const { rise, pad, pic, gap, nameH, notch } = CALLOUT;
   const W = pic + 2 * pad, H = pad + pic + gap + nameH + pad * 0.6;
   return items.filter((it) => it.type === 'desk' && (it.name || '').trim()).map((it) => {
@@ -170,7 +176,69 @@ export function calloutRects(K, items) {
   });
 }
 
+/**
+ * Top-down, a desk's person is their name on a frosted badge floating over their chair, covering most of it,
+ * with a small notch pointing to their desk (the name cards' frosted card, no animal; what lies under it shows
+ * through blurred). Every badge is the same height; its width follows the name, at least most of the chair's.
+ */
+const TOP_NAME = 15;     // the badges' text size (world units)
+const TOP_NOTCH = 6;     // how far the notch reaches out toward the desk
+function topNames(K, items) {
+  return items.filter((it) => it.type === 'desk' && (it.name || '').trim()).map((it) => {
+    const { W0, D0, parts } = partsFor(it);
+    const at = (q) => { const w = placeRect(q, W0, D0, it.rot, it.gx * CELL, it.gy * CELL); return { ...w, cx: w.x + w.w / 2, cy: w.y + w.d / 2 }; };
+    const top = at(parts.find((q) => /\bdeskTop\b/.test(q.cls || '')) || parts[0]);
+    const seatPart = parts.find((q) => /\bseat\b/.test(q.cls || '') && /\bchair\b/.test(q.cls || '') && !/\bbackrest\b/.test(q.cls || ''));
+    const seat = seatPart ? at(seatPart) : top;
+    let [x, y] = K.P(seat.cx, seat.cy, 0);
+    const [tx, ty] = K.P(top.cx, top.cy, 0), name = it.name.trim();
+    // the notch's side: toward the worktop, along the axis it mostly lies on
+    const dx = tx - x, dy = ty - y, side = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'r' : 'l') : (dy > 0 ? 'b' : 't');
+    const size = TOP_NAME, h = size * 2.1;
+    const chairW = Math.max(seat.w, seat.d);
+    const w = Math.max(chairW * 0.95, textW(name, size) + size * 1.2);
+    // kept clear of the desk: the badge stops at the worktop's edge, only its notch's tip touching it (the chair it stands
+    // over tucks under the desk, which would put the badge on the table)
+    const c = [K.P(top.x, top.y, 0), K.P(top.x + top.w, top.y + top.d, 0)];
+    const T = { x0: Math.min(c[0][0], c[1][0]), x1: Math.max(c[0][0], c[1][0]), y0: Math.min(c[0][1], c[1][1]), y1: Math.max(c[0][1], c[1][1]) };
+    const g = -2.5, n = TOP_NOTCH;   // (g < 0: the notch's tip just reaches onto the edge)
+    if (side === 'b') y = Math.min(y, T.y0 - g - n - h / 2);
+    else if (side === 't') y = Math.max(y, T.y1 + g + n + h / 2);
+    else if (side === 'r') x = Math.min(x, T.x0 - g - n - w / 2);
+    else x = Math.max(x, T.x1 + g + n + w / 2);
+    return { it, name, x, y, w, h, side, size, rect: { x0: x - w / 2, x1: x + w / 2, y0: y - h / 2, y1: y + h / 2 } };
+  });
+}
+
+/**
+ * A top-down name badge's outline: its rounded rectangle (x, y, w, h, corner r) with the notch (reaching n out,
+ * 2.2·n wide at its base) on side t / b / l / r, as one closed path.
+ */
+function badgeOutline(x, y, w, h, r, side, n) {
+  r = Math.min(r, h / 2, w / 2);
+  const q = (v) => v.toFixed(2), hw = n * 1.1, cx = x + w / 2, cy = y + h / 2;
+  const top = side === 't' ? `L${q(cx - hw)} ${q(y)}L${q(cx)} ${q(y - n)}L${q(cx + hw)} ${q(y)}` : '';
+  const right = side === 'r' ? `L${q(x + w)} ${q(cy - hw)}L${q(x + w + n)} ${q(cy)}L${q(x + w)} ${q(cy + hw)}` : '';
+  const bottom = side === 'b' ? `L${q(cx + hw)} ${q(y + h)}L${q(cx)} ${q(y + h + n)}L${q(cx - hw)} ${q(y + h)}` : '';
+  const left = side === 'l' ? `L${q(x)} ${q(cy + hw)}L${q(x - n)} ${q(cy)}L${q(x)} ${q(cy - hw)}` : '';
+  return `M${q(x + r)} ${q(y)}${top}L${q(x + w - r)} ${q(y)}A${r} ${r} 0 0 1 ${q(x + w)} ${q(y + r)}${right}L${q(x + w)} ${q(y + h - r)}` +
+    `A${r} ${r} 0 0 1 ${q(x + w - r)} ${q(y + h)}${bottom}L${q(x + r)} ${q(y + h)}A${r} ${r} 0 0 1 ${q(x)} ${q(y + h - r)}${left}` +
+    `L${q(x)} ${q(y + r)}A${r} ${r} 0 0 1 ${q(x + r)} ${q(y)}Z`;
+}
+
 export function renderDeskCallouts(K, items) {
+  if (K.top) {
+    const n = TOP_NOTCH;
+    // a foreignObject (as the 3D cards) so the badge can blur what is behind it; room round it for the notch
+    return topNames(K, items).map(({ it, name, x, y, w, h, side, size }) =>
+      `<foreignObject class="desk-callout top-name${it.unit ? ` u-${it.unit}` : ''}" data-for="${esc(it.id)}" data-id="${esc(it.id)}" ` +
+      `x="${(x - w / 2 - n).toFixed(1)}" y="${(y - h / 2 - n).toFixed(1)}" width="${(w + 2 * n).toFixed(1)}" height="${(h + 2 * n).toFixed(1)}">` +
+      `<div xmlns="http://www.w3.org/1999/xhtml" class="top-badge n-${side}" style="left:${n}px;top:${n}px;width:${w.toFixed(1)}px;height:${h.toFixed(1)}px;font-size:${size}px;--n:${n}px">` +
+      `<span>${esc(name)}</span></div>` +
+      // its outline: one thin translucent line round the card and along its notch, as a single shape
+      `<svg xmlns="http://www.w3.org/2000/svg" class="top-badge-edge" width="${(w + 2 * n).toFixed(1)}" height="${(h + 2 * n).toFixed(1)}">` +
+      `<path d="${badgeOutline(n, n, w, h, size * 0.55, side, n)}"/></svg></foreignObject>`).join('');
+  }
   const { rise, pad, pic, gap, fs, nameH, notch, notchW } = CALLOUT;
   const W = pic + 2 * pad, H = pad + pic + gap + nameH + pad * 0.6;
   // the notch: a soft, slightly curved drip under the card's middle, its tip just above the monitor

@@ -43,8 +43,10 @@ export function teamScope(items, t) {
   const mine = new Set(t.desks.map((d) => d.id));
   for (const it of items) {
     if (ids.has(it.id) || it.type === 'zone') continue;
-    // another team's desk standing in one of this team's areas stays back
-    if (it.type === 'desk' && !mine.has(it.id) && it.team && it.team !== t.label) continue;
+    // anyone else's desk standing in one of this team's areas stays back (another team's, or a person with no
+    // team set): as their name card does (markTeamLabels), so no desk is left blue without its name; an empty
+    // desk in the team's area stays with it (its spare seat)
+    if (it.type === 'desk' && !mine.has(it.id) && ((it.team && it.team !== t.label) || (it.name || '').trim())) continue;
     if (t.zones.some((z) => inZone(z, it))) ids.add(it.id);
   }
   return { ids, zones: zoneIds };

@@ -10,7 +10,7 @@ import { elevatorParts, LAYER } from '../model/catalog.js';
 import { renderParts } from '../iso/parts.js';
 import { footprint } from '../iso/grid.js';
 import { person } from '../iso/scenes.js';
-import { exportPng, shownBox } from '../lib/exportPng.js';
+import { exportPng, shownBox, tightBox, SHOT_W } from '../lib/exportPng.js';
 import { useShot } from '../lib/shotStore.js';
 import { teamList, teamScope, teamBounds, markTeamItems, markTeamLabels } from '../lib/teamView.js';
 import IsoDefs from './IsoDefs.jsx';
@@ -20,8 +20,8 @@ import { useRaiseOnHover } from '../lib/raiseOnHover.js';
 import { ghostBuilding, frameOf } from '../iso/ghost.js';
 import { reportDepth, usePlanZoom } from '../lib/planZoom.js';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
-import SceneButton, { icon } from './SceneButton.jsx';
-import { ViewTools, Divider, FloorUnitButtons, StatusLine, TeamPicker, ViewModeButton, sentence } from './ViewTools.jsx';
+import { icon } from './SceneButton.jsx';
+import { ViewTools, Divider, NavMenu, ViewModeMenu, FacilityMenu, StatusLine, sentence } from './ViewTools.jsx';
 import { CornerMenu, DockMenuContext } from './DockMenu.jsx';
 import MenuPanel from './MenuPanel.jsx';
 import { useT } from '../lib/i18n.js';
@@ -267,7 +267,8 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
   const areas = useMemo(() => Object.fromEntries(plan.units.map((u) => [u.unit, unitAreaD(K, u)])), [K, plan]);
   // feature overlays: the meeting-room highlight (and, arriving from "Go to KOSIGN", the route to KOSIGN)
   const [showMeet, setShowMeet] = useState(false);
-  const [dockUnit, setDockUnit] = useState(null);   // the unit whose dock button is hovered: the others turn to lines
+  const [navUnit, setNavUnit] = useState(null);   // the unit hovered in the dock's menu: only its floor lights up
+  const [navTeam, setNavTeam] = useState(null);   // the team hovered there: only its areas' floors light up
   // the dock's place buttons — meeting rooms, stairs, elevators, the women's and men's WCs: the one hovered
   // lights up its places' floors (spotHover); a click shows (spotOn) its places' glowing highlight
   const [spotHover, setSpotHover] = useState(null);
@@ -308,13 +309,21 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     const slot = svgRef.current?.querySelector('.floor-hi');
     if (!slot) return;
     // …and a place button's places' floors, the same way, while that button is hovered
-    const roomsD = spotHover ? spots[spotHover].map((r) => {
+    // (and a team's areas while it is hovered in the dock's menu): only floors light up, nothing else changes
+    const rectD = (r) => {
       const x0 = r.gx * CELL, y0 = r.gy * CELL, x1 = (r.gx + r.w) * CELL, y1 = (r.gy + r.d) * CELL;
       return K.path([[x0, y0, 0], [x1, y0, 0], [x1, y1, 0], [x0, y1, 0]]) + 'Z';
-    }).join('') : '';
-    slot.innerHTML = (hoverUnit && areas[hoverUnit] ? `<path class="unit-floor-hi" d="${areas[hoverUnit]}"/>` : '') +
+    };
+    // a facility hovered in the dock's menu lights up as it does under the pointer (.tip-hot), not its floor
+    const FAC = { stair: '.it.t-stair', lift: '.it.t-elevator', wcW: '.it.t-wc:not(.g-m)', wcM: '.it.t-wc.g-m' };
+    svgRef.current.querySelectorAll('.it.menu-hot').forEach((g) => g.classList.remove('menu-hot', 'tip-hot'));
+    if (FAC[spotHover]) svgRef.current.querySelectorAll(FAC[spotHover]).forEach((g) => g.classList.add('menu-hot', 'tip-hot'));
+    const roomsD = [...(spotHover && !FAC[spotHover] ? spots[spotHover] : []),
+      ...(teams.find((x) => x.label === navTeam)?.zones || []).map((z) => { const f = footprint(z); return { gx: z.gx, gy: z.gy, w: f.w, d: f.d }; })].map(rectD).join('');
+    const lit = hoverUnit || navUnit;
+    slot.innerHTML = (lit && areas[lit] ? `<path class="unit-floor-hi" d="${areas[lit]}"/>` : '') +
       (roomsD ? `<path class="unit-floor-hi" d="${roomsD}"/>` : '');
-  }, [hoverUnit, areas, scene, spotHover, spots, K]);
+  }, [hoverUnit, navUnit, navTeam, teams, areas, scene, spotHover, spots, K]);
   // arriving from "Go to KOSIGN": the route from the east lifts to KOSIGN's entrance, walked by a guide
   const kosign = useMemo(() => (guide ? routeToKosign(plan, floorItems, edgeItems(plan)) : null), [guide, plan, floorItems]);
   // welcome: the entrance doors swing as upright leaves when the floor opens
@@ -401,7 +410,9 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
   const shoot = async () => {
     const svg = svgRef.current;
     const name = `wefloor-floor-${floor}${team ? `-${team.replace(/[\\/:*?"<>|\s·]+/g, '-')}` : ''}${top ? '-2d' : ''}.png`;
-    try { return await exportPng(svg, { filename: name, viewBox: shownBox(svg), width: Math.min(4800, Math.max(2400, Math.round(svg.parentElement.clientWidth * 2))), shot: true, save: false }); }
+    // framed tight round the floor's drawing (its slab and units), not the whole screen
+    const floorParts = svg.querySelectorAll(':scope > g');
+    try { return await exportPng(svg, { filename: name, viewBox: tightBox(floorParts, shownBox(svg)), width: SHOT_W, shot: true, save: false }); }
     catch (err) { setMsg(['screenshot failed: {e}', { e: err.message }]); return null; }
   };
   useShot(active, shoot);   // the zoom dock's screenshot button takes this view while it is on screen
@@ -442,29 +453,16 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
 
   const tools = (
     <ViewTools menu={unitsList}>
-      <SceneButton place="above-start" compact docked label={t('Building')} tip={t('Back to the whole building')} onClick={onBack}>{TOOL.back}</SceneButton>
+      {/* where you are: the building, a floor, a unit, a team, the meeting rooms (one dropdown with submenus) */}
+      <NavMenu floor={floor} onBack={onBack} onFloor={onFloor} onUnit={onUnit} onHoverUnit={setNavUnit}
+        teams={teams} team={team} onTeam={showTeam} onHoverTeam={setNavTeam}
+        rooms={{ on: showMeet, count: rooms.length, onToggle: () => setShowMeet((v) => !v), onHover: (k) => setSpotHover(k) }} />
       <Divider />
-      <FloorUnitButtons floor={floor} onFloor={onFloor} onUnit={onUnit} onHoverUnit={(u) => { setHoverUnit(u); setDockUnit(u); }} />
+      <ViewModeMenu top={top} onChange={(v) => shared?.setPref('top', v)} />
       <Divider />
-      <ViewModeButton top={top} onChange={(v) => shared?.setPref('top', v)} />
-      {teams.length > 0 && <>
-        <Divider />
-        <TeamPicker teams={teams} team={team} onTeam={showTeam} />
-      </>}
-      <Divider />
-      <SceneButton place="above" compact docked label={t(showMeet ? 'Hide rooms' : 'Meeting rooms')} active={showMeet} onClick={() => setShowMeet((v) => !v)}
-        onPointerEnter={() => setSpotHover('meet')} onPointerLeave={() => setSpotHover(null)}
-        tip={rooms.length ? t('Light up the {n} meeting rooms on this floor', { n: rooms.length }) : t('No meeting rooms on this floor')}>{TOOL.meet}</SceneButton>
-      {/* stairs, elevators and the restrooms, the same way: hover lights their floors, a click their glow */}
-      {SPOTS.map(({ key, label, hide, one, many, none }) => {
-        const n = spots[key].length;
-        return (
-          <SceneButton key={key} place="above" compact docked label={t(spotOn === key ? hide : label)} active={spotOn === key}
-            onClick={() => setSpotOn((v) => (v === key ? null : key))}
-            onPointerEnter={() => setSpotHover(key)} onPointerLeave={() => setSpotHover(null)}
-            tip={t(n ? (n === 1 ? one : many) : none, { n })}>{TOOL[key]}</SceneButton>
-        );
-      })}
+      {/* stairs, elevators and the restrooms: hovering a row lights their floors, a click their glow */}
+      <FacilityMenu icon={TOOL.lift} on={spotOn} onToggle={(k) => setSpotOn((v) => (v === k ? null : k))} onHover={setSpotHover}
+        items={SPOTS.map(({ key, label }) => ({ key, label: t(label), icon: TOOL[key], n: spots[key].length }))} />
     </ViewTools>
   );
 
@@ -474,8 +472,8 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
         <div ref={stageRef} className="relative flex-1 min-h-0 overflow-hidden stage-glow">
           <svg
             ref={svgRef}
-            className="floor-ov office-lit cam-over select-none touch-none" data-dock-unit={dockUnit || undefined} data-spot={spotHover || undefined}
-            data-fu={(focusLabels && !team && (hoverUnit || dockUnit)) || undefined}
+            className="floor-ov office-lit cam-over select-none touch-none"
+            data-fu={(focusLabels && !team && hoverUnit) || undefined}
             data-team={team ? 'on' : undefined}
             viewBox={cam.box}
             role="img"

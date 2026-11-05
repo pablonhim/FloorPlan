@@ -32,7 +32,11 @@ export function entryDoors(items) {
   const meet = roomDoors(items), ids = new Set(meet.map((m) => m.id));
   const lines = items.filter((w) => w.type === 'glass' || w.type === 'wall').map((w) => cellRect(w));
   const toward = (d) => ents.reduce((a, z) => (!a || dist(d, z) < dist(d, a) ? z : a), null);
-  return meetInMiddle([...[...best.values()].filter((d) => !ids.has(d.id)).map((d) => lineLeaf(d, lines, toward(d)) || d), ...meet]);
+  // (an office entrance's and a meeting room's leaves are drawn as the glass door object: framed, with a bar
+  // handle — see leaf; the server room's stays a plain pane)
+  const entrance = (d) => ents.some((z) => near(d, z));
+  return meetInMiddle([...[...best.values()].filter((d) => !ids.has(d.id)).map((d) => ({ ...(lineLeaf(d, lines, toward(d)) || d), entrance: entrance(d) })),
+    ...meet.map((d) => ({ ...d, entrance: true }))]);
 }
 
 /**
@@ -200,7 +204,14 @@ export function leaf(K, d, phi) {
   const dir = [shut[0] * Math.cos(t) + open[0] * Math.sin(t), shut[1] * Math.cos(t) + open[1] * Math.sin(t)];
   const T = [H[0] + dir[0] * len, H[1] + dir[1] * len];
   // one pane, outlined in the glass's own line (no dark edge stroke down its free side)
-  return `<path class="door-panel" d="${K.path([[H[0], H[1], 0], [T[0], T[1], 0], [T[0], T[1], LEAF_H], [H[0], H[1], LEAF_H]])}Z"/>`;
+  const pane = `<path class="door-panel" d="${K.path([[H[0], H[1], 0], [T[0], T[1], 0], [T[0], T[1], LEAF_H], [H[0], H[1], LEAF_H]])}Z"/>`;
+  if (!d.entrance) return pane;
+  // an office entrance or a meeting room: the glass door's look (catalog glassDoor) — an aluminium frame round the
+  // glass and a long bar handle a little in from the free edge
+  const at = (k, z) => [H[0] + dir[0] * k, H[1] + dir[1] * k, z], e = 0.9;
+  const frame = `<path class="door-frame" d="${K.path([at(e, e), at(len - e, e), at(len - e, LEAF_H - e), at(e, LEAF_H - e)])}Z"/>`;
+  const bar = `<path class="door-bar" d="${K.path([at(len - 3.2, LEAF_H * 0.3), at(len - 3.2, LEAF_H * 0.72)])}"/>`;
+  return pane + frame + bar;
 }
 
 /**
