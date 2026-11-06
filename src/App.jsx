@@ -120,7 +120,7 @@ export default function App() {
                   onOpen={(f) => openFloor(f, true)} onGuide={(f) => setView({ kind: 'floor', floor: f, guide: true })}
                   info={(
                     // the floor list: the info button just right of the dock, its frosted panel popping up above it
-                    <MenuPanel open={floorsOpen} onOpen={setFloorsOpen} label={t('Floors')} width="w-56" id="floor-panel">
+                    <MenuPanel open={floorsOpen} onOpen={setFloorsOpen} label={t('Floors')} width="w-60" id="floor-panel">
                       <div className="no-scrollbar flex min-h-0 flex-col gap-0.5 overflow-auto p-1">
                         <h3 className="px-2 pt-1 text-[10px] uppercase tracking-[.18em] text-ink">{t('Floors')}</h3>
                         <ul className="flex flex-col gap-px">
@@ -133,16 +133,15 @@ export default function App() {
                                   className={`menu-item w-full flex items-center gap-2 rounded-md px-2 py-1 text-left text-[12px] leading-4 outline-none ${rented ? 'text-ink-hi' : 'text-ink cursor-default'}`}>
                                   <span className={`size-1.5 rounded-full ${rented ? 'bg-accent' : 'bg-detail'}`} />
                                   <span className="tabular-nums w-8">{f === 0 ? 'G' : `F${String(f).padStart(2, '0')}`}</span>
-                                  <span className="flex-1">{rented ? t('Units {u}', { u: UNITS[f].join(' · ') }) : t(f === 0 ? 'Lobby' : 'Vacant')}</span>
-                                  {rented && <span className="text-[11px] text-accent-hi tabular-nums">{o.assigned}/{o.desks}</span>}
+                                  <span className="flex-1 whitespace-nowrap">{rented ? t('Units {u}', { u: UNITS[f].join(' · ') }) : t(f === 0 ? 'Lobby' : 'Vacant')}</span>
+                                  {rented && <span className="whitespace-nowrap text-[11px] text-accent-hi tabular-nums">{o.assigned}/{o.desks}</span>}
                                 </button>
                               </li>
                             );
                           })}
                         </ul>
                         <p className="px-2 pb-1 pt-0.5 text-[11px] leading-snug text-ink">
-                          {t('Floors 2 and 4 are rented (Units C and D each), laid out from the official layout PDF of 2026-09-29.')}{' '}
-                          {t('Lit windows show how many desks have someone assigned.')}
+                          {t('Floors 2 and 4 are rented. Lit windows show seats taken.')}
                         </p>
                       </div>
                     </MenuPanel>

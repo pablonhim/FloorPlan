@@ -89,6 +89,8 @@
 /* ---- floor editor ---- */
 /* the object under the pointer (with its hover card, HoverTip) lights up; more so at night */
 .tip-hot { filter:brightness(1.12) saturate(1.15); }
+/* a row hovered in the floor's unit card (UnitCard): its things glow in the accent */
+.it.card-hot { filter:brightness(1.1) drop-shadow(0 0 3px var(--accent)) drop-shadow(0 0 8px color-mix(in srgb, var(--accent) 55%, transparent)); }
 :root:not([data-theme="light"]) .tip-hot { filter:brightness(1.2) saturate(1.1); }   /* at night: a subtle lift, not a flash */
 /* …everything but furniture (walls, the core's lifts, WCs and storerooms, the site's features …) only a touch */
 .tip-hot:not(:has(.face.furn)) { filter:brightness(1.04) saturate(1.05); }
@@ -112,7 +114,7 @@
 .nb { cursor:pointer; }
 /* (raised over every material's own colours — the leaders' birch desks and wooden chairs, the office chairs,
    the screens — which are set with high-priority rules of their own) */
-:root:root:root:root:root:root:root:root :is(.nb:not(.core), .it.nbc, .it.team-off, .it.faded, .shell-units, svg[data-team] .glass-behind,
+:root:root:root:root:root:root:root:root :is(.nb:not(.core), .it.nbc, .it.team-off, .it.pick-off, .it.faded, .shell-units, svg[data-team] .glass-behind,
     .it.nbi) {
   --clay-top:color-mix(in srgb, var(--clay) 86%, var(--nb-top));
   --clay-side:color-mix(in srgb, color-mix(in srgb, var(--clay) 86%, var(--nb-side)) 93%, #000);
@@ -140,17 +142,24 @@
    the same way.
    (Ranked over the clay rule above, which lines its pieces.)
    Hovered (to glide over), a neighbour stays as it is: only its floor lights up (.nb.hot, below). */
-:root:root:root:root:root:root:root:root:root:root:root:root :is(.nb:not(.core), .it.nbc, .glass-behind :is(.nbi, .nbc), .it.faded, .shell-units, .it.team-off, svg[data-team] .glass-behind,
+:root:root:root:root:root:root:root:root:root:root:root:root :is(.nb:not(.core), .it.nbc, .glass-behind :is(.nbi, .nbc), .it.faded, .shell-units, .it.team-off, .it.pick-off, svg[data-team] .glass-behind,
     .it.nbi)
   :is(path, rect, circle, ellipse, polygon, line):not(.face.pane, .door-panel) { stroke:none !important; }
 /* …except glass: a pane in the plain clay is near-white on a near-white floor, so it keeps a soft clay edge or
    it vanishes (the glass beside an entrance's doors, the meeting rooms' glass walls) */
-:root:root:root:root:root:root:root:root:root:root:root:root :is(.nb:not(.core), .it.nbc, .glass-behind :is(.nbi, .nbc), .it.faded, .shell-units, .it.team-off, svg[data-team] .glass-behind,
+:root:root:root:root:root:root:root:root:root:root:root:root :is(.nb:not(.core), .it.nbc, .glass-behind :is(.nbi, .nbc), .it.faded, .shell-units, .it.team-off, .it.pick-off, svg[data-team] .glass-behind,
     .it.nbi) :is(.face.pane, .door-panel) { stroke:var(--clay-line) !important; stroke-opacity:.55 !important; stroke-width:.6; }
 /* …and their room floors keep no colour either (a meeting room in use, the WeCafe): plain floor, like the rest */
-:root:root:root:root:root:root:root:root:root:root:root:root :is(.nb:not(.core), .it.nbc, .glass-behind :is(.nbi, .nbc), .it.faded, .shell-units, .it.team-off, svg[data-team] .glass-behind,
+:root:root:root:root:root:root:root:root:root:root:root:root :is(.nb:not(.core), .it.nbc, .glass-behind :is(.nbi, .nbc), .it.faded, .shell-units, .it.team-off, .it.pick-off, svg[data-team] .glass-behind,
     .it.nbi)
   .face.zone { fill:transparent !important; }
+/* …but top-down (svg[data-top]) only the tops show, all one clay white, so without lines the plan would vanish:
+   there the clay keeps a soft line round every piece, and the walls, pillars and partitions a darker clay */
+:root:root:root:root:root:root:root:root:root:root:root:root:root svg[data-top] :is(.nb:not(.core), .it.nbc, .glass-behind :is(.nbi, .nbc), .it.faded, .shell-units, .it.team-off, .it.pick-off, svg[data-team] .glass-behind, .it.nbi)
+  :is(path, rect, circle, ellipse, polygon, line):not(.slab, .slab-grid, .zone-hatch, .tile-line, .floor-grid, .zone, .zone-edge, .zone-badge, .door-arc) {
+  stroke:var(--clay-line) !important; stroke-opacity:.5 !important; stroke-width:.5; }
+:root:root:root:root:root:root:root:root:root:root:root:root:root svg[data-top] :is(.nb:not(.core), .it.nbc, .glass-behind :is(.nbi, .nbc), .it.faded, .shell-units, .it.team-off, .it.pick-off, svg[data-team] .glass-behind, .it.nbi) .face:is(.struct, .partition).top { fill:color-mix(in srgb, var(--clay-line) 42%, var(--clay-top)) !important; }
+:root:root:root:root:root:root:root:root:root:root:root:root:root:root svg[data-top] :is(.nb:not(.core), .it.nbc, .glass-behind :is(.nbi, .nbc), .it.faded, .shell-units, .it.team-off, .it.pick-off, svg[data-team] .glass-behind, .it.nbi) :is(.ao, .shadow-slice, .cast-shadow) * { stroke:none !important; }
 .nb .it { cursor:pointer; }
 /* Team / Department view (lib/teamView): the team picked keeps its colour (.team-off: the rest, above); its own
    areas keep their plain floor (no wash or edge on them: the rest stepping back is the highlight). Only the
@@ -990,6 +999,8 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 :root:not([data-theme="light"]) .callout-name { color:#eef1f5; }
 [data-labels="off"] .desk-callouts { display:none; }
 .floor-ov:not(.near) .desk-callouts { display:none; }
+/* …but a unit picked in the top-down floor (its card open, FloorOverview) shows all its labels at any zoom */
+.floor-ov[data-pick]:not(.near) .desk-callouts { display:inline; }
 
 /* the entrance ramps beside the steps: plain surfaces, no outlines */
 .face.plain { stroke:none; }
@@ -1051,16 +1062,18 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 /* top-down, the people's names (render.renderDeskCallouts): a frosted badge floating over each chair, what is
    under it blurred through it, with a small notch pointing to the person's desk (n-t / n-b / n-l / n-r) and a
    thin translucent outline (.top-badge-edge) */
-.top-badge { position:absolute; box-sizing:border-box; display:flex; align-items:center; justify-content:center; padding:0 .45em;
-  border-radius:.55em; background:rgb(255 255 255 / .55); -webkit-backdrop-filter:blur(2.5px) saturate(1.4); backdrop-filter:blur(2.5px) saturate(1.4);
+.top-badge { position:absolute; box-sizing:border-box; display:flex; align-items:center; justify-content:center; padding:0 .6em;
+  border-radius:999px; background:rgb(255 255 255 / .55); -webkit-backdrop-filter:blur(2.5px) saturate(1.4); backdrop-filter:blur(2.5px) saturate(1.4);
   color:#1f2933; font-family:var(--font); font-weight:600; line-height:1; white-space:nowrap; pointer-events:none; }
 .top-badge span { overflow:hidden; text-overflow:clip; }
 .top-badge::after { content:""; position:absolute; width:calc(var(--n) * 2.2); height:var(--n); background:inherit;
   -webkit-backdrop-filter:inherit; backdrop-filter:inherit; clip-path:polygon(0 0, 100% 0, 50% 100%); }
 .top-badge.n-b::after { left:50%; top:100%; translate:-50% 0; }
 .top-badge.n-t::after { left:50%; bottom:100%; translate:-50% 0; rotate:180deg; }
-.top-badge.n-r::after { top:50%; left:100%; translate:calc(var(--n) * -.6) -50%; rotate:-90deg; }
-.top-badge.n-l::after { top:50%; right:100%; translate:calc(var(--n) * .6) -50%; rotate:90deg; }
+.top-badge.n-r::after { top:50%; left:100%; translate:calc(var(--n) * -.6 - var(--ni, 0px) / 2) -50%; rotate:-90deg; }
+.top-badge.n-l::after { top:50%; right:100%; translate:calc(var(--n) * .6 + var(--ni, 0px) / 2) -50%; rotate:90deg; }
+/* (a pill's side notch starts in on its round end, --ni, so it is that much longer to keep its tip in place) */
+.top-badge:is(.n-r, .n-l)::after { height:calc(var(--n) + var(--ni, 0px)); }
 :root:not([data-theme="light"]) .top-badge { background:rgb(28 32 38 / .5); color:#eef1f5; }
 /* …no shadow under it: a thin translucent line round it instead, the notch included (one traced shape) */
 .top-badge-edge { position:absolute; left:0; top:0; overflow:visible; pointer-events:none; }

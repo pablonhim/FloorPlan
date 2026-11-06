@@ -610,13 +610,13 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     (hover && !ghost && !hovered ? renderCell(K, hover.cx, hover.cy) : '');
 
   // the screenshot button: the view exactly as it shows, at twice the screen's size (at least 2400 px wide)
-  const shoot = async () => {
+  const shoot = async ({ hide } = {}) => {
     const svg = svgRef.current;
     const name = `wefloor-floor-${plan.floor}-unit-${plan.unit}${team ? `-${team.replace(/[\\/:*?"<>|\s·]+/g, '-')}` : ''}${top ? '-2d' : ''}.png`;
     // framed tight round the unit itself (its plate and outline, its pieces, names and area labels), not the
     // whole screen; the neighbours inside that frame stay as context
     const own = svg.querySelectorAll(':scope > .own-plate, :scope > .zone-tags, :scope > .desk-callouts, :scope > g.it:not(.nbi, .nbc, .core-faded)');
-    try { return await exportPng(svg, { filename: name, viewBox: tightBox(own, shownBox(svg)), width: SHOT_W, shot: true, save: false }); }
+    try { return await exportPng(svg, { filename: name, viewBox: tightBox(own, shownBox(svg)), width: SHOT_W, shot: true, save: false, hide }); }
     catch (err) { setMsg(['screenshot failed: {e}', { e: err.message }]); return null; }
   };
   useShot(active, shoot);   // the zoom dock's screenshot button takes this view while it is on screen
@@ -716,6 +716,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
             className="office-lit cam-over select-none touch-none"
             data-hot={hoverUnit || undefined}
             data-team={focusTeam ? 'on' : undefined}
+            data-top={top ? 'on' : undefined}
             style={{ cursor: placing ? 'copy' : undefined }}
             viewBox={cam.box}
             role="img"

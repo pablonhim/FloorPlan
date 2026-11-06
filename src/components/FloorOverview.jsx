@@ -24,6 +24,7 @@ import { icon } from './SceneButton.jsx';
 import { ViewTools, Divider, NavMenu, ViewModeMenu, FacilityMenu, StatusLine, sentence } from './ViewTools.jsx';
 import { CornerMenu, DockMenuContext } from './DockMenu.jsx';
 import MenuPanel from './MenuPanel.jsx';
+import UnitCard from './UnitCard.jsx';
 import { useT } from '../lib/i18n.js';
 import { entryDoors, useDoorSwing } from '../iso/doorSwing.js';
 
@@ -229,6 +230,37 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
   const drag = useRef(null);
 
   useEffect(() => { setHoverUnit(null); setMsg(''); }, [VB0]);
+  // top-down (2D): a unit clicked once is picked — the rest of the floor steps back to clay and a card beside it
+  // lists what is inside (UnitCard); double-clicked it opens. One way in and one way back at each step:
+  //   unit picked → a department clicked (on the plan, in its card or in the dock's team menu): that team in the unit, the card
+  //   showing "‹ Unit C" → back (that button, the team's row again, Escape, a click on the unit or the empty
+  //   floor): the whole unit again → Escape, ✕ or the empty floor: the whole floor.
+  const [picked, setPicked] = useState(null);
+  // the unit in focus: the picked one while there is one (it stays lit, its labels on; the pointer passing over
+  // another unit, as the camera glides, changes nothing), else the hovered one
+  const focusU = (top && picked) || hoverUnit;
+  const [cardHint, setCardHint] = useState(null);   // the card's hovered row: { zones, ids } to light on the plan
+  useEffect(() => { setPicked(null); }, [VB0, top]);
+  // …and the rest of the floor (the other units, the shared core) steps back to plain clay, as round a unit
+  // in its own view (iso.css .it.pick-off)
+  useLayoutEffect(() => {
+    const on = top && picked;
+    svgRef.current?.querySelectorAll('.it').forEach((g) => g.classList.toggle('pick-off', Boolean(on) && !g.classList.contains(`u-${picked}`)));
+  }, [top, picked, scene]);
+  const pickedArea = useCallback(() => svgRef.current?.querySelector(`.unit-hit[data-unit="${picked}"] .unit-area`), [picked]);
+  // picking glides the camera onto the unit, centred on screen (as a unit's focus always is), zoomed out enough
+  // to leave room beside it for the card
+  const pickUnit = (u) => { setPicked(u); frameUnit(u); };
+  const frameUnit = (u) => {
+    const el = u && svgRef.current?.querySelector(`.unit-hit[data-unit="${u}"] .unit-area`), st = stageRef.current;
+    if (!el || !st) return;
+    const b = el.getBBox(), ar = st.clientHeight / st.clientWidth;
+    let w = Math.max(b.width * 1.9, (b.height * 1.25) / ar);
+    w = Math.min(w, VB0.w * 1.1);
+    const h = w * ar;
+    cam.glideTo({ x: b.x + b.width / 2 - w / 2, y: b.y + b.height / 2 - h / 2, w, h });
+  };
+  const pickedItems = useMemo(() => (picked ? floorItems.filter((it) => it.unit === picked) : []), [picked, floorItems]);
   // a search result on this floor (a corridor storage room): the camera glides onto it, which then glows
   const floorSeen = useRef(null);
   useEffect(() => {
@@ -245,17 +277,32 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
   const teamOn = teams.find((x) => x.label === team) || null;
   const scope = useMemo(() => (teamOn ? teamScope(floorItems, teamOn) : null), [floorItems, teamOn]);
   useLayoutEffect(() => { markTeamItems(svgRef.current, scope); markTeamLabels(svgRef.current, scope); }, [scope, scene]);
-  useEffect(() => {
-    if (!active || !team) return undefined;
-    const esc = (e) => { if (e.key === 'Escape' && !e.target.closest?.('input, textarea, select, [role="menu"]')) setTeam(null); };
-    window.addEventListener('keydown', esc);
-    return () => window.removeEventListener('keydown', esc);
-  }, [active, team]);
+  // a team shown: the camera onto it — inside the picked unit, onto its part there (the unit's card stays,
+  // its row marked)
   const showTeam = (label) => {
+    const x = label && teams.find((y) => y.label === label);
+    // top-down, a team sitting in one unit only is always shown inside it: that unit picked (its card open, the
+    // way back leading to it), whichever unit was picked before
+    const units = new Set(x ? [...x.zones, ...x.desks].map((i) => i.unit).filter(Boolean) : []);
+    const home = top && x ? (units.has(picked) ? picked : units.size === 1 ? [...units][0] : null) : null;
+    if (top && x && home !== picked) setPicked(home);
     setTeam(label);
-    const x = label && teams.find((y) => y.label === label), b = x && teamBounds(x);
+    // (inside a unit the camera stays on the whole unit, the card beside it: only the rest steps back)
+    if (home) { if (home !== picked) frameUnit(home); return; }
+    const b = x && teamBounds(x);
     if (b) cam.glideTo(focusBox(K, b, VB0, { minW: VB0.w * 0.35 }));
   };
+  // back one step: from a team to its whole unit, else from the unit to the floor
+  const back = () => {
+    if (team) { setTeam(null); return; }   // (the camera is already on the unit)
+    if (picked) setPicked(null);
+  };
+  useEffect(() => {
+    if (!active || (!team && !picked)) return undefined;
+    const esc = (e) => { if (e.key === 'Escape' && !e.target.closest?.('input, textarea, select, [role="menu"], [role="dialog"][aria-modal]')) back(); };
+    window.addEventListener('keydown', esc);
+    return () => window.removeEventListener('keydown', esc);
+  }); // (re-bound each render: back() reads the current team and unit)
   const unitStats = useMemo(() => Object.fromEntries(plan.units.map((u) => [u.unit, stats(plans[u.id])])), [plan, plans]);
   const overlay = useMemo(() => {
     const taken = [];   // each title kept clear of the ones placed before it
@@ -318,12 +365,16 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     const FAC = { stair: '.it.t-stair', lift: '.it.t-elevator', wcW: '.it.t-wc:not(.g-m)', wcM: '.it.t-wc.g-m' };
     svgRef.current.querySelectorAll('.it.menu-hot').forEach((g) => g.classList.remove('menu-hot', 'tip-hot'));
     if (FAC[spotHover]) svgRef.current.querySelectorAll(FAC[spotHover]).forEach((g) => g.classList.add('menu-hot', 'tip-hot'));
+    // the unit card's hovered row: its things glow, its areas' floors light up
+    svgRef.current.querySelectorAll('.it.card-hot').forEach((g) => g.classList.remove('card-hot'));
+    for (const id of cardHint?.ids || []) svgRef.current.querySelector(`.it[data-iid="${CSS.escape(id)}"]`)?.classList.add('card-hot');
     const roomsD = [...(spotHover && !FAC[spotHover] ? spots[spotHover] : []),
-      ...(teams.find((x) => x.label === navTeam)?.zones || []).map((z) => { const f = footprint(z); return { gx: z.gx, gy: z.gy, w: f.w, d: f.d }; })].map(rectD).join('');
-    const lit = hoverUnit || navUnit;
+      ...[...(teams.find((x) => x.label === navTeam)?.zones || []), ...(cardHint?.zones || [])].map((z) => { const f = footprint(z); return { gx: z.gx, gy: z.gy, w: f.w, d: f.d }; })].map(rectD).join('');
+    // (hovering a unit tints its floor as always, except the picked one: the clay round it is its focus)
+    const lit = (top && hoverUnit === picked ? null : hoverUnit) || navUnit;
     slot.innerHTML = (lit && areas[lit] ? `<path class="unit-floor-hi" d="${areas[lit]}"/>` : '') +
       (roomsD ? `<path class="unit-floor-hi" d="${roomsD}"/>` : '');
-  }, [hoverUnit, navUnit, navTeam, teams, areas, scene, spotHover, spots, K]);
+  }, [hoverUnit, picked, top, navUnit, cardHint, navTeam, teams, areas, scene, spotHover, spots, K]);
   // arriving from "Go to KOSIGN": the route from the east lifts to KOSIGN's entrance, walked by a guide
   const kosign = useMemo(() => (guide ? routeToKosign(plan, floorItems, edgeItems(plan)) : null), [guide, plan, floorItems]);
   // welcome: the entrance doors swing as upright leaves when the floor opens
@@ -387,7 +438,8 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     if (e.button !== 0) return;
     cam.cancel();
     svgRef.current.setPointerCapture(e.pointerId);
-    drag.current = { unit: e.target.closest('[data-unit]')?.dataset.unit || null, vb0: cam.live.current, scale: cam.scale(), sx: e.clientX, sy: e.clientY, moved: false };
+    lastUnit.current = e.target.closest('[data-unit]')?.dataset.unit || null;
+    drag.current = { unit: lastUnit.current, vb0: cam.live.current, scale: cam.scale(), sx: e.clientX, sy: e.clientY, moved: false };
   };
   const onPointerMove = (e) => {
     tipMove(e, Boolean(drag.current?.moved));
@@ -397,22 +449,46 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     d.moved = true;
     cam.move({ ...d.vb0, x: d.vb0.x - (e.clientX - d.sx) / d.scale, y: d.vb0.y - (e.clientY - d.sy) / d.scale }, null);
   };
-  const onPointerUp = () => {
+  // the department area of the picked unit under a point on screen (its own team, teamView), if any
+  const deptAt = (x, y) => {
+    const known = new Set(teams.map((t0) => t0.label));
+    for (const z of pickedItems) {
+      if (z.type !== 'zone' || !['dept', 'ceo'].includes(z.kind || 'dept') || !known.has(z.label)) continue;
+      const r = svgRef.current?.querySelector(`.it[data-iid="${CSS.escape(z.id)}"]`)?.getBoundingClientRect();
+      if (r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return z.label;
+    }
+    return null;
+  };
+  const onPointerUp = (e) => {
     const d = drag.current;
     drag.current = null;
     if (d?.moved) cam.commit();   // the pan settles: write the viewBox once
-    if (d && !d.moved && d.unit) onUnit(floor, d.unit);
+    if (!d || d.moved) return;
+    if (!top) { if (d.unit) onUnit(floor, d.unit); return; }
+    // top-down: a unit is picked with one click (its card opens) and opened with a double-click (onDoubleClick).
+    // Inside the picked unit, a click on a department shows it (on it again, or anywhere else in the unit: back
+    // to the whole unit); another unit: that one, picked afresh; the empty floor: one step back.
+    if (!d.unit) { back(); return; }
+    if (d.unit !== picked) { setTeam(null); pickUnit(d.unit); return; }
+    const dept = deptAt(e.clientX, e.clientY);
+    if (dept && dept !== team) showTeam(dept);
+    else if (team) back();
+  };
+  // (the unit pressed last: the svg holds the pointer while pressed, so the double-click lands on the svg itself)
+  const lastUnit = useRef(null);
+  const onDoubleClick = () => {
+    if (top && lastUnit.current && lastUnit.current === picked) onUnit(floor, picked);
   };
 
   const total = Object.values(unitStats).reduce((a, b) => ({ desks: a.desks + b.desks, assigned: a.assigned + b.assigned }), { desks: 0, assigned: 0 });
 
   // the screenshot button: the view exactly as it shows, at twice the screen's size (at least 2400 px wide)
-  const shoot = async () => {
+  const shoot = async ({ hide } = {}) => {
     const svg = svgRef.current;
     const name = `wefloor-floor-${floor}${team ? `-${team.replace(/[\\/:*?"<>|\s·]+/g, '-')}` : ''}${top ? '-2d' : ''}.png`;
     // framed tight round the floor's drawing (its slab and units), not the whole screen
     const floorParts = svg.querySelectorAll(':scope > g');
-    try { return await exportPng(svg, { filename: name, viewBox: tightBox(floorParts, shownBox(svg)), width: SHOT_W, shot: true, save: false }); }
+    try { return await exportPng(svg, { filename: name, viewBox: tightBox(floorParts, shownBox(svg)), width: SHOT_W, shot: true, save: false, hide }); }
     catch (err) { setMsg(['screenshot failed: {e}', { e: err.message }]); return null; }
   };
   useShot(active, shoot);   // the zoom dock's screenshot button takes this view while it is on screen
@@ -473,14 +549,17 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
           <svg
             ref={svgRef}
             className="floor-ov office-lit cam-over select-none touch-none"
-            data-fu={(focusLabels && !team && hoverUnit) || undefined}
+            data-fu={(focusLabels && (top && picked ? picked : !team && hoverUnit)) || undefined}
             data-team={team ? 'on' : undefined}
+            data-top={top ? 'on' : undefined}
+            data-pick={(top && picked) || undefined}
             viewBox={cam.box}
             role="img"
             aria-label={t('Isometric plan of floor {n} with units {u}. Click a unit to open it.', { n: floor, u: plan.units.map((u) => u.unit).join(' · ') })}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
+            onDoubleClick={onDoubleClick}
             onPointerCancel={() => { if (drag.current?.moved) cam.commit(); drag.current = null; }}
             onPointerLeave={() => { setHoverUnit(null); tipHide(); }}
           >
@@ -492,16 +571,23 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
             <g className="arrival-lift" ref={liftRef} pointerEvents="none" />
             <g className="features" pointerEvents="none" dangerouslySetInnerHTML={{ __html: features }} />
             <g className="arrival-visitor" ref={visitorRef} pointerEvents="none" />
-            <g className={hoverUnit ? `units hover-${hoverUnit}` : 'units'} dangerouslySetInnerHTML={{ __html: overlay }} />
+            <g className={focusU ? `units hover-${focusU}` : 'units'} dangerouslySetInnerHTML={{ __html: overlay }} />
           </svg>
           <HoverTip tip={tip} />
+          {top && picked && active && (
+            <UnitCard key={picked} unit={picked} items={pickedItems} stageRef={stageRef} areaOf={pickedArea}
+              onClose={() => { setTeam(null); setPicked(null); }} onHint={setCardHint}
+              teams={teams} team={team} onTeam={(label) => (label ? showTeam(label) : back())} />
+          )}
           {tools}
           {/* the status line (and any message or route note above it), top centre */}
           <StatusLine>
             {msg ? <div className="text-accent-hi">{sentence(t(msg))}</div> : null}
             {kosign && <div className="text-accent-hi">{kosign.path ? t('Follow the line to {r}', { r: kosign.room.label }) : t('No route to KOSIGN on this floor')}</div>}
             <div className="text-ink-hi">
-              {hoverUnit ? t('Unit {u} · Click to open', { u: hoverUnit }) : teamOn ? [t('Team view'), teamOn.label, t('{n} people', { n: teamOn.people })].join(' · ') : t('Floor {n} · {a} of {d} seats taken', { n: floor, a: total.assigned, d: total.desks })}
+              {top && picked && (!hoverUnit || hoverUnit === picked)
+                ? (teamOn ? [t('Unit {u}', { u: picked }), teamOn.label, t('Esc: back to the whole unit')].join(' · ') : t('Unit {u} · Click a department to show it · Double-click to open', { u: picked }))
+                : hoverUnit ? t(top && picked !== hoverUnit ? 'Unit {u} · Click to see what is inside' : 'Unit {u} · Click to open', { u: hoverUnit }) : teamOn ? [t('Team view'), teamOn.label, t('{n} people', { n: teamOn.people }), t('Esc: back to the whole floor')].join(' · ') : t('Floor {n} · {a} of {d} seats taken', { n: floor, a: total.assigned, d: total.desks })}
             </div>
           </StatusLine>
           {/* Export sits in the app header beside the Labels / Dark mode switches, as tall as they are */}

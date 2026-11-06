@@ -153,8 +153,12 @@ export default function Inspector({ plan, item, items, patch, resize, select, cu
             </div>
           )}
 
-          <Switch checked={!!item.locked} onChange={(locked) => patch({ locked })} label={tr('Locked')} icon={ICONS.lock}
-            title={tr(item.locked ? 'Locked: can be selected but not dragged, nudged, rotated or deleted' : 'Unlocked')} />
+          {/* off by default: a piece is only locked once someone turns this on; its state is spelled out beside it */}
+          <div className="flex items-center justify-between gap-2">
+            <span className={`text-[12px] ${item.locked ? 'text-ink-hi' : 'text-ink'}`}>{tr(item.locked ? 'Locked' : 'Unlocked')}</span>
+            <Switch checked={!!item.locked} onChange={(locked) => patch({ locked })} label={tr('Locked')} icon={ICONS.lock}
+              title={tr(item.locked ? 'Locked: can be selected but not dragged, nudged, rotated or deleted' : 'Unlocked')} />
+          </div>
 
           {onReplace && <ReplacePicker item={item} custom={custom} showCore={showCore} onReplace={onReplace} />}
           {onSave && <Btn onClick={onSave} title={tr('Keep this object, exactly as it is, in My objects at the top of the Objects panel')}>{tr('Save to Object Panel')}</Btn>}

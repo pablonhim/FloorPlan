@@ -83,7 +83,21 @@ export function tightBox(parts, shown, pad = 0.035, aspect = SHOT_W / SHOT_H) {
 // being placed, the camera's pointer shield) and the labels of what is only there for context (the units round
 // the one shown, the building core, the ghosted building) — the drawing itself stays as it is on screen
 const UI_ONLY = '[data-ui], .cam-shield, .it.ghost, .foot, .cellhint';
-const CONTEXT_LABELS = ':is(.nb, .nbi, .nbc, .core-faded, .faded) :is(text, .tag, foreignObject)';
+const CONTEXT = ':is(.nb, .nbi, .nbc, .core-faded, .faded)';   // the neighbours and faded pieces round a view
+const CONTEXT_LABELS = `${CONTEXT} :is(text, .tag, foreignObject)`;
+
+/**
+ * What a screenshot can leave out (the preview's Show switches, ShotPreview): each a label and the pieces it
+ * covers. A shot reports which of them its view has (`parts`), so the preview offers only those.
+ */
+export const SHOT_PARTS = [
+  { key: 'people', label: 'People', sel: '.desk-callout' },
+  { key: 'depts', label: 'Departments', sel: '.tag.team' },
+  { key: 'rooms', label: 'Rooms', sel: '.tag:is(.k-meeting, .k-cafe, .k-barista, .k-massage)' },
+  { key: 'storage', label: 'Storage', sel: '.tag:is(.k-cabinet, .k-server)' },
+  { key: 'notes', label: 'Notes', sel: '.tag:is(.k-note, .k-entrance)' },
+  { key: 'units', label: 'Unit titles', sel: '.unit-name, .unit-sub' },
+];
 
 /**
  * Rasterises `svg` to a PNG download. `viewBox`: the part to draw (default: the camera's view, data-view).
@@ -91,7 +105,7 @@ const CONTEXT_LABELS = ':is(.nb, .nbi, .nbc, .core-faded, .faded) :is(text, .tag
  * the view (see UI_ONLY, CONTEXT_LABELS); otherwise everything marked data-noexport goes too (a clean plan).
  * `save`: download it (default), or return { blob, url, filename, width, height } for the caller to show.
  */
-export async function exportPng(svg, { filename, viewBox, width = 2400, shot = false, save = true }) {
+export async function exportPng(svg, { filename, viewBox, width = 2400, shot = false, save = true, hide = [] }) {
   const root = document.documentElement;
   const cs = getComputedStyle(root);
   const clone = svg.cloneNode(true);
@@ -101,6 +115,8 @@ export async function exportPng(svg, { filename, viewBox, width = 2400, shot = f
   if (shot) {
     clone.querySelectorAll(UI_ONLY).forEach((n) => n.remove());
     clone.querySelectorAll(CONTEXT_LABELS).forEach((n) => n.remove());
+    // the parts the person switched off in the preview
+    for (const p of SHOT_PARTS) if (hide.includes(p.key)) clone.querySelectorAll(p.sel).forEach((n) => n.remove());
     clone.querySelectorAll('.hot, .dock-hot, .tip-hot, .lifted').forEach((n) => n.classList.remove('hot', 'dock-hot', 'tip-hot', 'lifted'));
     clone.classList.remove('cam-moving');
     clone.removeAttribute('data-hot');
@@ -139,7 +155,8 @@ export async function exportPng(svg, { filename, viewBox, width = 2400, shot = f
   const url = URL.createObjectURL(blob);
   // save: false — handed back instead of downloaded (the screenshot preview offers the download itself; it
   // revokes the url when it closes)
-  if (!save) return { blob, url, filename, width, height };
+  // (parts: the switchable parts this view shows at all, labels hidden by a setting or context excluded)
+  if (!save) return { blob, url, filename, width, height, parts: SHOT_PARTS.filter((p) => [...svg.querySelectorAll(p.sel)].some((n) => !n.closest(CONTEXT) && getComputedStyle(n).display !== 'none' && getComputedStyle(n).visibility !== 'hidden')).map((p) => p.key) };
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;

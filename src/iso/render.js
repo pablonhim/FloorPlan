@@ -145,7 +145,20 @@ export function tipData(item) {
 // card in a foreignObject, with backdrop-filter), no border; a rounded-square profile picture with the name
 // under it. Every card is the same width, wrapped tight round the picture; a long name shrinks to fit.
 const CALLOUT = { rise: 2, pad: 3.6, pic: 32, gap: 2.4, fs: 9.5, nameH: 11, notch: 5, notchW: 12 };
-export const textW = (s, fs) => [...s].reduce((w, c) => w + (/[\u1100-\uffff]/.test(c) ? 1.02 : 0.6) * fs, 0);
+/**
+ * A label's width at text size fs (semibold, the app's font): measured on a canvas in the browser, so capitals
+ * and wide letters (an "HRD") get their real width and never come out clipped; a per-letter guess elsewhere (the
+ * tests), on the wide side. A small margin covers the font still loading or rendering a hair wider.
+ */
+const FONT = '"Host Grotesk","Google Sans","Pretendard Variable",Pretendard,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif';
+let measureCtx;
+const guessW = (s) => [...s].reduce((w, c) => w + (/[ᄀ-￿]/.test(c) ? 1.02 : /[A-Z0-9@#%&mw]/.test(c) ? 0.74 : c === ' ' ? 0.3 : 0.6), 0);
+export const textW = (s, fs) => {
+  if (measureCtx === undefined) measureCtx = typeof document !== 'undefined' ? document.createElement('canvas').getContext('2d') : null;
+  if (!measureCtx) return guessW(s) * fs;
+  measureCtx.font = `600 100px ${FONT}`;
+  return Math.max(measureCtx.measureText(s).width / 100, guessW(s) * 0.85) * 1.04 * fs;
+};
 /** Until real photos come, each person's profile picture is an animal — their own, picked by their name (a
  *  stable hash, so it never changes between visits) — shown on its own, no tile behind it. */
 /** Real profile photos, by the name on the desk (public/photos): shown instead of the animal. */
@@ -194,9 +207,10 @@ function topNames(K, items) {
     const [tx, ty] = K.P(top.cx, top.cy, 0), name = it.name.trim();
     // the notch's side: toward the worktop, along the axis it mostly lies on
     const dx = tx - x, dy = ty - y, side = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'r' : 'l') : (dy > 0 ? 'b' : 't');
-    const size = TOP_NAME, h = size * 2.1;
+    const size = TOP_NAME, h = size * 1.8;
     const chairW = Math.max(seat.w, seat.d);
-    const w = Math.max(chairW * 0.95, textW(name, size) + size * 1.2);
+    // (a pill: at least long enough that a top / bottom notch sits on its straight edge, clear of the round ends)
+    const w = Math.max(chairW * 0.95, textW(name, size) + size * 1.3, h + TOP_NOTCH * 2.2 + 2);
     // kept clear of the desk: the badge stops at the worktop's edge, only its notch's tip touching it (the chair it stands
     // over tucks under the desk, which would put the badge on the table)
     const c = [K.P(top.x, top.y, 0), K.P(top.x + top.w, top.y + top.d, 0)];
@@ -211,20 +225,35 @@ function topNames(K, items) {
 }
 
 /**
- * A top-down name badge's outline: its rounded rectangle (x, y, w, h, corner r) with the notch (reaching n out,
+ * A top-down name badge's outline: its rounded rectangle or pill (x, y, w, h, corner r; r = h / 2 a pill) with the notch (reaching n out,
  * 2.2·n wide at its base) on side t / b / l / r, as one closed path.
  */
 function badgeOutline(x, y, w, h, r, side, n) {
   r = Math.min(r, h / 2, w / 2);
   const q = (v) => v.toFixed(2), hw = n * 1.1, cx = x + w / 2, cy = y + h / 2;
+  // a side notch on a pill's round end: its base where the end's curve is hw above and below the middle
+  const ins = pillInset(h, n), bx = x + w - ins, ax = x + ins;
   const top = side === 't' ? `L${q(cx - hw)} ${q(y)}L${q(cx)} ${q(y - n)}L${q(cx + hw)} ${q(y)}` : '';
-  const right = side === 'r' ? `L${q(x + w)} ${q(cy - hw)}L${q(x + w + n)} ${q(cy)}L${q(x + w)} ${q(cy + hw)}` : '';
   const bottom = side === 'b' ? `L${q(cx + hw)} ${q(y + h)}L${q(cx)} ${q(y + h + n)}L${q(cx - hw)} ${q(y + h)}` : '';
+  const pill = r >= h / 2 - 0.01;
+  if (pill) {
+    const R = h / 2;
+    const rightEnd = side === 'r'
+      ? `A${R} ${R} 0 0 1 ${q(bx)} ${q(cy - hw)}L${q(x + w + n)} ${q(cy)}L${q(bx)} ${q(cy + hw)}A${R} ${R} 0 0 1 ${q(x + w - R)} ${q(y + h)}`
+      : `A${R} ${R} 0 0 1 ${q(x + w - R)} ${q(y + h)}`;
+    const leftEnd = side === 'l'
+      ? `A${R} ${R} 0 0 1 ${q(ax)} ${q(cy + hw)}L${q(x - n)} ${q(cy)}L${q(ax)} ${q(cy - hw)}A${R} ${R} 0 0 1 ${q(x + R)} ${q(y)}`
+      : `A${R} ${R} 0 0 1 ${q(x + R)} ${q(y)}`;
+    return `M${q(x + R)} ${q(y)}${top}L${q(x + w - R)} ${q(y)}${rightEnd}${bottom}L${q(x + R)} ${q(y + h)}${leftEnd}Z`;
+  }
+  const right = side === 'r' ? `L${q(x + w)} ${q(cy - hw)}L${q(x + w + n)} ${q(cy)}L${q(x + w)} ${q(cy + hw)}` : '';
   const left = side === 'l' ? `L${q(x)} ${q(cy + hw)}L${q(x - n)} ${q(cy)}L${q(x)} ${q(cy - hw)}` : '';
   return `M${q(x + r)} ${q(y)}${top}L${q(x + w - r)} ${q(y)}A${r} ${r} 0 0 1 ${q(x + w)} ${q(y + r)}${right}L${q(x + w)} ${q(y + h - r)}` +
     `A${r} ${r} 0 0 1 ${q(x + w - r)} ${q(y + h)}${bottom}L${q(x + r)} ${q(y + h)}A${r} ${r} 0 0 1 ${q(x)} ${q(y + h - r)}${left}` +
     `L${q(x)} ${q(y + r)}A${r} ${r} 0 0 1 ${q(x + r)} ${q(y)}Z`;
 }
+/** How far in from a pill's end (height h) a side notch's base sits: where the round end is ±1.1·n off its middle. */
+const pillInset = (h, n) => { const R = h / 2, hw = Math.min(n * 1.1, R); return R - Math.sqrt(R * R - hw * hw); };
 
 export function renderDeskCallouts(K, items) {
   if (K.top) {
@@ -233,11 +262,11 @@ export function renderDeskCallouts(K, items) {
     return topNames(K, items).map(({ it, name, x, y, w, h, side, size }) =>
       `<foreignObject class="desk-callout top-name${it.unit ? ` u-${it.unit}` : ''}" data-for="${esc(it.id)}" data-id="${esc(it.id)}" ` +
       `x="${(x - w / 2 - n).toFixed(1)}" y="${(y - h / 2 - n).toFixed(1)}" width="${(w + 2 * n).toFixed(1)}" height="${(h + 2 * n).toFixed(1)}">` +
-      `<div xmlns="http://www.w3.org/1999/xhtml" class="top-badge n-${side}" style="left:${n}px;top:${n}px;width:${w.toFixed(1)}px;height:${h.toFixed(1)}px;font-size:${size}px;--n:${n}px">` +
+      `<div xmlns="http://www.w3.org/1999/xhtml" class="top-badge n-${side}" style="left:${n}px;top:${n}px;width:${w.toFixed(1)}px;height:${h.toFixed(1)}px;border-radius:${(h / 2).toFixed(2)}px;font-size:${size}px;--n:${n}px;--ni:${pillInset(h, n).toFixed(2)}px">` +
       `<span>${esc(name)}</span></div>` +
       // its outline: one thin translucent line round the card and along its notch, as a single shape
       `<svg xmlns="http://www.w3.org/2000/svg" class="top-badge-edge" width="${(w + 2 * n).toFixed(1)}" height="${(h + 2 * n).toFixed(1)}">` +
-      `<path d="${badgeOutline(n, n, w, h, size * 0.55, side, n)}"/></svg></foreignObject>`).join('');
+      `<path d="${badgeOutline(n, n, w, h, h / 2, side, n)}"/></svg></foreignObject>`).join('');
   }
   const { rise, pad, pic, gap, fs, nameH, notch, notchW } = CALLOUT;
   const W = pic + 2 * pad, H = pad + pic + gap + nameH + pad * 0.6;
@@ -256,6 +285,7 @@ export function renderDeskCallouts(K, items) {
     .sort((a, b) => a.at[0] + a.at[1] - (b.at[0] + b.at[1]))
     .map(({ it, at }) => {
       const name = it.name.trim(), photo = it.photo || PHOTOS[name], [ax, ay] = K.P(...at), x = ax - W / 2, y = ay - rise - notch - H;
+      // (the name may run into half the card's padding each side: its box is that wide, centred over the picture)
       const size = Math.min(fs, (pic + pad) / Math.max(textW(name, 1), 1e-6));
       return `<foreignObject class="desk-callout${it.unit ? ` u-${it.unit}` : ''}" data-for="${esc(it.id)}" data-id="${esc(it.id)}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${W}" height="${(H + notch).toFixed(1)}">` +
         `<div xmlns="http://www.w3.org/1999/xhtml" class="callout-wrap">` +
@@ -263,14 +293,14 @@ export function renderDeskCallouts(K, items) {
         (photo
           ? `<div class="callout-pic photo" style="width:${pic}px;height:${pic}px"><img src="${esc(photo)}" alt="${esc(name)}"/></div>`
           : `<div class="callout-pic" style="width:${pic}px;height:${pic}px;font-size:${(pic * 0.78).toFixed(1)}px">${animalOf(name).a}</div>`) +
-        `<div class="callout-name" style="margin-top:${gap}px;height:${nameH}px;line-height:${nameH}px;font-size:${size.toFixed(2)}px">${esc(name)}</div>` +
+        `<div class="callout-name" style="margin-top:${gap}px;width:${pic + pad}px;max-width:none;height:${nameH}px;line-height:${nameH}px;font-size:${size.toFixed(2)}px">${esc(name)}</div>` +
         `</div><div class="callout-notch" style="width:${notchW}px;height:${notch}px;clip-path:${tail}"></div>${edge}</div></foreignObject>`;
     }).join('');
 }
 
 /** A zone tag's classes after `tag`: lit, and `team` for a department's or an executive office's name (the
  *  dock menu's Departments switch hides those: data-depts). */
-export const tagCls = (it) => `${isLive(it) ? ' live' : ''}${['dept', 'ceo'].includes(it.kind || 'dept') ? ' team' : ''}`;
+export const tagCls = (it) => `${isLive(it) ? ' live' : ''}${['dept', 'ceo'].includes(it.kind || 'dept') ? ' team' : ''} k-${it.kind || 'dept'}`;
 
 export function renderZoneTag(K, item) {
   const n = itemNode(item);

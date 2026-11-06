@@ -17,6 +17,8 @@ const SHOT_ICON = icon(<><path d="M2.5 5.5a1 1 0 0 1 1-1h2l1-1.5h3l1 1.5h2a1 1 0
 const NAME = { building: 'Building', floor: 'Floor', unit: 'Unit' };
 const TRACK = 88;             // px
 
+const HIDE_KEY = 'wefloor.shot.hide';
+
 export default function ZoomRail({ stage, right = '3.75rem' }) {
   const t = useT();
   const { frac } = useZoom();
@@ -27,6 +29,21 @@ export default function ZoomRail({ stage, right = '3.75rem' }) {
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState(0);        // each shot flashes the screen
   const [taken, setTaken] = useState(null);     // the picture, shown in the preview until kept or discarded
+  // the parts left out of the picture (the preview's Show switches), remembered for the next one
+  const [hide, setHide] = useState(() => { try { return JSON.parse(localStorage.getItem(HIDE_KEY)) || []; } catch { return []; } });
+  // the pictures kept with "Take another" (ShotPreview), to save together as one PDF or deck; while there are
+  // some, a pill above the dock shows them, to save from there or keep going
+  const [pages, setPages] = useState([]);
+  const dropPages = (list) => list.forEach((p) => URL.revokeObjectURL(p.url));
+  const unlock = () => document.documentElement.classList.remove('shot-lock');
+  const [packing, setPacking] = useState(false);
+  const pack = async (kind) => {
+    if (packing || !pages.length) return;
+    setPacking(true);
+    try { const m = await import('../lib/shotPack.js'); await (kind === 'pdf' ? m.savePdf(pages) : m.savePptx(pages)); dropPages(pages); setPages([]); }
+    finally { setPacking(false); }
+  };
+  const keepHide = (h) => { setHide(h); try { localStorage.setItem(HIDE_KEY, JSON.stringify(h)); } catch { /* storage blocked */ } };
   const shoot = async () => {
     if (busy || !shot) return;
     setBusy(true);
@@ -41,7 +58,7 @@ export default function ZoomRail({ stage, right = '3.75rem' }) {
     root?.classList.add('shot-snap');
     if (!calm) await new Promise((res) => setTimeout(res, 300));
     let kept = false;
-    try { const r = await shot(); if (r?.url) { setTaken(r); kept = true; } } finally {
+    try { const r = await shot({ hide }); if (r?.url) { setTaken(r); kept = true; } } finally {
       root?.classList.remove('shot-snap');
       // (still locked while the preview is open — its photo pops in a touch larger than the window — and
       // unlocked when it closes; without a picture, once the page is back)
@@ -92,7 +109,34 @@ export default function ZoomRail({ stage, right = '3.75rem' }) {
       )}
       <span className="grid size-8 place-items-center"><Compass size={28} /></span>
       <ShotFlash n={flash} />
-      {taken && <ShotPreview shot={taken} onClose={() => { setTaken(null); document.documentElement.classList.remove('shot-lock'); }} />}
+      {taken && (
+        <ShotPreview shot={taken} hide={hide} retake={(h) => { keepHide(h); return shot?.({ hide: h }); }}
+          pages={pages}
+          onAnother={(p) => { setPages((list) => [...list, p]); setTaken(null); unlock(); }}
+          onRemovePage={(i) => setPages((list) => { URL.revokeObjectURL(list[i].url); return list.filter((_, k) => k !== i); })}
+          onSaved={() => { dropPages(pages); setPages([]); }}
+          onClose={() => { setTaken(null); unlock(); }} />
+      )}
+      {/* the kept pictures, above the dock: how many, the newest on top of the pile; save them, or drop them */}
+      {pages.length > 0 && !taken && (
+        <div className="frost-panel frost-edge absolute bottom-full right-0 mb-2 flex items-center gap-1.5 rounded-full py-1 pl-1.5 pr-1" role="group" aria-label={t('Kept pictures')}>
+          <span className="relative block h-7 w-9 shrink-0">
+            {pages.slice(-3).map((p, i, a) => (
+              <img key={p.url} src={p.url} alt="" className="absolute inset-0 m-auto h-6 w-8 rounded-[3px] border border-white bg-white object-cover shadow"
+                style={{ transform: `rotate(${(i - (a.length - 1)) * 7}deg) translateX(${(i - (a.length - 1)) * 2}px)` }} />
+            ))}
+          </span>
+          <span className="whitespace-nowrap text-[12px] text-ink-hi tabular-nums">{t('{n} kept', { n: pages.length })}</span>
+          {[['pdf', 'PDF'], ['pptx', 'PPT']].map(([k, label]) => (
+            <button key={k} type="button" onClick={() => pack(k)} disabled={packing} title={t(k === 'pdf' ? 'Save them as one PDF' : 'Save them as one PowerPoint')}
+              className="h-7 rounded-full bg-accent px-2.5 text-[11.5px] font-medium text-white hover:brightness-110 disabled:opacity-60">{label}</button>
+          ))}
+          <button type="button" onClick={() => { dropPages(pages); setPages([]); }} aria-label={t('Drop the kept pictures')} title={t('Drop the kept pictures')}
+            className="grid size-7 place-items-center rounded-full text-ink hover:text-[#d9534f]">
+            <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

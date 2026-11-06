@@ -6,13 +6,13 @@ let current = null;
 const subs = new Set();
 const set = (fn) => { current = fn; subs.forEach((s) => s()); };
 
-/** Registers `shoot` (returning a promise) as the screenshot while `active`; the newest closure is always used. */
+/** Registers `shoot(o)` (returning a promise; o.hide: the parts to leave out) as the screenshot while `active`; the newest closure is always used. */
 export function useShot(active, shoot) {
   const ref = useRef(shoot);
   ref.current = shoot;
   useEffect(() => {
     if (!active) return undefined;
-    const fn = () => ref.current();
+    const fn = (o) => ref.current(o);   // o: { hide } (the parts left out, exportPng)
     set(fn);
     return () => { if (current === fn) set(null); };
   }, [active]);

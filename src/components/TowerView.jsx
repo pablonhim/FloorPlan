@@ -1337,9 +1337,9 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
   // follow camera: while something moves, the view eases in on the newest actor and tracks it; when the
   // last one is done it eases back out to the whole site (exponential smoothing on the viewBox)
   // the zoom dock's screenshot button: the building as it shows, at twice the screen's size
-  useShot(active, () => {
+  useShot(active, ({ hide } = {}) => {
     const el = svgRef.current;
-    return exportPng(el, { filename: 'wefloor-building.png', viewBox: shownBox(el), width: Math.min(4800, Math.max(2400, Math.round(el.parentElement.clientWidth * 2))), shot: true, save: false })
+    return exportPng(el, { filename: 'wefloor-building.png', viewBox: shownBox(el), width: Math.min(4800, Math.max(2400, Math.round(el.parentElement.clientWidth * 2))), shot: true, save: false, hide })
       .catch(() => { setMsg('screenshot failed'); return null; });
   });
   const cam = useRef(null);
