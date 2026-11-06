@@ -1,4 +1,5 @@
-// The "More" button in a view's bottom-right corner (CornerMenu): one round frosted button of its own whose
+// The profile button in a view's bottom-right corner (CornerMenu): the signed-in person's picture (or their
+// animal, see Avatar) on one round frosted button of its own whose
 // frosted menu opens upward, right-aligned to it, with the app's shared switches — Labels, Block Names (rooms, regions, units), Departments (the teams' names on the floor),
 // Focus Labels (only the hovered unit's or the selected department's), Dynamic Background and Floor Grid (the
 // architectural model's colours are the one look now: no material-style switches) — then the view's own
@@ -10,12 +11,29 @@ import { createPortal } from 'react-dom';
 import { icon } from './SceneButton.jsx';
 import { useOneOpen } from '../lib/oneOpen.js';
 import { LANGS, useLang, useT } from '../lib/i18n.js';
+import { animalOf } from '../iso/render.js';
+
+/**
+ * The signed-in person as a round picture: their account photo when they have one (and it loads), else their
+ * own animal — the same kind of animal the desks' name cards use, picked from their email so it never changes.
+ */
+export function Avatar({ me, size = 40 }) {
+  const [broken, setBroken] = useState(false);
+  if (me?.picture && !broken) {
+    return <img src={me.picture} alt="" referrerPolicy="no-referrer" onError={() => setBroken(true)}
+      className="block shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />;
+  }
+  return (
+    <span aria-hidden="true" className="grid shrink-0 place-items-center leading-none" style={{ width: size, height: size, fontSize: Math.round(size * 0.58) }}>
+      {animalOf(me?.email || me?.name || 'guest').a}
+    </span>
+  );
+}
 
 /** { openHistory(), labels, setLabels(on), prefs, setPref(key, on) } — provided by App. */
 export const DockMenuContext = createContext(null);
 
 const I = {
-  more: icon(<><circle cx="3.5" cy="8" r=".9" /><circle cx="8" cy="8" r=".9" /><circle cx="12.5" cy="8" r=".9" /></>),
   history: icon(<><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3.2l2 1.3" /></>),
   export: icon(<path d="M8 2.5v8M4.5 7L8 10.5 11.5 7M3 13.5h10" />),
   reset: icon(<><path d="M3 8a5 5 0 1 0 1.5-3.6" /><path d="M3 2.5V5h2.5" /></>),
@@ -71,9 +89,11 @@ export default function DockMenu({ items = [] }) {
   const choose = (fn) => () => { setOpen(false); fn(); };
   return (
     <div ref={box} className="relative">
-      <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label={t('More')} onClick={toggle}
-        className={`pop-ico group frost-panel frost-edge frost-thin relative grid size-10 place-items-center rounded-full transition-colors ${open ? 'text-accent' : 'text-ink-hi hover:text-accent'}`}>
-        <span className="ico">{I.more}</span>
+      {/* the person signed in: their picture (or their animal) — it opens their menu of settings and actions */}
+      <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label={t('More')} title={shared?.me?.name || shared?.me?.email || t('More')} onClick={toggle}
+        className={`avatar-btn frost-panel frost-edge frost-thin relative grid size-10 place-items-center overflow-hidden rounded-full ${open ? 'is-open' : ''}`}>
+        {/* (a picture sits inset, a ring of the frosted button round it, as the dock's own buttons hold their icons) */}
+        <span className="overflow-hidden rounded-full"><Avatar me={shared?.me} size={shared?.me?.picture ? 30 : 34} /></span>
       </button>
       {open && at && createPortal(
         <div ref={menu} role="menu" aria-label={t('More')} onKeyDown={onKey} style={{ right: at.right, bottom: at.bottom }}

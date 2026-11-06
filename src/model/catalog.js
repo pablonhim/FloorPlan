@@ -32,7 +32,7 @@ export const SIZES = {
   stair:        { w: 6, d: 14, h: 0.5, label: 'Stairwell', kr: '계단' },   // an open flight going down: flat
   wc:           { w: 32, d: 18, h: 40, label: 'WC', kr: '화장실', sizable: 'wd' },
   cabinet:      { w: 6, d: 3, h: 34, label: 'Storage cabinet', kr: '수납장' },
-  storeroom:    { w: 18, d: 9, h: 56, label: 'Storage room', kr: '스토리지' }, // two lift shafts side by side
+  storeroom:    { w: 9, d: 9, h: 56, label: 'Storage room', kr: '스토리지' },  // one lift shaft's size
   tvStand:      { w: 8, d: 2, h: 22, label: 'TV stand', kr: 'TV 스탠드', km: 'ធ្នើទូរទស្សន៍' },
   wallTv:       { w: 5, d: 1, h: 34, label: 'Wall TV', kr: '벽걸이 TV', km: 'ទូរទស្សន៍ព្យួរជញ្ជាំង', note: 'hangs on a wall or pillar' },
   tvCart:       { w: 6, d: 3, h: 56, label: 'TV on wheels', kr: '이동식 TV', km: 'ទូរទស្សន៍មានកង់', note: 'a 55-inch screen on a rolling stand' },
@@ -255,6 +255,35 @@ function grain(w, h, along, seed) {
   return s;
 }
 
+/** A keyboard's top (w × d, in the frame the renderer hands it, turned with the desk): rows of keys along its
+ *  long side, a wide space bar in the row nearest the sitter. Symmetric enough to read right at any rotation. */
+function keyCaps(w, d) {
+  const long = w >= d, L = long ? w : d, S = long ? d : w;
+  const rows = 4, pad = 0.7, gap = 0.35, kh = (S - 2 * pad - (rows - 1) * gap) / rows;
+  let s = '';
+  for (let r = 0; r < rows; r++) {
+    const b = pad + r * (kh + gap);
+    // the last row: a few short keys either side of the space bar
+    const keys = r === rows - 1 ? [0.11, 0.11, 0.56, 0.11, 0.11] : Array(12).fill(1 / 12);
+    let a = pad;
+    const span = L - 2 * pad - (keys.length - 1) * gap;
+    for (const f of keys) {
+      const kw = span * f;
+      const [x, y, rw, rh] = long ? [a, b, kw, kh] : [b, a, kh, kw];
+      s += `<rect class="kb-key" x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${rw.toFixed(2)}" height="${rh.toFixed(2)}" rx=".25"/>`;
+      a += kw + gap;
+    }
+  }
+  return s;
+}
+/** A wireless mouse's top: the seam between its two buttons, across its front half. */
+function mouseTop(w, d) {
+  const long = d >= w;
+  return long
+    ? `<line class="mouse-seam" x1="${w / 2}" y1="0.5" x2="${w / 2}" y2="${(d * 0.42).toFixed(2)}"/>`
+    : `<line class="mouse-seam" x1="0.5" y1="${d / 2}" x2="${(w * 0.42).toFixed(2)}" y2="${d / 2}"/>`;
+}
+
 /** A desk kept for a remote PC (its note says so: 원격 PC / remote PC): no extension table. */
 const REMOTE_PC = /원격\s*PC|remote\s*PC/i;
 
@@ -279,6 +308,16 @@ function desk(item, W, D) {
   // the screen's light as a ray across the worktop: a widening, fading beam from just in front of the
   // monitor to the desk's front edge, in the worktop's own frame turned to the desk's rotation (the
   // beam is symmetric, so the mirroring of 180° / 270° desks does not change it); #ray-<rot> fades it
+  // a desk kept for a remote PC: no one sits there, but its monitor is always on — a bright white screen whose
+  // light glows out round it, with faint lines of a remote session typing on it without end (CSS .remote-screen,
+  // .rs-line)
+  const remote = REMOTE_PC.test(item.note || '');
+  const remoteScreen = (w, h) => {
+    const rows = [0.78, 0.52, 0.66, 0.4, 0.7];
+    return `<rect class="glass hot monitor remote-screen" x="0" y="0" width="${w}" height="${h}"/>` +
+      rows.map((f, i) => `<rect class="rs-line" style="animation-delay:-${(i * 0.9).toFixed(1)}s" x="2.4" y="${(2.6 + i * 2.9).toFixed(2)}" width="${((w - 4.8) * f).toFixed(2)}" height="1.1" rx=".4"/>`).join('') +
+      `<rect class="rs-cursor" x="2.4" y="${(2.6 + rows.length * 2.9).toFixed(2)}" width="1.6" height="1.3"/>`;
+  };
   const ray = (rot) => {
     const pw = W - EXT, pd = top, u = pw / 2;
     const pts = [[u - 13, 12.5], [u + 13, 12.5], [u + 19, pd], [u - 19, pd]].map(([a, b]) => rotPoint(a, b, pw, pd, rot));
@@ -309,15 +348,16 @@ function desk(item, W, D) {
         // the employee's name floats above the desk in a callout (render.renderDeskCallouts); an unassigned
         // desk keeps its small note on the worktop
         // (no screen light either: an empty desk has no monitor)
-        if (!name) return topGrain(w, d, rot) + `<text class="label desk-name" x="${w / 2}" y="${d / 2 + 2}" font-size="5" text-anchor="middle">${esc(item.note || '—')}</text>`;
+        // (a remote PC's desk: a bare worktop — its monitor says what it is, its light glowing from the screen)
+        if (!name) return topGrain(w, d, rot) + (remote ? '' : `<text class="label desk-name" x="${w / 2}" y="${d / 2 + 2}" font-size="5" text-anchor="middle">${esc(item.note || '—')}</text>`);
         return topGrain(w, d, rot) + ray(rot);
       },
     },
     // the monitor on its stand: a flat foot on the worktop, a neck rising at the back, and the screen
     // held up on it (the boxes never interpenetrate, so the part depth sort stays exact)
-    // set a little in from the back edge, toward the sitter; only on a desk someone sits at — an
-    // unassigned desk stands bare (the desk and its chair)
-    ...(name ? [
+    // set a little in from the back edge, toward the sitter; only on a desk someone sits at, or a remote PC's
+    // (always on) — an unassigned desk stands bare (the desk and its chair)
+    ...(name || remote ? [
     { x: mid - 5.5, y: 8.5, z: 38, w: 11, d: 6, h: 0.8, r: 1.5, cls: 'furn monitor-stand' },       // foot
     { x: mid - 1.25, y: 9.5, z: 38.8, w: 2.5, d: 1.5, h: 6.2, cls: 'furn monitor-stand' },        // neck
     {
@@ -325,11 +365,18 @@ function desk(item, W, D) {
       deco: {
         // the screen is on, facing its own chair; from behind (a desk turned
         // away) the monitor shows its back, with the screen's glow spilling round its edge
-        '+y': screen,
-        '-y': (w, h) => `<rect class="monitor-halo" x="-.5" y="-.5" width="${w + 1}" height="${h + 1}" rx="1.5"/>` +
+        '+y': name ? screen : remoteScreen,
+        '-y': (w, h) => `<rect class="monitor-halo${name ? '' : ' remote'}" x="-.5" y="-.5" width="${w + 1}" height="${h + 1}" rx="1.5"/>` +
           `<rect class="monitor-back" x="0" y="0" width="${w}" height="${h}"/>`,                       // frameless back, edge to edge
       },
     },
+    ] : []),
+    // in front of the screen, toward the sitter: a slim keyboard (its keys drawn on its top) and, on the
+    // sitter's right, a wireless mouse (no cable). The desk's frame is mirrored for 180° / 270° desks (flip,
+    // below), so the mouse is set on the other side first, to land on the right hand all the same.
+    ...(name ? [
+    { x: mid - 13, y: 19, z: 38, w: 22, d: 6.5, h: 0.9, r: 0.8, cls: 'furn keyboard', top: keyCaps },
+    { x: flip ? mid - 16.5 : mid + 13.5, y: 19.5, z: 38, w: 3, d: 5.2, h: 1.3, r: 1.4, cls: 'furn mouse', top: mouseTop },
     ] : []),
     ...officeChair(mid - 14, top + 3, 28, Math.min(22, D - top - 4), '-y', live),   // wide, as deep as the chair zone allows
   ].map((p) => (flip ? { ...p, x: W - p.x - p.w } : p));
@@ -495,11 +542,13 @@ export function zoneTag(item, w, d) {
  */
 export function elevatorParts({ open = 0, label = '▲▼' } = {}) {
   const doors = (w, h) => {
-    const dw = 40, x0 = (w - dw) / 2, top = 12, slide = open * (dw / 2) * 0.92;
+    // the leaves slide apart into pockets in the wall either side, as a real lift's: what shows of each is only
+    // the part still in the opening (it narrows toward its jamb), never past the frame onto the wall
+    const dw = 40, x0 = (w - dw) / 2, top = 12, slide = open * (dw / 2) * 0.96, lw = dw / 2 - slide;
     return `<rect class="face recess" x="${x0 - 2}" y="${top - 2}" width="${dw + 4}" height="${h - top + 2}"/>` +
       (open > 0 ? `<rect class="lift-gap" x="${x0}" y="${top}" width="${dw}" height="${h - top}"/>` : '') +
-      `<rect class="face" x="${x0 - slide}" y="${top}" width="${dw / 2}" height="${h - top}"/>` +
-      `<rect class="face" x="${x0 + dw / 2 + slide}" y="${top}" width="${dw / 2}" height="${h - top}"/>` +
+      (lw > 0.05 ? `<rect class="face" x="${x0}" y="${top}" width="${lw}" height="${h - top}"/>` +
+        `<rect class="face" x="${x0 + dw - lw}" y="${top}" width="${lw}" height="${h - top}"/>` : '') +
       `<rect class="glass hot" x="${w / 2 - 8}" y="2.5" width="16" height="7" rx="1"/>` +
       `<text class="scr" x="${w / 2}" y="8" font-size="5" text-anchor="middle">${esc(label)}</text>`;
   };
@@ -616,7 +665,7 @@ function cabinet() {
 }
 
 /**
- * Enclosed storage room in the building core: the size of two lift shafts side by side, with their height
+ * Enclosed storage room in the building core: the size of one lift shaft, beside the lift pair, with its height
  * and depth, walled in frosted glass, a single-leaf door (item.doorSide) and a "스토리지" sign above it.
  */
 function storeroom(item, W, D) {
@@ -634,18 +683,53 @@ function storeroom(item, W, D) {
       `<rect class="face recess" x="${x0 + dw / 2 - 14}" y="2.5" width="28" height="9.5" rx="1"/>` +
       `<text class="label" x="${x0 + dw / 2}" y="9.6" font-size="6.6" text-anchor="middle">스토리지</text>`;
   };
-  // as big as two lift shafts side by side (each 90 × 78, see elevator()), front face on the shafts' line.
-  // Frosted-glass enclosure: thin glass walls and roof with white mullions; the shelving inside shows
-  // faintly through it. Back and west walls first, then the shelves, then the front, east wall and roof.
+  // as big as a lift shaft (90 × 78, see elevator()), front face on the shafts' line.
+  // Frosted-glass enclosure: thin glass walls and roof with white mullions; the shelving and the sink inside
+  // show faintly through it. Back and west walls first, then the shelves, then the front, east wall and roof.
   const Dd = 78, H = 56, t = 1.5;
   const mullions = (w, h) => slits(30, w - 0.01, 30, 0, h, true, 'frost-mullion') +
     `<line class="frost-mullion" x1="0" y1="${h * 0.5}" x2="${w}" y2="${h * 0.5}"/>`;
   const withDoor = (f) => (face === f ? (w, h) => mullions(w, h) + door(w, h) : mullions);
+  // what is stored, seen blurred through the frost (.frosted-inside): two rows of grey shelving, their shelves
+  // drawn as lines and filled with blue file binders, and cardboard boxes stacked on top — darker and coloured,
+  // so the shapes show as soft smudges through the milky glass
+  const shelves = (w, h) => [0.25, 0.5, 0.75].map((f) => `<line class="store-shelf-line" x1="0" y1="${(h * f).toFixed(2)}" x2="${w}" y2="${(h * f).toFixed(2)}"/>`).join('') +
+    [0.06, 0.31, 0.56].map((f) => {
+      let s = '', x = 2;
+      const seed = [...String(item.id || 'st')].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, Math.round(f * 100));
+      let k = seed;
+      while (x < w - 4) { k = (k * 1103515245 + 12345) >>> 0; const bw = 2 + (k % 3); if ((k >>> 8) % 5) s += `<rect class="store-binder" x="${x}" y="${(h * f).toFixed(2)}" width="${bw - 0.5}" height="${(h * 0.17).toFixed(2)}"/>`; x += bw; }
+      return s;
+    }).join('');
+  // the room's end by the lifts (opposite its door): a dish-washing sink counter runs along that wall, so the
+  // shelving rows stop short of it
+  const liftWest = side !== 'w';                        // (the west room's door is on its east end, and so on)
+  const sx0 = liftWest ? 30 : 8, sw = W - 38;            // the shelving rows' span
+  const row = (y) => [
+    { x: sx0, y, z: 0, w: sw, d: 16, h: 40, cls: 'furn frosted-inside store-shelf', deco: { '+y': shelves, '-y': shelves } },
+    // boxes on top: a few cartons along the row (kept under the glass roof, which starts at H - t)
+    ...[[0.06, 20, 12], [0.55, 16, 9]].map(([f, bw, bh]) => ({ x: sx0 + sw * f, y: y + 2, z: 40, w: Math.min(bw, sw * 0.36), d: 12, h: bh, cls: 'furn frosted-inside store-box' })),
+  ];
+  // the sink: a steel counter against the lift-side wall with a basin let into its top, a tap on the wall
+  // and its spout reaching out over the basin
+  const CW = 22, CL = 54, cy = (Dd - CL) / 2, cx = liftWest ? t : W - t - CW;
+  const basin = (w, d) => {
+    const along = d >= w, L = along ? d : w, S = along ? w : d;
+    const [bx, by, bw, bh] = along ? [S * 0.18, L * 0.3, S * 0.64, L * 0.4] : [L * 0.3, S * 0.18, L * 0.4, S * 0.64];
+    return `<rect class="sink-basin" x="${bx.toFixed(2)}" y="${by.toFixed(2)}" width="${bw.toFixed(2)}" height="${bh.toFixed(2)}" rx="2"/>` +
+      `<circle class="sink-drain" cx="${(bx + bw / 2).toFixed(2)}" cy="${(by + bh / 2).toFixed(2)}" r="1.2"/>`;
+  };
+  const sink = [
+    { x: cx, y: cy, z: 0, w: CW, d: CL, h: 36, cls: 'furn frosted-inside store-sink', top: basin },
+    { x: liftWest ? t + 1 : W - t - 4, y: Dd / 2 - 1.5, z: 36, w: 3, d: 3, h: 8, cls: 'furn frosted-inside store-tap' },          // tap
+    { x: liftWest ? t + 4 : W - t - 11, y: Dd / 2 - 1, z: 42, w: 7, d: 2, h: 1.5, cls: 'furn frosted-inside store-tap' },          // spout
+  ];
   return [
     { x: 0, y: 0, z: 0, w: W, d: t, h: H - t, cls: 'frost-glass' },                                   // back
     { x: 0, y: t, z: 0, w: t, d: Dd - 2 * t, h: H - t, cls: 'frost-glass', deco: { '-x': withDoor('-x') } }, // west
-    { x: 8, y: 8, z: 0, w: W - 16, d: 16, h: 40, cls: 'furn frosted-inside' },                        // shelving, seen blurred
-    { x: 8, y: Dd - 30, z: 0, w: W - 16, d: 16, h: 40, cls: 'furn frosted-inside' },
+    ...row(8),                                                                                       // shelving, seen blurred
+    ...row(Dd - 30),
+    ...sink,
     { x: W - t, y: t, z: 0, w: t, d: Dd - 2 * t, h: H - t, cls: 'frost-glass', deco: { '+x': withDoor('+x') } }, // east
     { x: 0, y: Dd - t, z: 0, w: W, d: t, h: H - t, cls: 'frost-glass', deco: { '+y': withDoor('+y') } },  // front
     { x: 0, y: 0, z: H - t, w: W, d: Dd, h: t, cls: 'frost-glass',                                      // roof

@@ -1,6 +1,7 @@
 // The objects: a round button in the bottom dock opening a menu of them; drag one onto the floor, or click to stamp repeatedly (Esc to stop).
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOneOpen } from '../lib/oneOpen.js';
+import { useHoverOpen } from '../lib/hoverOpen.js';
 import { GripIcon } from './AnimatedIcons.jsx';
 import { frame } from '../iso/kernel.js';
 import { CELL } from '../iso/units.js';
@@ -45,9 +46,13 @@ export default function Palette({ placing, setPlacing, showCore, custom = [], on
   const tr = useT();   // (t is a type in here)
   const [open, setOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const draggingRef = useRef(false);
+  draggingRef.current = dragging;
   const [peek, setPeek] = useState(null);   // the hovered row's object, shown larger in a square beside the menu: { t, preset, y }
   useEffect(() => { if (!open) setPeek(null); }, [open]);
   useOneOpen(open, () => setOpen(false));
+  // opens on hover too (lib/hoverOpen); held open while an object is being dragged out of it
+  const { hover, toggle, viaHover } = useHoverOpen(open, setOpen, { hold: () => draggingRef.current });
   const box = useRef(null);
   const quiet = useRef(false);   // true while the menu focuses its first row on opening (no preview then)
   useEffect(() => {
@@ -57,7 +62,7 @@ export default function Palette({ placing, setPlacing, showCore, custom = [], on
     document.addEventListener('pointerdown', away);
     document.addEventListener('keydown', esc);
     quiet.current = true;   // the first row takes focus as the menu opens: no preview for that
-    box.current?.querySelector('[role=menu] [role=menuitem]')?.focus();
+    if (!viaHover.current) box.current?.querySelector('[role=menu] [role=menuitem]')?.focus();   // (not when the hover opened it)
     quiet.current = false;
     return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc); };
   }, [open]);
@@ -132,9 +137,9 @@ export default function Palette({ placing, setPlacing, showCore, custom = [], on
   };
 
   return (
-    <div ref={box} className="relative" onKeyDown={onKey}>
-      <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label={tr('Objects')} title={tr('Objects')} onClick={() => setOpen((o) => !o)}
-        className={`pop-ico frost-panel frost-edge frost-thin grid size-10 place-items-center rounded-full transition-colors ${open || placingNow ? 'text-accent' : 'text-ink-hi hover:text-accent'}`}>
+    <div ref={box} className="relative" onKeyDown={onKey} {...hover}>
+      <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label={tr('Objects')} title={tr('Objects')} onClick={toggle}
+        className={`pop-ico frost-panel frost-edge frost-thin grid size-10 place-items-center rounded-full transition-colors ${placingNow ? 'text-accent' : 'text-ink-hi'}`}>
         <span className="ico"><GripIcon size={17} /></span>
       </button>
       {open && (

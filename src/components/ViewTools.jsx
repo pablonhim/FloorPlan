@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import SceneButton, { icon } from './SceneButton.jsx';
 import { RENTED, UNITS, PLANS, planId } from '../model/floors.js';
 import { useOneOpen } from '../lib/oneOpen.js';
+import { useHoverOpen } from '../lib/hoverOpen.js';
 import { useT } from '../lib/i18n.js';
 
 /**
@@ -54,12 +55,16 @@ const chevUp = (open) => (
 const CHECK = <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0"><path d="M3.5 8.5l3 3 6-7" /></svg>;
 const CHEV_R = <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0 text-ink"><path d="M6 4l4 4-4 4" /></svg>;
 const ROW = 'menu-item flex w-full min-w-0 items-center gap-2 whitespace-nowrap rounded-md px-2 py-1 text-left text-[12px] leading-4 outline-none';
-const dockBtn = (on) => `flex h-8 items-center gap-1.5 rounded-full pl-2.5 pr-2 text-[11.5px] font-semibold transition-colors ${on ? 'bg-accent-dim text-accent' : 'text-ink-hi hover:bg-[color-mix(in_srgb,var(--ink)_12%,transparent)]'}`;
+// a dock button: its menu open (on hover now) shows the same quiet grey as a hover, never the accent; the accent
+// is kept for a button whose choice is switched on (a facility lit: `active`)
+const dockBtn = (open, active = false) => `flex h-8 items-center gap-1.5 rounded-full pl-2.5 pr-2 text-[11.5px] font-semibold transition-colors ${active ? 'bg-accent-dim text-accent' : `text-ink-hi hover:bg-[color-mix(in_srgb,var(--ink)_12%,transparent)] ${open ? 'bg-[color-mix(in_srgb,var(--ink)_12%,transparent)]' : ''}`}`;
 
-/** A dock dropdown's open state: closes on a click outside, Escape, or another menu opening (useOneOpen). */
+/** A dock dropdown's open state: opens on hover (or a click; lib/hoverOpen), closes on leaving it, a click
+ *  outside, Escape, or another menu opening (useOneOpen). */
 function useDropdown(onClose) {
   const [open, setOpen] = useState(false);
   useOneOpen(open, () => setOpen(false));
+  const { hover, toggle, viaHover } = useHoverOpen(open, setOpen);
   const box = useRef(null);
   const close = useRef(onClose);
   close.current = onClose;
@@ -69,7 +74,8 @@ function useDropdown(onClose) {
     const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('pointerdown', away);
     document.addEventListener('keydown', esc);
-    (box.current?.querySelector('[role=menu] [aria-checked="true"]') || box.current?.querySelector('[role=menu] [role^="menuitem"]'))?.focus();
+    // (opened by a click or the keyboard: the focus goes into it; a hover leaves the focus where it is)
+    if (!viaHover.current) (box.current?.querySelector('[role=menu] [aria-checked="true"]') || box.current?.querySelector('[role=menu] [role^="menuitem"]'))?.focus();
     return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc); };
   }, [open]);
   // arrow keys move through the items of the list the focus is in
@@ -80,7 +86,7 @@ function useDropdown(onClose) {
     if (e.key === 'ArrowDown') { e.preventDefault(); list[(i + 1) % list.length]?.focus(); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); list[(i - 1 + list.length) % list.length]?.focus(); }
   };
-  return { open, setOpen, box, onKey };
+  return { open, setOpen, box, onKey, hover, toggle };
 }
 
 const NAV_ICON = {
@@ -101,7 +107,7 @@ const NAV_ICON = {
 export function NavMenu({ floor, unit = null, onBack, onFloor, onUnit, onHoverUnit, teams = [], team = null, onTeam, onHoverTeam, rooms = null }) {
   const t = useT();
   const [sub, setSub] = useState(null);   // the submenu open: 'floor' | 'unit' | 'team' | 'room'
-  const { open, setOpen, box, onKey } = useDropdown(() => { setSub(null); onHoverUnit?.(null); onHoverTeam?.(null); rooms?.onHover?.(null); rooms?.onHoverAll?.(false); });
+  const { open, setOpen, box, onKey, hover, toggle } = useDropdown(() => { setSub(null); onHoverUnit?.(null); onHoverTeam?.(null); rooms?.onHover?.(null); rooms?.onHoverAll?.(false); });
   const done = () => setOpen(false);
   const place = [t('Floor {n}', { n: floor }), unit && t('Unit {u}', { u: unit }), team].filter(Boolean).join(' · ');
   const roomList = rooms?.items || [];
@@ -178,8 +184,8 @@ export function NavMenu({ floor, unit = null, onBack, onFloor, onUnit, onHoverUn
         whole building */}
     <SceneButton place="above-start" compact docked label={t('Back')} tip={unit ? t('Back to floor {n}', { n: floor }) : t('Back to the whole building')} onClick={onBack}>{NAV_ICON.back}</SceneButton>
     <Divider />
-    <div ref={box} className="relative" onKeyDown={onKey}>
-      <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} className={dockBtn(open)} title={t('Go to')}>
+    <div ref={box} className="relative" onKeyDown={onKey} {...hover}>
+      <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={toggle} className={dockBtn(open)} title={t('Go to')}>
         <span className="ico">{NAV_ICON.place}</span>
         <span className="max-w-[16rem] truncate tabular-nums">{place}</span>
         {chevUp(open)}
@@ -215,16 +221,17 @@ export function NavMenu({ floor, unit = null, onBack, onFloor, onUnit, onHoverUn
 /** 3D ↔ 2D as a dropdown in the dock: the button shows the view in use; the menu offers both. */
 export function ViewModeMenu({ top, onChange }) {
   const t = useT();
-  const { open, setOpen, box, onKey } = useDropdown();
+  const { open, setOpen, box, onKey, hover, toggle } = useDropdown();
   const modes = [
     { top: false, icon: VIEW_ICON.iso, short: '3D', label: t('3D view') },
     { top: true, icon: VIEW_ICON.flat, short: '2D', label: t('Top-down view') },
   ];
   const cur = modes.find((m) => m.top === !!top);
   return (
-    <div ref={box} className="relative" onKeyDown={onKey}>
-      <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label={`${t('View')}: ${cur.label}`} onClick={() => setOpen((o) => !o)} className={dockBtn(open)}>
-        <span className="ico">{cur.icon}</span><span>{cur.short}</span>{chevUp(open)}
+    <div ref={box} className="relative" onKeyDown={onKey} {...hover}>
+      <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label={`${t('View')}: ${cur.label}`} title={`${t('View')}: ${cur.label}`} onClick={toggle} className={dockBtn(open)}>
+        {/* (its icon only: the names are in its menu; the label stays for screen readers and the tip) */}
+        <span className="ico">{cur.icon}</span>{chevUp(open)}
       </button>
       {open && (
         <div role="menu" aria-label={t('View')} className="menu-frost menu-pop-up absolute bottom-full left-1/2 z-30 mb-2 w-max -translate-x-1/2 rounded-[10px] p-0.5">
@@ -247,12 +254,12 @@ export function ViewModeMenu({ top, onChange }) {
  */
 export function FacilityMenu({ items, on, onToggle, onHover, icon: glyph }) {
   const t = useT();
-  const { open, setOpen, box, onKey } = useDropdown(() => onHover?.(null));
+  const { open, setOpen, box, onKey, hover, toggle } = useDropdown(() => onHover?.(null));
   const cur = items.find((i) => i.key === on);
   return (
-    <div ref={box} className="relative" onKeyDown={onKey}>
+    <div ref={box} className="relative" onKeyDown={onKey} {...hover}>
       <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label={cur ? `${t('Facilities')}: ${cur.label}` : t('Facilities')} title={t('Facilities')}
-        onClick={() => setOpen((o) => !o)} className={dockBtn(open || !!cur)}>
+        onClick={toggle} className={dockBtn(open, !!cur)}>
         <span className="ico">{cur ? cur.icon : glyph}</span>
         {cur && <span className="max-w-[7rem] truncate">{cur.label}</span>}
         {chevUp(open)}

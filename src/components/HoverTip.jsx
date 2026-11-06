@@ -30,12 +30,34 @@ export function useHoverTip(stageRef, { top = false } = {}) {
     light(hit);
     if (!hit) { setTip(null); return; }
     // one language: the display language's (render.tipAttrs), English where it has no words of its own
-    const L = tipLang(), cap = L[0].toUpperCase() + L.slice(1), d = hit.dataset;
-    const title = d[`tip${cap}`] ?? d.tip, sub = d[`tipSub${cap}`] ?? d.tipSub;
+    const { title, sub } = tipText(hit);
     setTip({ id: ++n.current, title, sub, x: e.clientX - r.left, y: e.clientY - r.top, w: r.width });
   }, [stageRef, top]);
   const hide = useCallback(() => { light(null); setTip(null); }, []);
   return [tip, onMove, hide];
+}
+
+/** An item's tip words in the display language (render.tipAttrs), English where it has none of its own. */
+export function tipText(el) {
+  const L = tipLang(), cap = L[0].toUpperCase() + L.slice(1), d = el.dataset;
+  return { title: d[`tip${cap}`] ?? d.tip, sub: d[`tipSub${cap}`] ?? d.tipSub };
+}
+
+/**
+ * The tips of several items at once, each over its own item (the hover tip's pill, popping up the same way):
+ * the items a dock menu's row stands for while that row is hovered. els: their groups; stage: the box the
+ * pills are placed in.
+ */
+let shown = 0;   // each showing gets fresh ids, so every pill pops up anew (none is kept from the last row)
+export function tipsFor(els, stage) {
+  const r = stage.getBoundingClientRect(), n = ++shown;
+  return [...els].filter((el) => el.dataset.tip).map((el, i) => {
+    const b = el.getBoundingClientRect();
+    return { id: `${n}-${i}`, ...tipText(el), x: b.left + b.width / 2 - r.left, y: b.top - r.top, w: r.width };
+  });
+}
+export function TipPills({ tips }) {
+  return tips.map((tip) => <HoverTip key={tip.id} tip={tip} />);
 }
 
 export function HoverTip({ tip }) {

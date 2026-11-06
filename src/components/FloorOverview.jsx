@@ -19,9 +19,9 @@ import { keep } from '../lib/keep.js';
 import { useRaiseOnHover } from '../lib/raiseOnHover.js';
 import { ghostBuilding, frameOf } from '../iso/ghost.js';
 import { reportDepth, usePlanZoom } from '../lib/planZoom.js';
-import { HoverTip, useHoverTip } from './HoverTip.jsx';
+import { HoverTip, TipPills, tipsFor, useHoverTip } from './HoverTip.jsx';
 import { icon } from './SceneButton.jsx';
-import { ViewTools, Divider, NavMenu, ViewModeMenu, FacilityMenu, StatusLine, sentence } from './ViewTools.jsx';
+import { ViewTools, Divider, NavMenu, FacilityMenu, StatusLine, sentence } from './ViewTools.jsx';
 import { CornerMenu, DockMenuContext } from './DockMenu.jsx';
 import MenuPanel from './MenuPanel.jsx';
 import UnitCard from './UnitCard.jsx';
@@ -151,6 +151,9 @@ const SPOTS = [
   { key: 'wcW', label: "Women's WC", hide: "Hide women's WC", one: "Light up the women's restroom on this floor", many: "Light up the {n} women's restrooms on this floor", none: "No women's restrooms on this floor" },
   { key: 'wcM', label: "Men's WC", hide: "Hide men's WC", one: "Light up the men's restroom on this floor", many: "Light up the {n} men's restrooms on this floor", none: "No men's restrooms on this floor" },
 ];
+
+/** The facilities of the dock's menu (FacilityMenu) and their items' groups in the drawing. */
+const FAC = { stair: '.it.t-stair', lift: '.it.t-elevator', wcW: '.it.t-wc:not(.g-m)', wcM: '.it.t-wc.g-m' };
 
 /** Zoom range: view width as a share of the fitted width (closest, farthest). */
 const ZOOM = { min: 0.15, max: 1.5 };
@@ -298,8 +301,12 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     if (picked) setPicked(null);
   };
   useEffect(() => {
-    if (!active || (!team && !picked)) return undefined;
-    const esc = (e) => { if (e.key === 'Escape' && !e.target.closest?.('input, textarea, select, [role="menu"], [role="dialog"][aria-modal]')) back(); };
+    if (!active || (!team && !picked && !showMeet && !spotOn)) return undefined;
+    // Escape: first the meeting rooms lit up (or a facility switched on from the dock) go dark, then one step back
+    const esc = (e) => {
+      if (e.key !== 'Escape' || e.target.closest?.('input, textarea, select, [role="menu"], [role="dialog"][aria-modal]')) return;
+      if (showMeet || spotOn) { setShowMeet(false); setSpotOn(null); } else back();
+    };
     window.addEventListener('keydown', esc);
     return () => window.removeEventListener('keydown', esc);
   }); // (re-bound each render: back() reads the current team and unit)
@@ -320,6 +327,12 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
   // lights up its places' floors (spotHover); a click shows (spotOn) its places' glowing highlight
   const [spotHover, setSpotHover] = useState(null);
   const [spotOn, setSpotOn] = useState(null);
+  // …and while a facility's row is hovered, each of its places shows its tip too, as the pointer would
+  const [spotTips, setSpotTips] = useState([]);
+  useLayoutEffect(() => {
+    const svg = svgRef.current, stage = stageRef.current;
+    setSpotTips(FAC[spotHover] && svg && stage ? tipsFor(svg.querySelectorAll(FAC[spotHover]), stage) : []);
+  }, [spotHover]); // eslint-disable-line react-hooks/exhaustive-deps
   // opened from the building: the camera starts on the whole ghosted building and glides down into this
   // floor while the ghost fades in (CSS .ghost-bld); otherwise (another floor, back from a unit, a search,
   // the KOSIGN route) it opens fitted
@@ -362,7 +375,6 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
       return K.path([[x0, y0, 0], [x1, y0, 0], [x1, y1, 0], [x0, y1, 0]]) + 'Z';
     };
     // a facility hovered in the dock's menu lights up as it does under the pointer (.tip-hot), not its floor
-    const FAC = { stair: '.it.t-stair', lift: '.it.t-elevator', wcW: '.it.t-wc:not(.g-m)', wcM: '.it.t-wc.g-m' };
     svgRef.current.querySelectorAll('.it.menu-hot').forEach((g) => g.classList.remove('menu-hot', 'tip-hot'));
     if (FAC[spotHover]) svgRef.current.querySelectorAll(FAC[spotHover]).forEach((g) => g.classList.add('menu-hot', 'tip-hot'));
     // the unit card's hovered row: its things glow, its areas' floors light up
@@ -372,9 +384,14 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
       ...[...(teams.find((x) => x.label === navTeam)?.zones || []), ...(cardHint?.zones || [])].map((z) => { const f = footprint(z); return { gx: z.gx, gy: z.gy, w: f.w, d: f.d }; })].map(rectD).join('');
     // (hovering a unit tints its floor as always, except the picked one: the clay round it is its focus)
     const lit = (top && hoverUnit === picked ? null : hoverUnit) || navUnit;
+    // the meeting rooms lit up (the menu's "Light up every meeting room") and a facility switched on from the dock:
+    // their floors only, tinted under the walls, glass, doors and pillars (this slot lies below every solid), no
+    // outline
+    const meetD = [...(showMeet ? rooms : []), ...(spotOn ? spots[spotOn] || [] : [])].map(rectD).join('');
     slot.innerHTML = (lit && areas[lit] ? `<path class="unit-floor-hi" d="${areas[lit]}"/>` : '') +
-      (roomsD ? `<path class="unit-floor-hi" d="${roomsD}"/>` : '');
-  }, [hoverUnit, picked, top, navUnit, cardHint, navTeam, teams, areas, scene, spotHover, spots, K]);
+      (roomsD ? `<path class="unit-floor-hi" d="${roomsD}"/>` : '') +
+      (meetD ? `<path class="meet-floor-hi" d="${meetD}"/>` : '');
+  }, [hoverUnit, picked, top, navUnit, cardHint, navTeam, teams, areas, scene, spotHover, spots, K, showMeet, rooms, spotOn]);
   // arriving from "Go to KOSIGN": the route from the east lifts to KOSIGN's entrance, walked by a guide
   const kosign = useMemo(() => (guide ? routeToKosign(plan, floorItems, edgeItems(plan)) : null), [guide, plan, floorItems]);
   // welcome: the entrance doors swing as upright leaves when the floor opens
@@ -416,10 +433,77 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     id = requestAnimationFrame(step);
     return () => cancelAnimationFrame(id);
   }, [arrival, K, kosign]);
-  const features = useMemo(() => (showMeet ? meetingOverlay(K, rooms) : '') + (spotOn ? meetingOverlay(K, spots[spotOn]) : '') +
+  // a click on an elevator opens its doors (again: closes them): the doors slide apart over the lit car, its
+  // light spilling out a little onto the corridor floor in front. Drawn over the plan's own elevator (as the
+  // arrival above), per lift, eased; reduced motion: straight to open / shut.
+  const liftsRef = useRef(null);
+  const lifts = useRef({});      // id -> { gx, gy, open (0…1), target (0 | 1) }
+  const liftRaf = useRef(0);
+  const drawLifts = useCallback(() => {
+    const g = liftsRef.current;
+    if (!g) return;
+    const ease = (x) => x * x * (3 - 2 * x);
+    g.innerHTML = Object.entries(lifts.current).map(([id, s], i) => {
+      const o = ease(s.open), ox = s.gx * CELL, oy = s.gy * CELL;
+      if (o <= 0) return '';
+      // the light on the floor: from the opening (as wide as the doors are apart) fanning out a little, a warm
+      // glow fading away from the door (a radial gradient centred on the sill)
+      const hw = 20 * o, out = 26 + 22 * o;
+      const [cx, cy] = K.P(ox + 45, oy + 78, 0), [ex, ey] = K.P(ox + 45, oy + 78 + out, 0);
+      const gid = `lift-spill-${i}`;
+      const spill = `<radialGradient id="${gid}" gradientUnits="userSpaceOnUse" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${Math.hypot(ex - cx, ey - cy).toFixed(1)}">` +
+        `<stop offset="0" class="lift-spill-stop" stop-opacity="${(0.85 * o).toFixed(2)}"/><stop offset="1" class="lift-spill-stop" stop-opacity="0"/></radialGradient>` +
+        `<path class="lift-spill" fill="url(#${gid})" d="${K.path([[ox + 45 - hw, oy + 78, 0], [ox + 45 + hw, oy + 78, 0], [ox + 45 + hw * 1.9, oy + 78 + out, 0], [ox + 45 - hw * 1.9, oy + 78 + out, 0]])}Z"/>`;
+      // only its door face is redrawn (clipped to it), so the lift's box never paints over what stands beside it
+      const cid = `lift-face-${i}`;
+      const face = K.path([[ox, oy + 78, 0], [ox + 90, oy + 78, 0], [ox + 90, oy + 78, 56], [ox, oy + 78, 56]]) + 'Z';
+      return `<g class="lift-open" data-lift="${esc(id)}">${spill}<clipPath id="${cid}"><path d="${face}"/></clipPath>` +
+        `<g class="it" clip-path="url(#${cid})">${renderParts(K, elevatorParts({ open: o }), { W0: 90, D0: 90, rot: 0, ox, oy })}</g></g>`;
+    }).join('');
+  }, [K]);
+  // the doors stay open this long, then close by themselves (a real lift holds them about 5–6 s for a hall call)
+  const LIFT_HOLD = 6000;
+  const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const runLifts = () => {
+    if (reduced()) {
+      for (const [k, v] of Object.entries(lifts.current)) { v.open = v.target; if (!v.target) delete lifts.current[k]; }
+      drawLifts(); return;
+    }
+    if (liftRaf.current) return;
+    let last = performance.now();
+    const step = (now) => {
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      let moving = false;
+      for (const [k, v] of Object.entries(lifts.current)) {
+        if (v.open !== v.target) { v.open = v.target ? Math.min(1, v.open + dt / 0.7) : Math.max(0, v.open - dt / 0.7); moving = true; }
+        if (!v.open && !v.target) delete lifts.current[k];   // shut: the plan's own elevator shows again
+      }
+      drawLifts();
+      liftRaf.current = moving ? requestAnimationFrame(step) : 0;
+    };
+    liftRaf.current = requestAnimationFrame(step);
+  };
+  // a click: shut or closing → open (and close again by itself after LIFT_HOLD); open → close at once
+  const toggleLift = (id) => {
+    const it = floorItems.find((i) => i.id === id);
+    if (!it) return;
+    const s = lifts.current[id] || (lifts.current[id] = { gx: it.gx, gy: it.gy, open: 0, target: 0 });
+    clearTimeout(s.timer);
+    s.target = s.target ? 0 : 1;
+    if (s.target) s.timer = setTimeout(() => { s.target = 0; runLifts(); }, LIFT_HOLD + 700 * (1 - s.open));
+    runLifts();
+  };
+  // another floor or view: every lift shut again
+  useEffect(() => () => {
+    cancelAnimationFrame(liftRaf.current); liftRaf.current = 0;
+    for (const v of Object.values(lifts.current)) clearTimeout(v.timer);
+    lifts.current = {}; if (liftsRef.current) liftsRef.current.innerHTML = '';
+  }, [floor, top, K]);
+  // (the meeting rooms lit up and a facility switched on are tinted on the floor itself: see the .floor-hi slot)
+  const features = useMemo(() => 
     (focus ? meetingOverlay(K, [focus]) : '') +   // the search result, lit as the meeting rooms are
     // arriving by lift, the visitor (drawn per frame) stands at the route's start instead of a walking dot
-    (kosign ? routeOverlay(K, kosign) + (arrival ? '' : guideWalker(K, kosign)) : ''), [K, showMeet, rooms, spotOn, spots, kosign, arrival, focus]);
+    (kosign ? routeOverlay(K, kosign) + (arrival ? '' : guideWalker(K, kosign)) : ''), [K, kosign, arrival, focus]);
 
   const toSvg = useCallback((e) => cam.toSvg(e.clientX, e.clientY), [cam.toSvg]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -439,7 +523,8 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     cam.cancel();
     svgRef.current.setPointerCapture(e.pointerId);
     lastUnit.current = e.target.closest('[data-unit]')?.dataset.unit || null;
-    drag.current = { unit: lastUnit.current, vb0: cam.live.current, scale: cam.scale(), sx: e.clientX, sy: e.clientY, moved: false };
+    const lift = top ? null : e.target.closest('.it.t-elevator[data-iid]')?.dataset.iid || null;   // (3D only: top-down has no doors)
+    drag.current = { unit: lastUnit.current, lift, vb0: cam.live.current, scale: cam.scale(), sx: e.clientX, sy: e.clientY, moved: false };
   };
   const onPointerMove = (e) => {
     tipMove(e, Boolean(drag.current?.moved));
@@ -464,6 +549,7 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
     drag.current = null;
     if (d?.moved) cam.commit();   // the pan settles: write the viewBox once
     if (!d || d.moved) return;
+    if (d.lift) { toggleLift(d.lift); return; }   // an elevator: its doors open (or close)
     if (!top) { if (d.unit) onUnit(floor, d.unit); return; }
     // top-down: a unit is picked with one click (its card opens) and opened with a double-click (onDoubleClick).
     // Inside the picked unit, a click on a department shows it (on it again, or anywhere else in the unit: back
@@ -534,8 +620,6 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
         teams={teams} team={team} onTeam={showTeam} onHoverTeam={setNavTeam}
         rooms={{ on: showMeet, count: rooms.length, onToggle: () => setShowMeet((v) => !v), onHover: (k) => setSpotHover(k) }} />
       <Divider />
-      <ViewModeMenu top={top} onChange={(v) => shared?.setPref('top', v)} />
-      <Divider />
       {/* stairs, elevators and the restrooms: hovering a row lights their floors, a click their glow */}
       <FacilityMenu icon={TOOL.lift} on={spotOn} onToggle={(k) => setSpotOn((v) => (v === k ? null : k))} onHover={setSpotHover}
         items={SPOTS.map(({ key, label }) => ({ key, label: t(label), icon: TOOL[key], n: spots[key].length }))} />
@@ -569,11 +653,13 @@ export default function FloorOverview({ floor, plans, onBack, onFloor, onUnit, l
             <g dangerouslySetInnerHTML={{ __html: scene }} />
             <g className="door-swing" ref={doorsRef} pointerEvents="none" />
             <g className="arrival-lift" ref={liftRef} pointerEvents="none" />
+            <g className="lift-doors" ref={liftsRef} pointerEvents="none" />
             <g className="features" pointerEvents="none" dangerouslySetInnerHTML={{ __html: features }} />
             <g className="arrival-visitor" ref={visitorRef} pointerEvents="none" />
             <g className={focusU ? `units hover-${focusU}` : 'units'} dangerouslySetInnerHTML={{ __html: overlay }} />
           </svg>
           <HoverTip tip={tip} />
+          <TipPills tips={spotTips} />
           {top && picked && active && (
             <UnitCard key={picked} unit={picked} items={pickedItems} stageRef={stageRef} areaOf={pickedArea}
               onClose={() => { setTeam(null); setPicked(null); }} onHint={setCardHint}

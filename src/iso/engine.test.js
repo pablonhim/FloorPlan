@@ -182,7 +182,7 @@ describe('building core (full-floor view only)', () => {
       const rooms = core.filter((i) => i.type === 'storeroom');
       const lift = core.find((i) => i.type === 'elevator');
       expect(rooms).toHaveLength(2);
-      for (const r of rooms) expect([r.gy, footprint(r).w, footprint(r).d]).toEqual([lift.gy, 2 * footprint(lift).w, footprint(lift).d]); // two shafts' size, same wall line
+      for (const r of rooms) expect([r.gy, footprint(r).w, footprint(r).d]).toEqual([lift.gy, footprint(lift).w, footprint(lift).d]); // one shaft's size, same wall line
       for (const it of core) expect(validate(units, it, fp)).toBeNull();
       expect(renderScene(floorFrame(fp), fp, [...units, ...core])).not.toMatch(/NaN|undefined/);
     }

@@ -59,10 +59,14 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 
 /* the bottom bars (tool dock, zoom rail, search, menu buttons) and the menus they open: a thin frost, 10% fill and a strong blur, so the
    sky and the drawing show through; their icons and text get a soft halo to stay legible on any backdrop */
+/* (the blur is drawn by a layer behind the bar's contents, not the bar itself: an element with a backdrop
+   filter is a "backdrop root", and a menu or knob inside it could then blur only the bar's own thin glass,
+   never the drawing behind — this way the dock's menus blur the plan as the ⋯ menu does) */
 .frost-panel.frost-thin {
   background: color-mix(in srgb, #ffffff 10%, transparent);
-  -webkit-backdrop-filter: blur(22px) saturate(1.5);
-  backdrop-filter: blur(22px) saturate(1.5);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  isolation: isolate;
   /* the edge is the scene's line colour (blueprint blue-grey, morning gold, evening amber, night blue) */
   border-color: color-mix(in srgb, var(--line) 55%, transparent);
   box-shadow: 0 2px 12px rgb(0 0 0 / .06);
@@ -72,6 +76,16 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 :root[data-sky="evening"] .frost-thin input::placeholder, :root[data-sky="evening"] .frost-thin kbd { color: var(--ink-hi); }
 :root:not([data-theme="light"]) .frost-panel.frost-thin { background: color-mix(in srgb, #1c1e22 10%, transparent); border-color: color-mix(in srgb, var(--line) 90%, transparent); }
 .frost-thin { text-shadow: 0 0 3px rgb(255 255 255 / .9); }
+/* the profile button (DockMenu): the frosted button with its usual edge (as the info button and the docks),
+   the person's picture inset in it (or their animal); it lifts a touch on hover, no extra ring when open */
+.avatar-btn { transition: transform .15s ease; }
+.avatar-btn:hover { transform: scale(1.06); }
+.avatar-btn:focus { outline: none; }
+/* the zoom slider's handle (ZoomRail): no outline — a frosted disc, whatever lies behind blurred through it, on
+   a light, soft shadow; dragged, it keeps its look (only grows a touch) */
+.zoom-knob { background: color-mix(in srgb, #ffffff 74%, transparent); backdrop-filter: blur(40px) saturate(1.4) brightness(1.08); -webkit-backdrop-filter: blur(40px) saturate(1.4) brightness(1.08);
+  box-shadow: 0 1px 3px rgb(16 24 40 / .14), 0 2px 8px rgb(16 24 40 / .08); }
+:root:not([data-theme="light"]) .zoom-knob { background: color-mix(in srgb, #ffffff 46%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / .3), 0 2px 8px rgb(0 0 0 / .18); }
 .frost-thin svg { filter: drop-shadow(0 0 2px rgb(255 255 255 / .85)); }
 .frost-thin input::placeholder { text-shadow: 0 0 3px rgb(255 255 255 / .9); }
 :root:not([data-theme="light"]) .frost-thin { text-shadow: 0 0 3px rgb(0 0 0 / .85); }
@@ -310,6 +324,13 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 .switch:focus-visible .switch-track { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), 0 3px 12px color-mix(in srgb, var(--accent) 28%, transparent); }
 .switch:hover .switch-knob { box-shadow: 0 1px 3px rgb(0 0 0 / .2), 0 3px 8px rgb(0 0 0 / .12); }
 
+.frost-panel.frost-thin:not(.absolute, .fixed, .sticky) { position: relative; }
+.frost-panel.frost-thin::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  backdrop-filter: blur(22px) saturate(1.5);
+}
+
 /* frosted side panel (building view floor list): light grey glass over the scene */
 .frost-panel {
   background: color-mix(in srgb, #ffffff 72%, transparent);
@@ -320,7 +341,21 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 /* view switch: the new view settles in quickly */
 @keyframes view-enter { from { opacity: 0; scale: .985; } }
 .view-enter { animation: view-enter .22s ease-out both; }
-@media (prefers-reduced-motion: reduce) { .view-enter { animation: none; } }
+/* floor to floor (2 ⇄ 4): the views slide like a lift ride — going up, the floor left sinks away below while the
+   one above comes down into place; going down, the other way (App Layer) */
+@keyframes view-in-up { from { transform: translateY(-100%); } }
+@keyframes view-in-down { from { transform: translateY(100%); } }
+@keyframes view-out-up { to { transform: translateY(100%); } }
+@keyframes view-out-down { to { transform: translateY(-100%); } }
+/* (only the drawing moves — svg.cam-over, the floor plan or the unit (not the palette's little drawings) — not the docks, header or sky) */
+:is(.lift-in-up, .lift-in-down, .lift-out-up, .lift-out-down) svg.cam-over { animation-duration: .62s; animation-timing-function: cubic-bezier(.65, 0, .35, 1); animation-fill-mode: both; }
+.lift-in-up svg.cam-over { animation-name: view-in-up; } .lift-in-down svg.cam-over { animation-name: view-in-down; }
+.lift-out-up svg.cam-over { animation-name: view-out-up; } .lift-out-down svg.cam-over { animation-name: view-out-down; }
+/* …the floor left is shown over the new view while it slides away: everything of it but its drawing hidden
+   (backgrounds included), so the new view's sky and docks show round it */
+:is(.lift-out-up, .lift-out-down) { background: none !important; visibility: hidden; }
+:is(.lift-out-up, .lift-out-down) svg.cam-over { visibility: visible; }
+@media (prefers-reduced-motion: reduce) { .view-enter, :is(.lift-in-up, .lift-in-down, .lift-out-up, .lift-out-down) svg.cam-over { animation: none; } }
 /* jelly wobble of the floor-menu button once the closing panel has shrunk into it */
 @keyframes jelly {
   0%   { scale: 1 1; }

@@ -26,7 +26,7 @@ import DeskCard from './DeskCard.jsx';
 import { useCustomObjects } from '../lib/customObjects.js';
 import { HoverTip, useHoverTip } from './HoverTip.jsx';
 import SceneButton, { icon } from './SceneButton.jsx';
-import { ViewTools, Divider, NavMenu, ViewModeMenu, StatusLine, sentence } from './ViewTools.jsx';
+import { ViewTools, Divider, NavMenu, StatusLine, sentence } from './ViewTools.jsx';
 import { useT, why } from '../lib/i18n.js';
 import { CornerMenu, DockMenuContext } from './DockMenu.jsx';
 import MenuPanel from './MenuPanel.jsx';
@@ -497,6 +497,7 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
     const onKey = (e) => {
       if (e.target.closest?.('input, textarea, select')) return;
       const k = e.key;
+      if ((e.ctrlKey || e.metaKey) && (k === 'ArrowUp' || k === 'ArrowDown')) return;   // Ctrl+↑ / ↓: the floor switch (App), not a nudge
       if (k === 'Escape' && team && !selected && !placing && !drag.current) { setTeam(null); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'z') { dispatch({ type: 'undo' }); setMsg(['undo']); }
       else if (k === 'r' || k === 'R') rotate();
@@ -701,8 +702,6 @@ export default function FloorEditor({ pid, items: allItems, plans, dispatch, onB
         onUnit={(f, u) => glide(u)}
         teams={teams} team={team} onTeam={showTeam} onHoverTeam={setNavTeam}
         rooms={{ items: jumps.rooms, onPick: jumpTo, onHover: (j) => setHoverId(j?.id || null), onHoverAll: (on) => setJumpGroup(on ? 'rooms' : null) }} />
-      <Divider />
-      <ViewModeMenu top={top} onChange={(v) => shared?.setPref('top', v)} />
     </ViewTools>
   );
 

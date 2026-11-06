@@ -36,16 +36,19 @@ export const UNIT_AT = { C: [0, 0], D: [78, 0], A: [15, 99], B: [78, 99] }; // A
 /** Building core from the key plan (floor cells; identical on every floor, stacked). */
 export const CORE = {
   corridor: { x0: 6, x1: 150, y0: 87, y1: 102 },       // common corridor (3 m) between the north and south units
-  liftsW: [15, 24], liftsE: [122, 131], liftY: 87,      // twin lifts at each end, opening onto the corridor
+  // twin lifts at each end, opening onto the corridor; set back against the units' wall line (row 84) with the
+  // storage rooms beside them, so neither stands off the wall behind it
+  liftsW: [15, 24], liftsE: [122, 131], liftY: 84,
   // WCs fill the pocket from the outer wall to the neighbouring unit wall, down to the lift shafts' wall
   // line; doors open onto the lift hallway at the corner away from the shafts
   // doorOff: the door sits along the front wall right beside the lifts (world units in from its end)
-  wcW: { x: 0, y: 69, w: 32, d: 18, doorSide: 'l', doorOff: 100 }, wcE: { x: 124, y: 69, w: 32, d: 18, doorSide: 'r', doorOff: 120 },
+  // (15 deep: they end where the lifts, set back, begin)
+  wcW: { x: 0, y: 69, w: 32, d: 15, doorSide: 'l', doorOff: 100 }, wcE: { x: 124, y: 69, w: 32, d: 15, doorSide: 'r', doorOff: 120 },
   stairsW: { x0: 1, x1: 35 }, stairsE: { x0: 121, x1: 155 }, stairsY: [102, 118], // stair cores below the corridor
-  // enclosed storage rooms (스토리지) on the Unit C/D side, right beside each lift pair: as big as the two
-  // lift shafts together, on the same corridor wall line; doors on their end faces, facing each other
-  // along the corridor (west room: east end, east room: west end)
-  storerooms: [{ x: 33, doorSide: 'e' }, { x: 104, doorSide: 'w' }],
+  // enclosed storage rooms (스토리지) on the Unit C/D side, right beside each lift pair: as big as one lift
+  // shaft, on the same corridor wall line, right against the lifts (no gap); doors on their end faces,
+  // facing each other along the corridor (west room: east end, east room: west end)
+  storerooms: [{ x: 33, doorSide: 'e' }, { x: 113, doorSide: 'w' }],
   // corridor storage cabinets (none at present; the Unit A/B side was cleared): [{ xs, side: 'n' | 's' }]
   cabinets: [],
 };
@@ -72,7 +75,7 @@ export function floorPlan(floor) {
   const c = CORE.corridor;
   fill(c.x0, c.y0, c.x1, c.y1);
   fill(0, 69, 33, 93); fill(cols - 33, 69, cols, 93);                                          // WC pockets + the floor their doors swing onto
-  fill(33, 84, 60, 87);   // the strip above the west storage room, between the women's WC and Unit C's notch (east: Unit D covers it)
+  fill(33, 84, 60, 87);   // the strip the west storage room stands on, by Unit C's notch (east: Unit D covers it)
   fill(CORE.stairsW.x0 - 1, CORE.stairsY[0] - 4, CORE.stairsW.x1, CORE.stairsY[1] + 2);         // stair cores (and their doors)
   fill(CORE.stairsE.x0, CORE.stairsY[0] - 4, CORE.stairsE.x1 + 1, CORE.stairsY[1] + 2);
   // a boundary wall both neighbours carry (Unit A's east wall is Unit B's west wall) is drawn once
@@ -103,7 +106,7 @@ export function coreItems() {
       { id: `core-store-${i}`, type: 'storeroom', gx: r.x, gy: liftY, rot: 0, doorSide: r.doorSide, locked: true },
       // its door swings out of the end face, along the corridor toward the other storage room
       r.doorSide === 'e'
-        ? { id: `core-store-door-${i}`, type: 'door', gx: r.x + 18, gy: liftY + 2, rot: 0, locked: true }
+        ? { id: `core-store-door-${i}`, type: 'door', gx: r.x + SIZES.storeroom.w, gy: liftY + 2, rot: 0, locked: true }
         : { id: `core-store-door-${i}`, type: 'door', gx: r.x - 4, gy: liftY + 2, rot: 90, locked: true },
     ]),
     ...CORE.cabinets.flatMap((g, gi) => g.xs.map((x, i) => ({
@@ -253,7 +256,12 @@ export function shellUnits(floor) {
     const from = RENTED.find((f) => UNITS[f].includes(u));
     if (from === undefined) return [];
     const id = planId(from, u), [ox, oy] = UNIT_AT[u];
-    return [{ unit: u, plan: PLANS[id], items: seedPlan(id).filter((it) => ['wall', 'glass', 'pillar'].includes(it.type)), ox, oy }];
+    // the wall between the two empty units (A's east edge, B's west edge) runs right up to the corridor wall,
+    // as C / D's does: the rented floor's plan starts it 8 cells back (the shared entrance space of floor 2's
+    // A and B, kept there), which an empty floor has no use for
+    const shared = { A: 63, B: 0 }[u];
+    const edges = (PLANS[id].edges || []).map((e) => (e.rot === 90 && e.gx === shared && e.gy === 12 ? { ...e, gy: 4, w: e.w + 8 } : e));
+    return [{ unit: u, plan: { ...PLANS[id], edges }, items: seedPlan(id).filter((it) => ['wall', 'glass', 'pillar'].includes(it.type)), ox, oy }];
   });
 }
 
@@ -315,10 +323,17 @@ export function load() {
         // v9 → v10: nothing locked by default any more; the walls as the seed lays them (the 4C meeting room's
         // wall one cell over, walls no longer running into a unit's outline) with the 4C meeting room's area;
         // 뿌이, 리티니아 and 쏘펜 (2B) in IT 인프라
-        if (raw.v >= 10) return v9;
-        const unlocked = v9.map(({ locked, ...it }) => it);   // eslint-disable-line no-unused-vars
-        const walls = resetSeeded(unlocked, id, (it) => it.type === 'wall' || it.id === '4C-zone-048');
-        return resetSeeded(walls, id, (it) => ['2B-desk-070', '2B-desk-072', '2B-desk-073'].includes(it.id));
+        let v10 = v9;
+        if (raw.v < 10) {
+          const unlocked = v9.map(({ locked, ...it }) => it);   // eslint-disable-line no-unused-vars
+          const walls = resetSeeded(unlocked, id, (it) => it.type === 'wall' || it.id === '4C-zone-048');
+          v10 = resetSeeded(walls, id, (it) => ['2B-desk-070', '2B-desk-072', '2B-desk-073'].includes(it.id));
+        }
+        // v10 → v11: the glass doors as the seed lays them — each entrance's double door with its glass walls
+        // either side (as Unit A's), every meeting room's and the HQ room's door opening 3 cells wide (as
+        // 매꽁's) — so the doors, the glass walls and the two walls moved for them (2A, 2B) come from the seed
+        if (raw.v >= 11) return v10;
+        return resetSeeded(v10, id, (it) => it.type === 'door' || it.type === 'glass' || ['2A-wall-035', '2B-wall-033'].includes(it.id));
       };
       return Object.fromEntries(Object.keys(PLANS).map((id) => [id, Array.isArray(raw.plans[id]) ? fix(sanitize(raw.plans[id], PLANS[id]), id) : seedPlan(id)]));
     }
@@ -328,7 +343,7 @@ export function load() {
 
 export function save(plans) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ v: 10, savedAt: new Date().toISOString(), plans }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ v: 11, savedAt: new Date().toISOString(), plans }));
     return true;
   } catch {
     return false;

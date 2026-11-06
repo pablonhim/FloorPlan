@@ -33,21 +33,36 @@ const FloorEditor = lazy(loadEditor);
  */
 const keyOf = (v) => (v.kind === 'unit' ? `unit-${v.floor}` : v.kind === 'floor' ? `floor-${v.floor}` : 'building');
 
-/** One kept-alive view: shown and fading in when it becomes the active one, hidden but kept otherwise. */
-function Layer({ active, plain, children }) {
-  const ref = useRef(null);
+/**
+ * One kept-alive view: shown and settling in when it becomes the active one, hidden but kept otherwise.
+ * slide ('up' | 'down'): this switch goes to another floor, as a lift would — only the floors' drawings move (the
+ * docks, header and sky stay put): the arriving floor's slides in from above (going up) or below (going down)
+ * while the one left slides out the other way, shown over the new view with all but its drawing hidden, and is
+ * only hidden once it is gone (index.css .lift-*); any other switch fades in (view-enter). (The animation is a class of its own state, so React's
+ * re-renders keep it.)
+ */
+function Layer({ active, plain, slide, children }) {
+  const [anim, setAnim] = useState('');
+  const was = useRef(false);   // (mounted active: it animates in too)
   useLayoutEffect(() => {
-    const el = ref.current;
-    if (!active || !el) return;
-    el.classList.remove('view-enter');
-    void el.offsetWidth;   // restart the settle-in animation
-    el.classList.add('view-enter');
-  }, [active]);
+    const before = was.current;
+    was.current = active;
+    if (before === active) return undefined;
+    if (active) { setAnim(slide ? `lift-in-${slide}` : 'view-enter'); return undefined; }
+    if (!slide) { setAnim(''); return undefined; }
+    setAnim(`lift-out-${slide}`);
+    // (it ends on animationend; with no animation, e.g. reduced motion, a fallback hides it — timed from the
+    // first frame, since building the floor arriving can hold the page a moment before the slide starts)
+    let t = 0;
+    const f = requestAnimationFrame(() => { t = setTimeout(() => setAnim(''), 1500); });
+    return () => { cancelAnimationFrame(f); clearTimeout(t); };
+  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+  const leaving = !active && anim.startsWith('lift-out');
   return (
     // (not `inert`: toggling it restyles every element of the view; hidden content is not hit or painted anyway)
-    <div ref={ref} aria-hidden={!active}
-      className={`absolute inset-0 flex min-h-0 min-w-0 ${plain ? '' : 'bg-panel'} ${active ? 'z-[1]' : ''}`}
-      style={active ? undefined : { contentVisibility: 'hidden' }}>
+    <div aria-hidden={!active} onAnimationEnd={(e) => { if (leaving && e.animationName.startsWith('view-out')) setAnim(''); }}
+      className={`absolute inset-0 flex min-h-0 min-w-0 ${plain ? '' : 'bg-panel'} ${active ? 'z-[2]' : leaving ? 'z-[3] pointer-events-none' : ''} ${anim}`}
+      style={active || leaving ? undefined : { contentVisibility: 'hidden' }}>
       {children}
     </div>
   );
@@ -67,6 +82,13 @@ export default function App() {
   const alive = useRef(new Map());
   alive.current.set(keyOf(view), view);
   const [savedAt, setSavedAt] = useState(null);
+  // a switch from one floor to the other (floor or unit view, 2 ⇄ 4): which way it goes, for the lift-like slide
+  // (the view before this one, kept as state adjusted during render: pure, so a double render agrees)
+  const [nav, setNav] = useState({ view, prev: null });
+  if (nav.view !== view) setNav({ view, prev: nav.view });
+  const prev = nav.view !== view ? nav.view : nav.prev;
+  const floorish = (v) => v?.kind === 'floor' || v?.kind === 'unit';
+  const slide = floorish(prev) && floorish(view) && prev.floor !== view.floor ? (view.floor > prev.floor ? 'up' : 'down') : null;
   // once the app is idle after its first paint: fetch the floor and unit pages and build their drawings
   // (both floors' scenes, every unit's surroundings and furniture) a little at a time, so opening a floor or
   // a unit later finds them ready instead of building thousands of elements on the click
@@ -109,6 +131,26 @@ export default function App() {
   // intro: opened from the building, the floor view glides down into the floor from the whole (ghosted) building
   const openFloor = (floor, intro = false) => setView({ kind: 'floor', floor, intro });
   const openUnit = (floor, unit = UNITS[floor][0]) => setView({ kind: 'unit', floor, unit });
+  // Ctrl (⌘) + ↑ / ↓: up to the next rented floor or down to the one below (2 ⇄ 4). In a unit, the same unit on
+  // that floor when it has one (C, D), else that floor's view. Not while typing or with a dialog open.
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+      if (e.target.closest?.('input, textarea, select, [contenteditable="true"]') || document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      const v = viewRef.current;
+      if (v.kind !== 'floor' && v.kind !== 'unit') return;
+      const up = e.key === 'ArrowUp';
+      const next = up ? RENTED.find((f) => f > v.floor) : [...RENTED].reverse().find((f) => f < v.floor);
+      e.preventDefault();
+      if (next === undefined) return;   // already the top (bottom) rented floor
+      if (v.kind === 'unit' && UNITS[next].includes(v.unit)) setView({ kind: 'unit', floor: next, unit: v.unit });
+      else setView({ kind: 'floor', floor: next });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [setView]);
 
   const floors = Array.from({ length: TOTAL_FLOORS + 1 }, (_, i) => TOTAL_FLOORS - i);   // 10 … 1, then G (0)
 
@@ -200,7 +242,7 @@ export default function App() {
         {[...alive.current].map(([key, v]) => {
           const on = key === keyOf(view);
           return (
-            <Layer key={key} active={on} plain={v.kind === 'building'}>
+            <Layer key={key} active={on} plain={v.kind === 'building'} slide={slide}>
               <Suspense fallback={<div className="flex-1 bg-panel" />}>{renderView(on ? view : v, on)}</Suspense>
             </Layer>
           );

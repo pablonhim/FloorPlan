@@ -268,14 +268,35 @@ svg .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.8; }   /* over .
 :root:not([data-theme="light"]) .glass.monitor { fill:color-mix(in srgb, var(--accent) 30%, #e6f2ff); fill-opacity:.95; stroke:var(--accent-hi); filter:url(#soft); }
 :root:not([data-theme="light"]) .glass.monitor ~ .scr-accent { fill:var(--accent); opacity:.9; }
 .it.live .scr-accent { fill:#fff; opacity:.85; }
-/* …the desk monitors: a dark, near-black screen with a soft cool glow round it (stronger at night), taking a
+/* …the desk monitors: a dark, near-black screen, no glow (only the remote PC's screen glows, below), taking a
    faint wash of the sky's light (index.css); a plain back; no blue light ray */
-:root:root .glass.monitor { fill:#16191e; fill-opacity:1; stroke:var(--struct-line); stroke-opacity:.4; stroke-width:.6;
-  filter:drop-shadow(0 0 1.2px rgb(205 225 255 / .75)) drop-shadow(0 0 3px rgb(170 200 255 / .35)); }
+:root:root .glass.monitor { fill:#16191e; fill-opacity:1; stroke:var(--struct-line); stroke-opacity:.4; stroke-width:.6; filter:none; }
+:root:root:root .glass.monitor:not(.remote-screen) { filter:none; }   /* (over .it.live .glass.hot's soft glow too) */
 :root:root:not([data-theme="light"]) .glass.monitor { fill:#16191e; stroke:var(--struct-line); filter:none; }   /* at night: a plain dark screen, no glow */
 :root:root .glass.monitor ~ .scr-accent { fill:var(--struct-top); opacity:.35; }
 :root:root .monitor-back { fill:color-mix(in srgb, var(--accent) 70%, #000); stroke:var(--accent-hi); stroke-opacity:.6; }   /* the back in the monitor's darker blue */
 :root:root :is(.monitor-ray, .monitor-halo) { display:none; }
+/* …except a remote PC's monitor (catalog desk: its note says 원격 PC), always on: a bright white screen whose
+   light glows out round it and breathes, faint lines of a remote session typing across it and a blinking
+   cursor, without end; from behind, its light spills round the casing (the halo). No beam on the worktop.
+   (ranked over index.css's sky wash on the dark screens) */
+:root:root:root:root:root .glass.monitor.remote-screen { fill:#fff; fill-opacity:1; stroke:#fff; stroke-opacity:1;
+  animation:rs-glow 2.4s ease-in-out infinite; }
+:root:root:root .monitor-halo.remote { display:inline; stroke:#fff; animation:rs-halo 2.4s ease-in-out infinite; }
+.rs-line { fill:color-mix(in srgb, var(--accent) 40%, #fff); transform-box:fill-box; transform-origin:0 50%;
+  animation:rs-type 4.5s steps(9) infinite; pointer-events:none; }
+.rs-cursor { fill:var(--accent); animation:rs-blink 1s steps(1) infinite; pointer-events:none; }
+/* the white light: a tight white bloom, then a wide one tinted a touch of the accent (so it shows on a light floor) */
+@keyframes rs-glow {
+  0%, 100% { filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 3px rgb(255 255 255 / .6)) drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 22%, transparent)); }
+  50% { filter:drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 4.5px rgb(255 255 255 / .75)) drop-shadow(0 0 9px color-mix(in srgb, var(--accent) 30%, transparent)); } }
+@keyframes rs-halo { 0%, 100% { opacity:.35; } 50% { opacity:.6; } }
+@keyframes rs-type { 0% { transform:scaleX(0); } 55%, 90% { transform:scaleX(1); } 100% { transform:scaleX(0); } }
+@keyframes rs-blink { 50% { opacity:0; } }
+@media (prefers-reduced-motion: reduce) { .rs-line, .rs-cursor, :root:root:root:root:root :is(.remote-screen, .monitor-halo.remote) { animation:none; } }
+/* in the plain clay round a unit / another team: no glow or halo (the clay would fill them solid) */
+:root:root:root:root :is(.nb, .nbc, .nbi, .team-off, .pick-off, .faded, .shell-units) .monitor-halo.remote { display:none; }
+:root:root:root:root:root:root :is(.nb, .nbc, .nbi, .team-off, .pick-off, .faded, .shell-units) .remote-screen { animation:none; filter:none; }
 /* the doors' flat floor symbol (the blue swing wedge and its dark leaf line) is not drawn: a door shows as its
    standing glass leaf where it has one (doorSwing), otherwise only its footprint when hovered or selected */
 .door-arc, .door-leaf { display:none; }
@@ -328,10 +349,35 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 .face.fixture.counter.side, .face.fixture.partition.side { fill:var(--struct-lit); }
 /* frosted glass (storage rooms): dense milky panes; the contents inside are drawn blurred and faded
    (.frosted-inside), so what shows through is soft and out of focus */
-.face.frost-glass { fill:var(--glass-white, #fff); fill-opacity:.86; stroke:var(--glass-line, var(--struct-line)); stroke-width:.6; }
-.face.frost-glass.side { fill-opacity:.9; }
-.face.frost-glass.top { fill-opacity:.82; }
-.frosted-inside { filter:url(#frost-blur); opacity:.55; }
+.face.frost-glass { fill:var(--glass-white, #fff); fill-opacity:.66; stroke:var(--glass-line, var(--struct-line)); stroke-width:.6; }
+.face.frost-glass.side { fill-opacity:.7; }
+.face.frost-glass.top { fill-opacity:.6; }
+.frosted-inside { filter:url(#frost-blur); opacity:.9; }
+/* …at night it is lit from inside, like an ATM booth: the frosted panes glow a cool white, the box casts a soft
+   halo round itself, and the stored things show as darker shapes against the light */
+:root:not([data-theme="light"]) .it.t-storeroom { filter:drop-shadow(0 0 4px rgb(225 238 255 / .7)) drop-shadow(0 0 14px rgb(190 215 255 / .45)); }
+:root:root:not([data-theme="light"]) .it.t-storeroom .face.frost-glass { fill:#eaf2ff; fill-opacity:.5; stroke:#f4f8ff; stroke-opacity:.9; }
+:root:root:not([data-theme="light"]) .it.t-storeroom .face.frost-glass.top { fill:#f3f8ff; fill-opacity:.62; }
+:root:not([data-theme="light"]) .it.t-storeroom .frost-mullion { stroke:#ffffff; opacity:1; }
+/* (not in the plain clay round a unit / another team) */
+:root:root:root:not([data-theme="light"]) :is(.nb, .nbc, .nbi, .team-off, .pick-off, .faded, .shell-units) .it.t-storeroom,
+:root:root:root:not([data-theme="light"]) .it.t-storeroom:is(.nbc, .nbi, .team-off, .pick-off, .faded) { filter:none; }
+/* …the storage's contents, dark and coloured enough to show as soft shapes through the frost: grey steel
+   shelving with its shelf lines, blue file binders on the shelves, cardboard boxes on top */
+:root:root .it .face.store-shelf { fill:#8f969f; stroke:#6f767f; }
+:root:root .it .face.store-shelf.side { fill:#7d848d; } :root:root .it .face.store-shelf.top { fill:#a3aab2; }
+/* (the shelf lines and binders are drawn beside the shelving's faces, so they take the frost blur themselves) */
+.store-shelf-line { stroke:#5d636b; stroke-width:.8; filter:url(#frost-blur); opacity:.9; }
+.store-binder { fill:#3f6fb8; stroke:none; filter:url(#frost-blur); }
+.store-binder:nth-child(3n) { fill:#e2a93b; } .store-binder:nth-child(5n) { fill:#c9cdd3; }
+:root:root .it .face.store-box { fill:#b88a55; stroke:#93693d; } :root:root .it .face.store-box.side { fill:#a57a48; }
+:root:root .it .face.store-box.top { fill:#cfa06a; }
+/* …and its dish-washing sink: a brushed-steel counter, a darker basin let into the top, a chrome tap */
+:root:root .it .face.store-sink { fill:#b9bfc6; stroke:#8f969e; } :root:root .it .face.store-sink.side { fill:#a8aeb6; }
+:root:root .it .face.store-sink.top { fill:#d5d9de; }
+.sink-basin { fill:#8d949c; stroke:#6f767e; stroke-width:.5; filter:url(#frost-blur); }
+.sink-drain { fill:#5d636b; filter:url(#frost-blur); }
+:root:root .it .face.store-tap { fill:#9aa1a9; stroke:#6f767e; } :root:root .it .face.store-tap.top { fill:#c4c9cf; }
 .frost-mullion { fill:none; stroke:var(--glass-line, #fff); stroke-width:1.2; vector-effect:non-scaling-stroke; opacity:.9; }
 /* WC wall lights: in daylight just the fitting; at night each throws a warm beam down the wall */
 .wc-lamp { fill:var(--struct-shade); stroke:var(--struct-line); stroke-width:.4; vector-effect:non-scaling-stroke; }
@@ -406,22 +452,28 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 /* the desks themselves (worktop, extension, legs; not the monitor or the chair) in the selection's blue: the
    selected top's light blue on the worktop and the accent down the sides, with the sky's cast and every shading
    rule still applied on top (they work from these tones) */
-.it:has(.face.deskTop) .face.furn:not(.chair, .chair-base, .monitor-stand, .monitor-body) {
+.it:has(.face.deskTop) .face.furn:not(.chair, .chair-base, .monitor-stand, .monitor-body, .keyboard, .mouse) {
   --struct-top:color-mix(in srgb, var(--accent) 72%, #fff);
   --struct-lit:color-mix(in srgb, var(--accent) 88%, #fff);
   --struct-shade:var(--accent); }
 /* the monitor (its casing, neck and foot; not the screen) in the desk's blue, a step darker */
-.it:has(.face.deskTop) .face.furn:is(.monitor-stand, .monitor-body) {
+.it:has(.face.deskTop) .face.furn:is(.monitor-stand, .monitor-body, .keyboard, .mouse) {
   --struct-top:var(--accent);
   --struct-lit:color-mix(in srgb, var(--accent) 86%, #000);
   --struct-shade:color-mix(in srgb, var(--accent) 74%, #000); }
-.it.it:has(.face.deskTop) .face.furn:is(.monitor-stand, .monitor-body) { stroke:var(--accent-hi); }
+.it.it:has(.face.deskTop) .face.furn:is(.monitor-stand, .monitor-body, .keyboard, .mouse) { stroke:var(--accent-hi); }
 /* …but on a lead's wooden desk the monitor is a dark charcoal (casing, neck, foot and back), not the blue */
-.it.it.lead:has(.face.deskTop) .face.furn:is(.monitor-stand, .monitor-body) {
+.it.it.lead:has(.face.deskTop) .face.furn:is(.monitor-stand, .monitor-body, .keyboard, .mouse) {
   --struct-top:#3a3d43; --struct-lit:#2f3237; --struct-shade:#26282c; stroke:#16171a; }
 :root:root .it.lead .monitor-back { fill:#2a2c31; stroke:#16171a; stroke-opacity:.7; }
+/* the keyboard's keys: lighter caps on the dark-blue (a lead's desk: charcoal) board; the mouse's button seam */
+.kb-key { fill:color-mix(in srgb, var(--accent) 30%, #fff); fill-opacity:.9; stroke:none; }
+:root:not([data-theme="light"]) .kb-key { fill:color-mix(in srgb, var(--accent) 45%, #dfe8f7); }
+.it.lead .kb-key { fill:#6b6f77; }
+.mouse-seam { stroke:color-mix(in srgb, var(--accent) 45%, #000); stroke-width:.25; stroke-linecap:round; }
+.it.lead .mouse-seam { stroke:#111214; }
 /* …their line in a deeper blue, a touch darker than the other furniture's */
-.it.it:has(.face.deskTop) .face.furn:not(.chair, .chair-base, .monitor-stand, .monitor-body) { stroke:var(--accent-hi); }
+.it.it:has(.face.deskTop) .face.furn:not(.chair, .chair-base, .monitor-stand, .monitor-body, .keyboard, .mouse) { stroke:var(--accent-hi); }
 /* the desks and their monitors in more contrast: their grey faces deeper and their line lighter (the white
    worktop and its sky cast as they were) */
 .it.it:has(.face.deskTop) .face.furn:not(.chair, .chair-base) { stroke-opacity:.55; }
@@ -515,6 +567,11 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
    pillar, desk and partition, without an outline: the floor view tints its area in the scene's floor layer
    (.unit-floor-hi in renderScene's .floor-hi slot); the unit editor tints that unit's slab (own or neighbour) */
 .unit-floor-hi { fill:var(--accent); fill-opacity:.12; stroke:none; pointer-events:none; }
+/* the meeting rooms lit up (and a facility switched on): their floors tinted, gently pulsing, no outline —
+   in the floor slot, so walls, glass, doors and pillars all stand over it */
+.meet-floor-hi { fill:var(--accent); fill-opacity:.22; stroke:none; pointer-events:none; animation:meet-floor-pulse 2.2s ease-in-out infinite; }
+@keyframes meet-floor-pulse { 0%, 100% { fill-opacity:.16; } 50% { fill-opacity:.32; } }
+@media (prefers-reduced-motion: reduce) { .meet-floor-hi { animation:none; } }
 /* the floor view, hovering a unit's button in the dock (or a place button): the rest in grayscale (see Out of focus) */
 
 :is(.own-plate.hot, .nb.dock-hot, .nb.hot) .face.slab.top { fill:color-mix(in srgb, var(--accent) 14%, var(--floor)) !important; }
@@ -757,6 +814,13 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 .twr .bld .face, .twr .bld .bld-grain, .twr .bld .fl, .twr .bld .detail, .twr .bld .roof-shadow { transition:opacity .25s ease-out; }
 /* the lift's dual doors */
 .lift-gap { fill:var(--night-light-hi); }
+/* an elevator opened with a click (FloorOverview: lift-doors): the lit car glows in the opening, and its warm
+   light spills a little onto the corridor floor in front (a radial fade from the sill) */
+.floor-ov:not([data-top]) .it.t-elevator { cursor:pointer; }
+.lift-open .lift-gap { filter:drop-shadow(0 0 2px var(--night-light-hi)) drop-shadow(0 0 7px color-mix(in srgb, var(--night-light) 70%, transparent)); }
+.lift-spill-stop { stop-color:var(--night-light); }
+:root[data-theme="light"] .lift-spill-stop, :root:not([data-theme]) .lift-spill-stop { stop-color:color-mix(in srgb, var(--night-light) 75%, #fff); }
+.lift-spill { pointer-events:none; }
 .lift-door { fill:var(--struct-lit); stroke:var(--struct-line); stroke-width:.4; vector-effect:non-scaling-stroke; }
 .lift-ground { fill:var(--accent); opacity:.18; }
 /* "Go to KOSIGN": the rented floors as bands round the frosted building (the destination brightest) */
@@ -1048,8 +1112,11 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 .face.paper { fill:#ffffff; stroke:#c9cdd2; } .face.paper.top { fill:#ffffff; }
 /* glass doors: aluminium posts and frames, long bar handles; the cabinet room's glass frosted */
 .face.door-post { fill:#a7adb5; stroke:#868c95; } .face.door-post.side { fill:#959ba4; } .face.door-post.top { fill:#bcc1c8; }
-.door-frame { fill:none; stroke:#8e959f; stroke-width:.8; vector-effect:non-scaling-stroke; }
-.door-bar { stroke:#7d848e; stroke-width:1.8; stroke-linecap:round; vector-effect:non-scaling-stroke; }
+/* (the frame a light aluminium, close to the glass walls' own soft line; the bar a step deeper so it still reads) */
+.door-frame { fill:none; stroke:#c4c9cf; stroke-width:.7; vector-effect:non-scaling-stroke; }
+.door-bar { stroke:#a3a9b1; stroke-width:1.6; stroke-linecap:round; vector-effect:non-scaling-stroke; }
+:root:not([data-theme="light"]) .door-frame { stroke:#aab1ba; }
+:root:not([data-theme="light"]) .door-bar { stroke:#bcc2ca; }
 .face.pane.frosted-door { fill:#ffffff; fill-opacity:.72; }
 :root:not([data-theme="light"]) .face.pane.frosted-door { fill:#c9ced6; fill-opacity:.35; }
 /* café stools in a colour (item.color): the seat painted, its sides a shade darker, its top a touch lighter */
