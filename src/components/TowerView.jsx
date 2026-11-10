@@ -7,7 +7,7 @@ import { frame, slits } from '../iso/kernel.js';
 import { depthSort } from '../iso/depth.js';
 import { renderParts } from '../iso/parts.js';
 import { elevatorParts } from '../model/catalog.js';
-import { shadowLayer, roundedRectPath } from '../iso/shadow.js';
+import { shadowLayer, roundedRectPath, EVENING_SUN } from '../iso/shadow.js';
 import { RENTED, TOTAL_FLOORS, UNITS, PLANS, UNIT_AT, planId, stats } from '../model/floors.js';
 import { itemNode } from '../iso/render.js';
 import { CELL } from '../iso/units.js';
@@ -24,6 +24,27 @@ import { HoverTip, useHoverTip } from './HoverTip.jsx';
 import { CornerMenu } from './DockMenu.jsx';
 import { factorOf, fracOf, onZoomCommand, setZoom } from '../lib/zoomStore.js';
 import { useT } from '../lib/i18n.js';
+
+/** The night sky's stars: [x %, y %, size px, twinkle delay s], scattered over the upper sky (a fixed seed, so
+ *  they never jump between renders). */
+const STARS = (() => {
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  return Array.from({ length: 46 }, () => [+(rnd() * 100).toFixed(1), +(6 + rnd() * 52).toFixed(1), rnd() < 0.2 ? 3 : rnd() < 0.5 ? 2 : 1.5, +(rnd() * 4).toFixed(2)]);
+})();
+
+/** Cloud banks in the sky's own 1600 × 1000 frame: [cx, cy, rx, ry]; overlapping, so the noise tears them into
+ *  connected wisps — a long bank high on the left, a smaller one up to the right, thin streaks near the horizon. */
+const CLOUDS = [[520, 150, 290, 46], [700, 112, 190, 32], [1080, 100, 240, 32], [1120, 300, 210, 14], [760, 410, 250, 12]];
+
+/** A shadow layer for each sun: the day's (morning, night, no sky) and the evening's low south-west sun, which
+ *  throws it the other way. Both are drawn; the time of day shows one (iso.css .sun-am / .sun-pm), so a change
+ *  of sky redraws nothing. The evening's is a touch lighter and much softer toward its tip (the low sun's light
+ *  is diffuse), so it melts into the lanes instead of ending in a hard-edged slab. */
+const sunShadows = (K, casters, opts) =>
+  `<g class="sun-am">${shadowLayer(K, casters, opts)}</g>` +
+  `<g class="sun-pm">${shadowLayer(K, casters, { ...opts, clipId: `${opts.clipId}-pm`, sun: EVENING_SUN,
+    darkness: opts.darkness * 0.85, spread: opts.spread && [opts.spread[0] * 1.5, opts.spread[1] * 1.8] })}</g>`;
 
 /*  World units: 1 m = M units. The building stands on a site plate with a 6.4 m margin.
     plate      0..PW × 0..PD, height PZ
@@ -319,8 +340,8 @@ function publicWC() {
   const { SIDE, TOP, box } = K, b = PUBLIC_WC;
   const z1 = PZ + b.h;
   // soft shadow on the paving, then the block
-  let s = `<g class="pwc-shadow">` + shadowLayer(K, [{ x0: b.x, y0: b.y, x1: b.x + b.w, y1: b.y + b.d, h: b.h }],
-    { z: PZ, clipId: 'pwc-clip', clip: roundedRectPath(K, PLATE, PLATE_R, PZ), slices: 4, darkness: 0.22, spread: [0.6, 3], cls: 'twr-ground-shadow' }) + `</g>`;
+  let s = `<g class="pwc-shadow">` + sunShadows(K, [{ x0: b.x, y0: b.y, x1: b.x + b.w, y1: b.y + b.d, h: b.h }],
+    { z: PZ, clipId: 'pwc-clip', clip: roundedRectPath(K, PLATE, PLATE_R, PZ), slices: 4, darkness: 0.32, spread: [0.6, 3], cls: 'twr-ground-shadow' }) + `</g>`;
   // interior, only seen when the block is x-rayed: three stalls along the west wall and a basin counter
   for (let i = 0; i < 3; i++) s += box(b.x + 1, b.y + 2 + i * 9, PZ, 9, 0.6, 9, 0, 'partition fixture');
   s += box(b.x + 1, b.y + 2 + 27, PZ, 9, 0.6, 9, 0, 'partition fixture');
@@ -711,16 +732,25 @@ export function buildSvg({ occ, cursor, away, vipArrived, vipGone, plans }) {
   svg += tipG('Underground parking exit', '지하 주차장 출구', ramp(RAMPS[1])); // west exit ramp: behind the building and inside its shadow
   svg += `<g class="anim-back"></g>`; // moving actors behind the building (filled per frame)
 
-  // ---- building shadow: lighter, blur growing toward the tip so the far corners round off ----
+  // ---- building shadow: lighter, blur growing toward the tip so the far corners round off. No contact shadow
+  //      round the base: a dark rim all round the ground floor made the building look as if it floated; the
+  //      only shade is the one it casts, away from the sun ----
   svg += `<g class="tower-shadow">`;
-  svg += shadowLayer(K, strips().map((r) => ({ x0: wx(r.x0), x1: wx(r.x1), y0: wy(r.y0), y1: wy(r.y1), h: H })),
+  svg += sunShadows(K, strips().map((r) => ({ x0: wx(r.x0), x1: wx(r.x1), y0: wy(r.y0), y1: wy(r.y1), h: H })),
     // clipped to the plate's own rounded outline, so the shadow follows its corners exactly
-    { z: PZ, clipId: 'twr-clip', clip: roundedRectPath(K, PLATE, PLATE_R, PZ), slices: 10, darkness: 0.22, spread: [0.7, 13], cls: 'twr-ground-shadow' }); // soft, light; only a slight blur at the base so it does not bleed onto the lit (right) side
+    { z: PZ, clipId: 'twr-clip', clip: roundedRectPath(K, PLATE, PLATE_R, PZ), ao: false, slices: 10, darkness: 0.36, spread: [0.7, 13], cls: 'twr-ground-shadow' }); // soft but deep enough to model the building; only a slight blur at the base so it does not bleed onto the lit (right) side
   svg += `</g>`;
   // the external public restroom on the west paved platform: after the building's ground shadow, which
   // lies on the paving round it (drawn before, it painted over most of the restroom's roof)
   svg += tipG('Public restroom', '공용 화장실', publicWC());
 
+  // the façades' sunlight (see the façade loop): a vertical wash, and the sky's reflection in the glass as diagonal
+  // streaks in the façade's own units, repeating along it
+  svg += `<defs><linearGradient id="twr-sun-wash" x1="0" y1="0" x2="0" y2="1">` +
+    `<stop offset="0" class="sun-wash-a"/><stop offset=".55" class="sun-wash-b"/><stop offset="1" class="sun-wash-c"/></linearGradient>` +
+    `<linearGradient id="twr-sheen" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="70" y2="-46" spreadMethod="repeat">` +
+    `<stop offset="0" class="sheen-off"/><stop offset=".18" class="sheen-off"/><stop offset=".26" class="sheen-on"/><stop offset=".34" class="sheen-off"/>` +
+    `<stop offset=".52" class="sheen-off"/><stop offset=".56" class="sheen-mid"/><stop offset=".6" class="sheen-off"/><stop offset="1" class="sheen-off"/></linearGradient></defs>`;
   svg += `<g class="bld">`; // the building itself: façades, roof and roof furniture (x-rayed on demand)
   svg += interiors(plans);   // floors 2 and 4 inside, seen through their frosted windows
   // ---- façades, back to front: wall, per-floor bands with windows, pilasters on the pillar grid ----
@@ -758,6 +788,15 @@ export function buildSvg({ occ, cursor, away, vipArrived, vipGone, plans }) {
     // concrete grain over the whole face, fins included, so no fin reads as a plain white strip
     for (const u of f.us) s += `<rect class="face struct pilaster ${side}" x="${(u - 1.6).toFixed(2)}" y="0" width="3.2" height="${H}"/>`;
     s += `<rect class="bld-grain" width="${f.len}" height="${H}"${mask}/>`;
+    // the sun on the façade (morning: the east faces; evening: the south faces, iso.css): a warm wash, brightest
+    // toward the top, and the sky reflected in the glass — diagonal streaks of light across the windows, one
+    // continuous sweep over the whole face. Not on the rented floors' windows (their interiors show through).
+    s += `<rect class="bld-sun ${side}" width="${f.len}" height="${H}" fill="url(#twr-sun-wash)"${mask}/>`;
+    // The reflection is one wide streaked sheet clipped to the panes: as the sun moves (iso.css --sun-p) the sheet
+    // slides along the façade, so the streaks travel across the windows with it.
+    s += `<clipPath id="shc-${fi}">` + Array.from({ length: NF }, (_, i) => RENTED.includes(i) ? '' : f.slots.map((sl) =>
+      `<rect x="${sl.x.toFixed(2)}" y="${H - (i + 1) * FH + (i === 0 ? 1.6 : 2.6)}" width="${sl.w.toFixed(2)}" height="${FH - (i === 0 ? 3.4 : 5.2)}"/>`).join('')).join('') + `</clipPath>` +
+      `<g class="bld-sheen ${side}" clip-path="url(#shc-${fi})"><rect class="sheen-sweep" x="-260" y="0" width="${f.len + 520}" height="${H}" fill="url(#twr-sheen)"/></g>`;
     svg += s + `</g>`;
   }
 
@@ -766,9 +805,9 @@ export function buildSvg({ occ, cursor, away, vipArrived, vipGone, plans }) {
   // guard parapet round the walkable roof, lift overruns and penthouse, back to front — first their
   // shadows on the roof slab (same sun as the ground), clipped to the roof outline
   const rb = roofBoxes();
-  svg += shadowLayer(K, rb.map((b) => ({ x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, h: b.h })), {
+  svg += sunShadows(K, rb.map((b) => ({ x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, h: b.h })), {
     z: ZTOP, clipId: 'roof-clip', clip: `${path(FOOTPRINT.map(([x, y]) => [wx(x), wy(y), ZTOP]))}Z`,
-    slices: 5, darkness: 0.16, spread: [0.3, 1.4], cls: 'roof-shadow',
+    slices: 5, darkness: 0.26, spread: [0.3, 1.4], cls: 'roof-shadow',
   });
   for (const b of rb) {
     svg += box(b.x, b.y, ZTOP, b.w, b.d, b.h, 0, b.cls);
@@ -1882,6 +1921,37 @@ export default function TowerView({ occupancy, plans, onOpen, onGuide, light, sv
           <span className="pop-in"><SceneButton place="above" compact docked label={t('Reset')} tip={t('Every car back in its bay, every scene stopped')} onClick={resetScene}>{ICON.reset}</SceneButton></span>
         </>}
       </ViewTools>
+      {/* the sky behind the drawing, fixed on screen (at infinity, so panning never moves it): stars at night and
+          drifting clouds. No sun or moon disc: the light itself shows where they are, and moves with them on a
+          change of sky (the façades' wash, reflections and shadows, iso.css --sun-*). iso.css .twr-sky */}
+      <div className="twr-sky" aria-hidden="true">
+        {STARS.map(([x, y, r, d], i) => <span key={i} className="twr-star" style={{ left: `${x}%`, top: `${y}%`, width: r, height: r, animationDelay: `${d}s` }} />)}
+        {/* clouds: soft blurred banks torn into wisps by fractal noise (a displacement map), so they read as real
+            vapour, not drawn shapes. Two identical copies side by side on one strip that slides one copy's width
+            and starts over: an endless, seamless drift (each bank sits well inside its copy, so no seam ever shows) */}
+        <div className="twr-cloud-strip">
+          {[0, 1].map((k) => (
+            <svg key={k} className="twr-clouds" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMin meet">
+              {k === 0 && <defs>
+                <filter id="twr-cloud-f" x="-30%" y="-60%" width="160%" height="220%" colorInterpolationFilters="sRGB">
+                  <feTurbulence type="fractalNoise" baseFrequency="0.007 0.013" numOctaves="5" seed="11" result="n" />
+                  <feDisplacementMap in="SourceGraphic" in2="n" scale="190" xChannelSelector="R" yChannelSelector="G" result="d" />
+                  <feGaussianBlur in="d" stdDeviation="28" result="b" />
+                  <feTurbulence type="fractalNoise" baseFrequency="0.006 0.011" numOctaves="2" seed="4" result="t" />
+                  <feColorMatrix in="t" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.3 1.45" result="ta" />
+                  <feComposite in="b" in2="ta" operator="in" />
+                </filter>
+                <linearGradient id="twr-cloud-g" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" className="cloud-top" /><stop offset="1" className="cloud-base" />
+                </linearGradient>
+              </defs>}
+              <g filter="url(#twr-cloud-f)" fill="url(#twr-cloud-g)">
+                {CLOUDS.map(([cx, cy, rx, ry], i) => <ellipse key={i} cx={cx} cy={cy} rx={rx} ry={ry} />)}
+              </g>
+            </svg>
+          ))}
+        </div>
+      </div>
       <svg
         ref={svgRef}
         className="twr cam-over select-none touch-none"

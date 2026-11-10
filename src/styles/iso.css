@@ -212,9 +212,9 @@ svg[data-team] :is(.desk-callout.team-hide, .tag.team-hide, .tag:not([data-zone]
 .ao path { fill:var(--shadow); }
 .shell-shadows { pointer-events:none; }
 /* tower: a lighter contact shadow around the building's base */
-.twr-ground-shadow .ao { opacity:calc(var(--ao-a) * .75); }
-.tower-shadow .ao { opacity:calc(var(--ao-a) * .55); }   /* the building's base rim: a firm contact shadow where it meets the ground */
-.roof-shadow .ao { opacity:calc(var(--ao-a) * .4); }
+.twr-ground-shadow .ao { opacity:calc(var(--ao-a) * .8); }
+.tower-shadow .ao { opacity:calc(var(--ao-a) * .65); }   /* the building's base rim: a firm contact shadow where it meets the ground */
+.roof-shadow .ao { opacity:calc(var(--ao-a) * .55); }
 .plan-shadow .ao { opacity:calc(var(--ao-a) * .55); }   /* the plans' walls and pillars: a light contact shadow */
 :root[data-theme="light"] .desk-name { fill:var(--ink-hi); }
 :root[data-theme="light"] .desk-name.scr { fill:var(--accent-hi); font-weight:500; }
@@ -703,8 +703,8 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 @keyframes beacon-flash { 50% { fill:#9a6a1c; } }
 .site-gate, .gate-beacon { pointer-events:none; }
 /* the building's south façades a touch deeper, so it stands out against the sky (its line work stays subtle) */
-.twr .bld .face.struct { stroke-opacity:.6; }
-.twr .bld .face.struct.front { fill:color-mix(in srgb, var(--struct-shade) 94%, var(--ink)); }
+.twr .bld .face.struct { stroke-opacity:.75; }
+.twr .bld .face.struct.front { fill:color-mix(in srgb, var(--struct-shade) 87%, var(--ink)); }
 /* the site's features with a hover pill (TowerView tipG) take the pointer, the ATM room and the gates included */
 .ext-tip .atm-kiosk, .ext-tip .site-gate { pointer-events:auto; }
 @media (prefers-reduced-motion: reduce) { .site-gate .gate-slide { transition:none; } .gate-beacon.open { animation:none; } }
@@ -960,6 +960,18 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 .twr-int .face.twr-int-struct.glassy { fill:color-mix(in srgb, var(--accent) 22%, var(--struct-lit)); fill-opacity:.7; }
 .twr-int .face.twr-int-furn { fill:color-mix(in srgb, var(--struct-shade) 55%, var(--ink)); } .twr-int .face.twr-int-furn.top { fill:var(--struct-top); } .twr-int .face.twr-int-furn.side { fill:color-mix(in srgb, var(--struct-lit) 70%, var(--ink)); }
 :root:not([data-theme="light"]) .twr-int-back { fill:#14171c; }
+/* by day, the building view's glass reads clearly (light theme only; night keeps its lit look above):
+   - the rented floors (2 and 4): a deeper interior behind the glass, so the office inside shows through; clearer
+     panes with a fine frame, and the occupied ones a distinctly deeper blue than the empty ones
+   - every other floor: a faint frame round each pane, so the window grid reads as glass, not flat patches */
+:root[data-theme="light"] .twr-int-back { fill:color-mix(in srgb, var(--struct-shade) 80%, var(--ink)); }
+:root[data-theme="light"] .face.twr-int-floor { fill:color-mix(in srgb, var(--deck) 86%, var(--ink)); }
+:root[data-theme="light"] .twr-int .face.twr-int-furn { fill:color-mix(in srgb, var(--struct-shade) 45%, var(--ink)); }
+:root[data-theme="light"] .twr .fl.rent .pn { fill:color-mix(in srgb, var(--accent) 30%, #eef3fa); fill-opacity:.52;
+  stroke:color-mix(in srgb, var(--accent) 45%, #3a4658); stroke-opacity:.55; stroke-width:.5; }
+:root[data-theme="light"] .twr .fl.rent .pn.on { fill:color-mix(in srgb, var(--accent) 72%, #ffffff); fill-opacity:.7; stroke-opacity:.75; }
+:root[data-theme="light"] .twr .fl.rent .pn.on.hi { fill:color-mix(in srgb, var(--accent) 85%, #ffffff); fill-opacity:.78; }
+:root[data-theme="light"] .twr .fl:not(.rent) .pn:not(.lobby) { stroke:var(--struct-line); stroke-opacity:.6; stroke-width:.45; }
 :root:not([data-theme="light"]) .face.twr-int-floor { fill:color-mix(in srgb, var(--night-light) 22%, #1d2025); }
 /* the building seen through (x-ray): its insides go with it */
 .twr.xray-bld .twr-int { display:none; }
@@ -1146,3 +1158,66 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 .top-badge-edge { position:absolute; left:0; top:0; overflow:visible; pointer-events:none; }
 .top-badge-edge path { fill:none; stroke:rgb(31 41 51 / .22); stroke-width:.8; stroke-linejoin:round; }
 :root:not([data-theme="light"]) .top-badge-edge path { stroke:rgb(255 255 255 / .22); }
+
+/* ---- the building view's sun: where the light comes from ----
+   (No sun or moon is drawn: the light shows where they are.) Morning: the sun high in the north-east (top right on screen) — its shadows fall toward the front (bottom
+   left), the east façades take the light. Evening: low in the south-west (left, near the horizon) — the shadows
+   fall to the right (TowerView sunShadows: .sun-pm), the south façades glow. Night: the moon, a faint cool
+   glint in the east glass. A change of time of day is one slow, eased move (--sky-t, --sky-ease): as the sun or
+   moon travels, the light on the façades shifts from face to face, the reflections
+   sweep across the glass and the shadows turn — driven by animatable sky values on the root:
+     --sun-e / --sun-s  how much light the east / south faces catch (reflections; the wash above .3)
+     --sun-p            where the sun is along its path (0 morning → 1 evening → 1.4 set), sliding the streaks */
+@property --sun-e { syntax:'<number>'; inherits:true; initial-value:0; }
+@property --sun-s { syntax:'<number>'; inherits:true; initial-value:0; }
+@property --sun-p { syntax:'<number>'; inherits:true; initial-value:0; }
+:root { --sky-t:1.6s; --sky-ease:cubic-bezier(.45,0,.55,1);   /* the same as the page's cross-fade (index.css ::view-transition), so everything turns together */
+  transition:--sun-e var(--sky-t) var(--sky-ease), --sun-s var(--sky-t) var(--sky-ease), --sun-p var(--sky-t) var(--sky-ease); }
+:root[data-sky="morning"] { --sun-e:1; --sun-s:.3; --sun-p:0; --sun-hi:#fff6dc; --sun-glint:#ffffff; }
+:root[data-sky="evening"] { --sun-e:.3; --sun-s:1; --sun-p:1; --sun-hi:#ffc58f; --sun-glint:#ffe6cc; }
+:root[data-sky="night"] { --sun-e:.22; --sun-s:0; --sun-p:1.4; --sun-hi:#9fb4e6; --sun-glint:#cfdcff; }
+@media (prefers-reduced-motion: reduce) { :root { transition:none; } }
+/* the shadows of each sun cross-fade as it moves (hidden once faded, so the unseen one costs nothing to paint).
+   Each state names its own transition: the one fading in turns visible at once, the one fading out only once
+   its fade is over (a shared rule gave the incoming one the outgoing delay, so it stayed hidden through the
+   whole fade and then popped in) */
+.twr .sun-am, :root[data-sky="evening"] .twr .sun-pm { opacity:1; visibility:visible; transition:opacity var(--sky-t) var(--sky-ease), visibility 0s linear 0s; }
+.twr .sun-pm, :root[data-sky="evening"] .twr .sun-am { opacity:0; visibility:hidden; transition:opacity var(--sky-t) var(--sky-ease), visibility 0s linear var(--sky-t); }
+/* the façades' wash (the face turned to the sun) and the glass reflections, following the light */
+.twr :is(.bld-sun, .bld-sheen) { pointer-events:none; }
+.twr .bld-sun.side { opacity:max(0, calc((var(--sun-e) - .3) / .7)); }
+.twr .bld-sun.front { opacity:max(0, calc((var(--sun-s) - .3) / .7)); }
+.twr .bld-sheen.side { opacity:var(--sun-e); }
+.twr .bld-sheen.front { opacity:var(--sun-s); }
+:root[data-sky="none"] .twr :is(.bld-sun, .bld-sheen) { display:none; }
+.twr .sheen-sweep { transform:translateX(calc(var(--sun-p) * -130px)); }
+.twr :is(.sun-wash-a, .sun-wash-b, .sun-wash-c, .sheen-on, .sheen-mid, .sheen-off) { transition:stop-color var(--sky-t) var(--sky-ease), stop-opacity var(--sky-t) var(--sky-ease); }
+.twr .sun-wash-a { stop-color:var(--sun-hi, #fff); stop-opacity:.42; }
+.twr .sun-wash-b { stop-color:var(--sun-hi, #fff); stop-opacity:.14; }
+.twr .sun-wash-c { stop-color:var(--sun-hi, #fff); stop-opacity:0; }
+:root[data-sky="evening"] .twr .sun-wash-a { stop-opacity:.22; }
+:root[data-sky="evening"] .twr .sun-wash-b { stop-opacity:.1; }
+.twr .sheen-off { stop-color:var(--sun-glint, #fff); stop-opacity:0; }
+.twr .sheen-on { stop-color:var(--sun-glint, #fff); stop-opacity:.2; }
+.twr .sheen-mid { stop-color:var(--sun-glint, #fff); stop-opacity:.1; }
+/* the sky (TowerView .twr-sky): behind the drawing, fixed on screen, never in the way of the pointer */
+.twr-sky { position:absolute; inset:0; overflow:hidden; pointer-events:none; }
+:root[data-sky="none"] .twr-sky { display:none; }
+/* clouds: real vapour (TowerView .twr-clouds): white and bright on top by morning, warm with a peach-lilac base at
+   sunset, faint and grey-blue at night; fading over the move. Their own layer, drifting very slowly, so panning
+   the drawing never repaints them */
+.twr-cloud-strip { position:absolute; left:0; top:0; width:200%; height:100%; display:flex; opacity:0; transition:opacity var(--sky-t) var(--sky-ease);
+  will-change:transform; animation:cloud-drift 260s linear infinite; }
+.twr-clouds { flex:none; width:50%; height:100%; overflow:visible; }
+.twr-clouds stop { transition:stop-color var(--sky-t) var(--sky-ease); }
+:root[data-sky="morning"] .twr-cloud-strip { opacity:.36; } :root[data-sky="evening"] .twr-cloud-strip { opacity:.32; } :root[data-sky="night"] .twr-cloud-strip { opacity:.07; }
+.cloud-top { stop-color:#ffffff; } .cloud-base { stop-color:#dfe7f1; }
+:root[data-sky="evening"] .cloud-top { stop-color:#ffe6d6; } :root[data-sky="evening"] .cloud-base { stop-color:#e8c6c6; }
+:root[data-sky="night"] .cloud-top { stop-color:#8a96ad; } :root[data-sky="night"] .cloud-base { stop-color:#4a5468; }
+@keyframes cloud-drift { from { transform:translateX(-50%); } to { transform:translateX(0); } }   /* left to right, one copy's width, then again */
+@media (prefers-reduced-motion: reduce) { .twr-cloud-strip { animation:none; transition:none; } }
+/* stars: night only, fading in and out with the move, each twinkling on its own beat */
+.twr-star { position:absolute; border-radius:50%; background:#fff; opacity:0; transition:opacity var(--sky-t) var(--sky-ease); }
+:root[data-sky="night"] .twr-star { opacity:.7; animation:star-twinkle 4s ease-in-out infinite; }
+@keyframes star-twinkle { 0%, 100% { opacity:.75; } 50% { opacity:.2; } }
+@media (prefers-reduced-motion: reduce) { .twr-star { transition:none; animation:none; } }

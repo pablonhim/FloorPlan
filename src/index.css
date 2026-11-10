@@ -161,7 +161,7 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
    silhouette stays crisp against the horizon glow; the window recesses a step deeper */
 :root[data-sky="morning"] .twr .bld > .face.top.struct { stroke: rgb(255 250 236 / .95); stroke-width: 1.6; stroke-opacity: 1; }
 :root[data-sky="evening"] .twr .bld > .face.top.struct { stroke: rgb(255 226 190 / .95); stroke-width: 1.6; stroke-opacity: 1; }
-:root:is([data-sky="morning"], [data-sky="evening"]) .twr .pn:not(.on, .lobby) { fill: color-mix(in srgb, var(--struct-glass) 88%, var(--ink)); }
+:root:is([data-sky="morning"], [data-sky="evening"]) .twr .pn:not(.on, .lobby) { fill: color-mix(in srgb, var(--struct-glass) 84%, var(--ink)); }
 
 /* the sky's light on the surfaces themselves (only while the weather background is on: data-sky is "none"
    when it is off, and every surface keeps its neutral matte colour): a soft, low-opacity cast of the sky's
@@ -297,7 +297,7 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 
 /* the theme switch: a plain cross-fade of the whole page (started by setTheme in lib/theme.js) */
 ::view-transition-old(root),
-::view-transition-new(root) { animation-duration: .45s; animation-timing-function: ease-in-out; }
+::view-transition-new(root) { animation-duration: 1.6s; animation-timing-function: cubic-bezier(.45, 0, .55, 1); }   /* one timeline with the building view's light (iso.css --sky-t) */
 /* …except the time-of-day toggle, shown live through the fade so its knob slides (SkyToggle) */
 .sky-toggle { view-transition-name: sky-toggle; }
 ::view-transition-old(sky-toggle) { display: none; }
@@ -480,6 +480,21 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
   --paving: #2a2c30; --asphalt: #222427; --concrete: #34363a; --concrete-lit: #3a3c40; --concrete-ramp: #303236; --lawn: #2c2f33;
   --struct-line: rgba(255, 255, 255, .13); --line: #4a4e55; --detail: #34373c; --car-edge: rgba(255, 255, 255, .12);
   --shadow: #000000; --ao-a: .5;
+}
+/* the building view only (.twr): the same model, a little more contrast so the building's details read —
+   the lit (east) and shaded (south) faces a step deeper against the near-white roof, the glass a touch darker,
+   firmer line work, deeper ambient occlusion and a deeper shadow colour. The floor and unit views keep the
+   tones above. (Set on .twr itself, so the time of day's cast still mixes over these as everywhere.) */
+:root:root[data-theme="light"] .twr {
+  --struct-lit: #e9e9e9; --struct-shade: #d5d5d5; --struct-glass: #ccd2d9;
+  --struct-line: rgba(0, 0, 0, .19); --car-edge: rgba(0, 0, 0, .17);
+  --shadow: #1d2026; --ao-a: .56;
+}
+:root:root[data-theme="light"][data-sky="evening"] .twr { --struct-lit: #d9dbe2; }   /* evening: the east faces turn from the low south-west sun */
+:root:root:not([data-theme="light"]) .twr {
+  --struct-top: #3f4248; --struct-lit: #33363b; --struct-shade: #25282c; --struct-glass: #25292e;
+  --struct-line: rgba(255, 255, 255, .17); --car-edge: rgba(255, 255, 255, .15);
+  --ao-a: .62;
 }
 :root:not([data-theme="light"])[data-corten="on"], :root:not([data-theme="light"])[data-corten="on"] .office-lit {
   --struct-top: #393b40; --struct-lit: #323438; --struct-shade: #2a2c30; --struct-cap: #4a3a32; --struct-glass: #2b2f34;

@@ -12,6 +12,9 @@
 
 /** Ground offset per unit of height (world units). */
 export const SUN = { dx: 0, dy: 0.85 };
+/** The building view's evening sun: low in the south-west, so shadows fall long toward the north-east
+ *  (+x, −y: to the right on screen) and the south façades face it. */
+export const EVENING_SUN = { dx: 0.4, dy: -0.32 };
 
 /** Andrew's monotone chain convex hull. */
 export function hull(pts) {
@@ -26,8 +29,8 @@ export function hull(pts) {
 const d2 = (K, pts, z) => 'M' + pts.map(([x, y]) => K.P(x, y, z).map((v) => v.toFixed(2)).join(' ')).join('L') + 'Z';
 
 /** Shadow of box (x0..x1, y0..y1, height h above the ground plane at z) as an SVG path "d". */
-export function castShadow(K, { x0, y0, x1, y1, h }, z = 0) {
-  const ox = h * SUN.dx, oy = h * SUN.dy;
+export function castShadow(K, { x0, y0, x1, y1, h }, z = 0, sun = SUN) {
+  const ox = h * sun.dx, oy = h * sun.dy;
   const pts = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].flatMap(([x, y]) => [[x, y], [x + ox, y + oy]]);
   return d2(K, hull(pts), z);
 }
@@ -57,9 +60,11 @@ export const rectsPath = (K, rects, z = 0) =>
  * Shadow layer, clipped to the floor. Options: `slices` (layers in the fade), `darkness` (at the base),
  * `spread` [near, far] blur radius: when set, each layer is blurred more the farther it reaches, so a
  * tall caster's shadow sharpens near its base and melts into rounded, diffuse corners at the tip.
+ * `sun`: ground offset per unit of height (default SUN; the building view's evening sun is EVENING_SUN).
+ * `ao: false` leaves out the contact shadow round the footprint (only the cast shadow is drawn).
  */
-export function shadowLayer(K, casters, { z = 0, clipId, clip, slices = 8, darkness = BASE_DARKNESS, cls = '', spread = null }) {
-  const ao = casters.map((c) => `<path d="${contactShadow(K, c, z)}"/>`).join('');
+export function shadowLayer(K, casters, { z = 0, clipId, clip, slices = 8, darkness = BASE_DARKNESS, cls = '', spread = null, sun = SUN, ao: withAo = true }) {
+  const ao = withAo ? casters.map((c) => `<path d="${contactShadow(K, c, z)}"/>`).join('') : '';
   // n layers of alpha a overlap near the base: 1 - (1 - a)^n = BASE_DARKNESS
   const a = (1 - Math.pow(1 - darkness, 1 / slices)).toFixed(4);
   const U = 'filterUnits="userSpaceOnUse" x="-4000" y="-4000" width="8000" height="8000"';
@@ -71,7 +76,7 @@ export function shadowLayer(K, casters, { z = 0, clipId, clip, slices = 8, darkn
       defs += `<filter id="${clipId}-b${k}" ${U}><feGaussianBlur stdDeviation="${(spread[0] + (spread[1] - spread[0]) * t).toFixed(2)}"/></filter>`;
       f = ` filter="url(#${clipId}-b${k})"`;
     }
-    cast += `<g class="shadow-slice" opacity="${a}"${f}>${casters.map((c) => `<path d="${castShadow(K, { ...c, h: c.h * t }, z)}"/>`).join('')}</g>`;
+    cast += `<g class="shadow-slice" opacity="${a}"${f}>${casters.map((c) => `<path d="${castShadow(K, { ...c, h: c.h * t }, z, sun)}"/>`).join('')}</g>`;
   }
   return `<defs><clipPath id="${clipId}"><path d="${clip}"/></clipPath>${defs}</defs>` +
     `<g class="${cls}" clip-path="url(#${clipId})"><g class="ao" filter="url(#ao)">${ao}</g>` +
