@@ -7,7 +7,7 @@ import { frame, slits } from '../iso/kernel.js';
 import { depthSort } from '../iso/depth.js';
 import { renderParts } from '../iso/parts.js';
 import { elevatorParts } from '../model/catalog.js';
-import { shadowLayer, roundedRectPath, EVENING_SUN } from '../iso/shadow.js';
+import { shadowLayer, roundedRectPath, hull, EVENING_SUN } from '../iso/shadow.js';
 import { RENTED, TOTAL_FLOORS, UNITS, PLANS, UNIT_AT, planId, stats } from '../model/floors.js';
 import { itemNode } from '../iso/render.js';
 import { CELL } from '../iso/units.js';
@@ -132,6 +132,9 @@ function courtyard() {
   // everything below is clipped to the platform's inner perimeter (same rounded corners, inset EDGE)
   let s = `<g transform="${TOP(0, 0, PZ)}"><clipPath id="yard-clip"><rect x="${PLATE.x0 + EDGE}" y="${PLATE.y0 + EDGE}" ` +
     `width="${PLATE.x1 - PLATE.x0 - 2 * EDGE}" height="${PLATE.y1 - PLATE.y0 - 2 * EDGE}" rx="${PLATE_R - EDGE}"/></clipPath><g clip-path="url(#yard-clip)">`;
+  // one ground everywhere: the same asphalt round the building on every side (and round the public
+  // restroom); the areas below are laid on top of it
+  s += `<rect class="yard-road" x="${PLATE.x0}" y="${PLATE.y0}" width="${PLATE.x1 - PLATE.x0}" height="${PLATE.y1 - PLATE.y0}"/>`;
   // front band: entrance paving and the drop-off lay-by in front of the canopy
   s += `<rect class="yard-paving" x="${wx(3.6)}" y="${p0}" width="${wx(28.9) - wx(3.6)}" height="${p1 - p0}"/>`;
   s += slits(CX - 28, CX + 28, 6, p0 + 1, DROP[0] - 1, true, 'detail floor-grid');
@@ -144,10 +147,10 @@ function courtyard() {
   for (const ax of [PW * 0.3, PW * 0.5, PW * 0.7, PW * 0.88]) s += arrow(ax, (r0 + r1) / 2, 'w');
   // (the VIP lanes are a raised deck with a graded ramp: see vipDeck)
   // west side: perimeter paving around the P↑OUT ramp (the ramp is cut into it, drawn afterwards)
-  // one plain paving plane from the perimeter wall to the building, from the end of the VIP bays down to
+  // one plain plane, the same asphalt as the loop round it (a lighter paving here stood out as a patch), from the perimeter wall to the building, from the end of the VIP bays down to
   // the loop (the raised turnaround sits on it): no grid lines, no seams
   const pave0 = VIPZ.y0 + VIPZ.n * 12.5 + 2;
-  s += `<rect class="yard-paving" x="${VIPZ.x0 - 1}" y="${pave0}" width="${wx(3.6) - 4 - VIPZ.x0 + 1}" height="${YARD.road[0] - pave0}"/>`;
+  s += `<rect class="yard-road" x="${VIPZ.x0 - 1}" y="${pave0}" width="${wx(3.6) - 4 - VIPZ.x0 + 1}" height="${YARD.road[0] - pave0}"/>`;
   // street connectors: in at the south-east (north-bound), out at the south-west (south-bound)
   s += `<rect class="yard-road" x="${ENTRY[0]}" y="${r1}" width="${ENTRY[1] - ENTRY[0]}" height="${PLATE.y1 - EDGE - r1}"/>`;
   s += `<rect class="yard-road" x="${EXIT[0]}" y="${r1}" width="${EXIT[1] - EXIT[0]}" height="${PLATE.y1 - EDGE - r1}"/>`;
@@ -253,7 +256,19 @@ function vipDeck() {
   const STEPS = 16, ys = [...Array(STEPS + 1)].map((_, k) => sl.y0 + ((sl.y1 - sl.y0) * k) / STEPS);
   const zr = (y) => vipZ(E.in[0], y);
   s += `<path class="face side vip-deck" d="${K.path([[E.out[1], sl.y1, PZ], [E.out[1], sl.y0, PZ], ...ys.map((y) => [E.out[1], y, zr(y)])])}Z"/>`;
-  s += ys.slice(1).map((y, k) => `<path class="face top vip-deck" d="${K.path([[E.in[0], ys[k], zr(ys[k])], [E.out[1], ys[k], zr(ys[k])], [E.out[1], y, zr(y)], [E.in[0], y, zr(y)]])}Z"/>`).join('');
+  // each strip shaded by how steeply it climbs (tilted toward the viewer, it reads a little darker, like a
+  // front face), and a soft sheen along the convex crest where it rolls onto the deck and catches the sky —
+  // so the grade reads as a slope, not a flat painted band
+  const maxSlope = 1.5 / (sl.y1 - sl.y0);   // smoothstep's peak gradient (per unit of t)
+  s += ys.slice(1).map((y, k) => {
+    const q = K.path([[E.in[0], ys[k], zr(ys[k])], [E.out[1], ys[k], zr(ys[k])], [E.out[1], y, zr(y)], [E.in[0], y, zr(y)]]);
+    const slope = (rampT(ys[k]) - rampT(y)) / (y - ys[k]) / maxSlope;           // 0 flat … 1 steepest
+    const t = (sl.y1 - (ys[k] + y) / 2) / (sl.y1 - sl.y0);                         // 0 at the loop … 1 at the deck
+    const sheen = Math.max(0, Math.sin(Math.PI * Math.min(1, Math.max(0, (t - 0.55) / 0.45))));
+    return `<path class="face top vip-deck" d="${q}Z"/>` +
+      `<path class="vip-slope-shade" d="${q}Z" opacity="${(0.16 * slope).toFixed(3)}"/>` +
+      (sheen > 0.02 ? `<path class="vip-slope-sheen" d="${q}Z" opacity="${(0.34 * sheen).toFixed(3)}"/>` : '');
+  }).join('');
   // markings: on the deck (flat, at VZ) and on the ramp (each at the ramp's height where it lies)
   let deck = '', ramp = '';
   const onRamp = (y, m) => `<g transform="${TOP(0, 0, zr(y) + 0.05)}">${m}</g>`;
@@ -302,7 +317,9 @@ function gradedCurb(x0, y0, w, len, h = 1.5, nose = 7, base = () => PZ) {
  * rotate about their pivot (CSS, `.vip-gate.open`): the entry arm reaches east across VIP IN, the exit
  * arm west across VIP OUT. Both open for a car stopped at them and close once it has passed.
  */
-const VIP_GATE = { y: Math.round((RAMPS[0].y0 + YARD.road[0] - 4) / 2), x0: VIP_E.in[1] - 2, x1: VIP_E.in[1] + CURB + 2 };
+// at the foot of the grade, on the south end of the centre curb (clear of its tapered nose), so a car is
+// checked before it starts the climb
+const VIP_GATE = { y: YARD.road[0] - 17, x0: VIP_E.in[1] - 2, x1: VIP_E.in[1] + CURB + 2 };
 function vipGate() {
   const { box, FRONT, SIDE } = K, g = VIP_GATE, zb = vipZ(VIP_E.in[1], g.y), bh = 11, arm = 15, armZ = zb + 5;
   let s = box(g.x0, g.y - 4, zb, g.x1 - g.x0, 8, bh, 0, 'struct booth');
@@ -341,7 +358,7 @@ function publicWC() {
   const z1 = PZ + b.h;
   // soft shadow on the paving, then the block
   let s = `<g class="pwc-shadow">` + sunShadows(K, [{ x0: b.x, y0: b.y, x1: b.x + b.w, y1: b.y + b.d, h: b.h }],
-    { z: PZ, clipId: 'pwc-clip', clip: roundedRectPath(K, PLATE, PLATE_R, PZ), slices: 4, darkness: 0.32, spread: [0.6, 3], cls: 'twr-ground-shadow' }) + `</g>`;
+    { z: PZ, clipId: 'pwc-clip', clip: roundedRectPath(K, PLATE, PLATE_R, PZ), ao: false, slices: 4, darkness: 0.2, spread: [0.8, 4], cls: 'twr-ground-shadow' }) + `</g>`; // no contact rim (it made the block float), lighter
   // interior, only seen when the block is x-rayed: three stalls along the west wall and a basin counter
   for (let i = 0; i < 3; i++) s += box(b.x + 1, b.y + 2 + i * 9, PZ, 9, 0.6, 9, 0, 'partition fixture');
   s += box(b.x + 1, b.y + 2 + 27, PZ, 9, 0.6, 9, 0, 'partition fixture');
@@ -400,6 +417,16 @@ function vipWallBack() {
     K.box(n.x0, n.y, PZ, n.x1 - n.x0, w.t, w.h, 0, 'struct') +       // north run
     vipCorner();
 }
+/**
+ * The VIP parking's south wall: across the end of the bays and the turning area, from the west perimeter
+ * wall to the building's west face, so no car can drive between the VIP zone and the public restroom's
+ * ground (VIP cars come and go only by the east leg and its checkpoint).
+ */
+function vipWallSouth() {
+  const w = VIP_WALL, x0 = VIP_WALL_W.x, x1 = wx(3.6), y = TURN_Y + 22;
+  return `<g class="ao" filter="url(#ao)"><path d="${K.path([[x0, y - 1, PZ], [x1, y - 1, PZ], [x1, y + w.t + 1, PZ], [x0, y + w.t + 1, PZ]])}Z"/></g>` +
+    K.box(x0, y, PZ, x1 - x0, w.t, w.h, 0, 'struct');
+}
 /** The cut corner: a 45° run as thick as the side runs, mitred into the east and north runs' inner faces. */
 function vipCorner() {
   const w = VIP_WALL, n = VIP_WALL_N, x1 = w.x + w.t, yc = n.y + VIP_CUT, m = w.t * (Math.SQRT2 - 1);
@@ -409,17 +436,39 @@ function vipCorner() {
 const FOOTPRINT_NE = FOOTPRINT.reduce((best, p) => (p[0] - p[1] > best[0] - best[1] ? p : best));
 
 /** The VIP entrance leg's inner (west) wall, shared with the P↓IN ramp: one wall on the boundary
- *  between them, from the back of the route down to the loop. */
+ *  between them, from the back of the route (the VIP north lane's edge) down to the loop. */
+// A cross wall closes the strip between the building and this wall, set back behind the building: along
+// the VIP north lane's south edge, a little north of the building's north façade, running from behind
+// the building (its west end hidden by it) across to this wall, so the two meet in a clean L.
+const VIP_CROSS = { x0: wx(FOOTPRINT_NE[0]) - 12, y: VIP_N.in[1] };
 function vipWallInner() {
-  // a cross wall closes the strip between the building and this wall: from the building's north-east
-  // corner (starting just inside it, so it sits flush on the façade) straight across, in line with the
-  // building's north wall; this wall starts at that cross wall, so the two meet in a clean L
-  const [cx0, cy] = [wx(FOOTPRINT_NE[0]) - 0.5, wy(FOOTPRINT_NE[1])];
-  const { box } = K, w = VIP_WALL, x = VIP_E.in[0] - w.t, y0 = cy, L = w.y1 - y0;
-  const ao = (x0, ya, x1, yb) => `<path d="${K.path([[x0, ya, PZ], [x1, ya, PZ], [x1, yb, PZ], [x0, yb, PZ]])}Z"/>`;
-  return `<g class="ao" filter="url(#ao)">${ao(x - 1, y0, x + w.t + 1, w.y1)}${ao(cx0, cy - 1, x, cy + w.t + 1)}</g>` +
-    box(cx0, cy, PZ, x - cx0, w.t, w.h, 0, 'struct') +
-    box(x, y0, PZ, w.t, L, w.h, 0, 'struct');
+  const { box } = K, w = VIP_WALL, x = VIP_E.in[0] - w.t, y0 = VIP_CROSS.y, L = w.y1 - y0;
+  return `<g class="ao" filter="url(#ao)"><path d="${K.path([[x - 1, y0, PZ], [x + w.t + 1, y0, PZ], [x + w.t + 1, w.y1, PZ], [x - 1, w.y1, PZ]])}Z"/></g>` +
+    box(x, y0, PZ, w.t, L, w.h, 0, 'struct') + wallLight(x + w.t, w.y1, L, w.h, 'vipw-in');
+}
+/** That cross wall: drawn before the building, which stands in front of its west end. */
+function vipWallCross() {
+  const { box } = K, w = VIP_WALL, c = VIP_CROSS, x1 = VIP_E.in[0] - w.t;
+  return `<g class="ao" filter="url(#ao)"><path d="${K.path([[c.x0, c.y, PZ], [x1, c.y, PZ], [x1, c.y + w.t + 1, PZ], [c.x0, c.y + w.t + 1, PZ]])}Z"/></g>` +
+    box(c.x0, c.y, PZ, x1 - c.x0, w.t, w.h, 0, 'struct');
+}
+/**
+ * Light on a long wall's east (+x) face, seen from the VIP lanes: darker toward its foot (ambient
+ * occlusion from the ground), deeper toward the back where the building shades it, and a soft sheen of
+ * sky light sweeping across its open middle — so the face reads as a lit concrete wall, not a flat card.
+ * (xf: the face's x, y1: its front end, L: its length back toward −y, h: its height)
+ */
+function wallLight(xf, y1, L, h, id) {
+  const ink = '#141a24';
+  return `<g class="wall-light" transform="${K.SIDE(xf, y1, PZ + h)}">` +
+    `<defs><linearGradient id="${id}-v" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${ink}" stop-opacity="0"/>` +
+    `<stop offset=".6" stop-color="${ink}" stop-opacity=".06"/><stop offset="1" stop-color="${ink}" stop-opacity=".22"/></linearGradient>` +
+    `<linearGradient id="${id}-h" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${ink}" stop-opacity="0"/>` +
+    `<stop offset=".55" stop-color="${ink}" stop-opacity=".05"/><stop offset="1" stop-color="${ink}" stop-opacity=".2"/></linearGradient>` +
+    `<linearGradient id="${id}-s" x1="0" y1="0" x2="1" y2="1"><stop offset=".15" stop-color="#fff" stop-opacity="0"/>` +
+    `<stop offset=".38" stop-color="#fff" stop-opacity=".55"/><stop offset=".62" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>` +
+    `<rect width="${L}" height="${h}" fill="url(#${id}-h)"/><rect width="${L}" height="${h}" fill="url(#${id}-v)"/>` +
+    `<rect class="wall-sheen" width="${L}" height="${h}" fill="url(#${id}-s)"/></g>`;
 }
 
 function vipWall() {
@@ -527,7 +576,11 @@ function entrance() {
     slits(1.5 + (w - 3) / 4, w - 1.5 - (w - 3) / 4 + 0.01, (w - 3) / 4, 2, FH, true, 'entry-mullion') +
     `<line class="entry-mullion" x1="1.5" y1="5.5" x2="${w - 1.5}" y2="5.5"/>` +
     `<line class="entry-handle" x1="${w / 2 - 1.2}" y1="${FH * 0.55}" x2="${w / 2 - 1.2}" y2="${FH * 0.75}"/>` +
-    `<line class="entry-handle" x1="${w / 2 + 1.2}" y1="${FH * 0.55}" x2="${w / 2 + 1.2}" y2="${FH * 0.75}"/></g>`;
+    `<line class="entry-handle" x1="${w / 2 + 1.2}" y1="${FH * 0.55}" x2="${w / 2 + 1.2}" y2="${FH * 0.75}"/>` +
+    // shade under the canopy: the slab hides the sky, so the doors are darkest just below it
+    `<defs><linearGradient id="entry-soffit" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#141a24" stop-opacity=".42"/>` +
+    `<stop offset="1" stop-color="#141a24" stop-opacity=".12"/></linearGradient></defs>` +
+    `<rect class="entry-soffit" x="0" y="${FH - 12}" width="${w}" height="12" fill="url(#entry-soffit)"/></g>`;
   const cw = 44, c0 = CX - cw / 2, cd = 18, cz = PZ + 12;
   // night: downlights under the canopy — a warm pool on the paving below it, soft cones from three
   // fittings along its front edge, and the fittings themselves (dark mode only; drawn before the posts
@@ -540,8 +593,26 @@ function entrance() {
     `<g transform="${FRONT(c0, YB + cd - 2, cz)}">${fx.map((u) => `<path class="canopy-cone" d="M${u - 1.2} 0L${u + 1.2} 0L${u + 6} ${ch}L${u - 6} ${ch}Z" fill="url(#canopy-cone)"/>`).join('')}</g>` +
     `</g>`;
   s += entryLevel();   // landing, steps and accessible ramp, under / beside the canopy
+  // these are drawn after the building's ground shadow, so they get it again on top (same sun, same
+  // softness, clipped to the entrance area), plus the soft shade the canopy throws on the landing
+  const ex0 = wx(3.6) - 1, ex1 = wx(28.9) + 1, ey1 = DROP[1] + 0.5;
+  const area = hull([PZ, PZ + 3.2].flatMap((z) => [[ex0, YB, z], [ex1, YB, z], [ex1, ey1, z], [ex0, ey1, z]].map(([x, y, zz]) => K.P(x, y, zz))));
+  s += `<g class="entry-shade">` + sunShadows(K, strips().map((r) => ({ x0: wx(r.x0), x1: wx(r.x1), y0: wy(r.y0), y1: wy(r.y1), h: H })),
+    { z: PZ, clipId: 'entry-clip', clip: 'M' + area.map((p) => p.map((v) => v.toFixed(2)).join(' ')).join('L') + 'Z',
+      ao: false, slices: 10, darkness: 0.36, spread: [0.7, 13], cls: 'twr-ground-shadow' }) + `</g>`;
+  s += `<g transform="${TOP(c0, YB, PZ + ENTRY_RISE + 0.02)}"><rect class="canopy-shade" x="2" y="0" width="${cw - 4}" height="${cd - 2}" rx="4" filter="url(#entry-blur)"/></g>` +
+    `<defs><filter id="entry-blur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1.6"/></filter></defs>`;
   s += box(c0 + 1, YB + cd - 3, PZ, 2, 2, cz - PZ, 0, 'struct') + box(c0 + cw - 3, YB + cd - 3, PZ, 2, 2, cz - PZ, 0, 'struct');
   s += box(c0, YB, cz, cw, cd, 1.8, 0, 'struct');
+  // light on the canopy's roof: shaded where it meets the façade (the wall above hides half the sky),
+  // brighter toward its open front edge, with a soft diagonal sheen across it
+  const ink = '#141a24';
+  s += `<g class="wall-light" transform="${TOP(c0, YB, cz + 1.8 + 0.01)}">` +
+    `<defs><linearGradient id="canopy-ao" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${ink}" stop-opacity=".26"/>` +
+    `<stop offset=".45" stop-color="${ink}" stop-opacity=".06"/><stop offset="1" stop-color="${ink}" stop-opacity="0"/></linearGradient>` +
+    `<linearGradient id="canopy-sheen" x1="0" y1="0" x2="1" y2="1"><stop offset=".2" stop-color="#fff" stop-opacity="0"/>` +
+    `<stop offset=".5" stop-color="#fff" stop-opacity=".6"/><stop offset=".8" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>` +
+    `<rect width="${cw}" height="${cd}" fill="url(#canopy-ao)"/><rect class="wall-sheen" width="${cw}" height="${cd}" fill="url(#canopy-sheen)"/></g>`;
   // the fittings: small lit lenses at the bottom edge of the slab's front face
   s += `<g class="canopy-light" transform="${FRONT(c0, YB + cd, cz + 1.8)}">${fx.map((u) => `<rect class="canopy-lamp" x="${u - 1.4}" y="1.45" width="2.8" height=".35" rx=".15" filter="url(#glow)"/>`).join('')}</g>`;
   s += `<g transform="${FRONT(c0, YB + cd, cz + 1.8)}"><text class="canopy-text" x="${cw / 2}" y="1.45" font-size="1.4" text-anchor="middle" letter-spacing=".4">TELA OFFICE BUILDING</text></g>`;
@@ -596,6 +667,14 @@ function ramp(r) {
     `<rect class="park-halo" x="2" y="6" width="${w - 4}" height="${drop - 6}" filter="url(#bloom)"/>` +
     `<rect class="face struct front" width="${w}" height="3"/></g>`;
   s += `<g transform="${deck}"><rect class="ramp" width="${w}" height="${L}"/>` +
+    // depth: the deck darkens as it sinks below the plate (less sky reaches it), and the cut's west wall
+    // shades the strip of deck beside it — so it reads as a slope going down, not a flat band
+    `<defs><linearGradient id="ramp-depth-${r.dir}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#141a24" stop-opacity="0"/>` +
+    `<stop offset=".55" stop-color="#141a24" stop-opacity=".2"/><stop offset="1" stop-color="#141a24" stop-opacity=".5"/></linearGradient>` +
+    `<linearGradient id="ramp-wall-${r.dir}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#141a24" stop-opacity=".28"/>` +
+    `<stop offset="1" stop-color="#141a24" stop-opacity="0"/></linearGradient></defs>` +
+    `<rect class="ramp-shade" width="${w}" height="${L}" fill="url(#ramp-depth-${r.dir})"/>` +
+    `<path class="ramp-shade" d="M0 0L${w * 0.45} ${L}L0 ${L}Z" fill="url(#ramp-wall-${r.dir})"/>` +
     // light from the car park spilling up the bottom of the ramp
     `<rect class="park-spill" x="0" y="${L * 0.6}" width="${w}" height="${L * 0.4}" filter="url(#bloom)"/>` +
     `${[...Array(Math.floor(L / 4))].map((_, i) => `<line class="ramp-groove" x1="1.5" y1="${i * 4 + 2}" x2="${w - 1.5}" y2="${i * 4 + 2}"/>`).join('')}` +
@@ -728,6 +807,7 @@ export function buildSvg({ occ, cursor, away, vipArrived, vipGone, plans }) {
   svg += courtyard();
   svg += tipG('VIP route', 'VIP 통로', vipDeck());      // the raised VIP route with its graded ramp, bays and markings
   svg += vipWallBack();  // VIP perimeter wall along the back (north) of the route
+  svg += vipWallCross(); // the cross wall behind the building's north-east corner
   svg += tipG('VIP parking', 'VIP 주차장', vipCars(vipArrived, vipGone)); // VIP zone on the west (back-left) side, also behind the building
   svg += tipG('Underground parking exit', '지하 주차장 출구', ramp(RAMPS[1])); // west exit ramp: behind the building and inside its shadow
   svg += `<g class="anim-back"></g>`; // moving actors behind the building (filled per frame)
@@ -742,6 +822,7 @@ export function buildSvg({ occ, cursor, away, vipArrived, vipGone, plans }) {
   svg += `</g>`;
   // the external public restroom on the west paved platform: after the building's ground shadow, which
   // lies on the paving round it (drawn before, it painted over most of the restroom's roof)
+  svg += vipWallSouth();  // closes the VIP parking's south end off from the restroom's ground
   svg += tipG('Public restroom', '공용 화장실', publicWC());
 
   // the façades' sunlight (see the façade loop): a vertical wash, and the sky's reflection in the glass as diagonal
@@ -961,8 +1042,8 @@ export function vipLeavePath(i, facingBuilding = false) {
       : cubicLeg([bx, by], [bx + 11, by], [xw, by + 2], [xw, by - 12], { reverse: true, speed: 16, ease: true, z: vipZ }),
     leg([xw, facingBuilding ? by + 12 : by - 12], [['L', xw, TURN_Y + 4], ['Q', xw, TURN_Y + 16, (xw + xi) / 2, TURN_Y + 16], ['Q', xi, TURN_Y + 16, xi, TURN_Y + 4],
       ['L', xi, yi + 14], ['Q', xi, yi, xi + 14, yi], ['L', xo - 14, yi], ['Q', xo, yi, xo, yi + 14], ['L', xo, gy - 56]], { speed: CAR_SPEED, z: vipZ }),
-    ...gateStop(xo, gy - 56, gy - 16, gy + 24),
-    leg([xo, gy + 24], [['L', xo, YARD.road[0] - 2], ['Q', xo, ROAD_Y, xo - 9, ROAD_Y], ['L', EXIT_X + 9, ROAD_Y],
+    ...gateStop(xo, gy - 56, gy - 16, gy + 8),
+    leg([xo, gy + 8], [['L', xo, YARD.road[0] - 2], ['Q', xo, ROAD_Y, xo - 9, ROAD_Y], ['L', EXIT_X + 9, ROAD_Y],
       ['Q', EXIT_X, ROAD_Y, EXIT_X, YARD.road[1]], ['L', EXIT_X, OFF]], { speed: CAR_SPEED, clip: 'twr-clip', z: vipZ }),
   ];
 }
@@ -1170,14 +1251,31 @@ function reflectingPool() {
   const x0 = (a0 + a1 - len) / 2, x1 = x0 + len;
   const y0 = GARDEN_WALL.y1 + 1, y1 = YARD.park[1] - 2.2, w = x1 - x0, d = y1 - y0;
   let s = box(x0, y0, PZ, w, d, h, 1.2, 'struct');                                    // rim (rounded)
-  // wavy ripple lines (gentle quadratic waves, 4 units long, alternating up and down)
-  const wave = (yc) => {
-    let p = `M${rim + 2} ${yc}`;
-    for (let x = rim + 2, k = 0; x + 4 <= w - rim - 2; x += 4, k++) p += `Q${x + 2} ${yc + (k % 2 ? 0.7 : -0.7)} ${x + 4} ${yc}`;
-    return p;
-  };
-  const ripples = [0.3, 0.55, 0.78].map((f, i) => `<path class="pool-ripple" style="animation-delay:-${(i * 21 * TICK).toFixed(2)}s" d="${wave(rim + (d - 2 * rim) * f)}"/>`).join('');
-  return s + `<g transform="${TOP(x0, y0, PZ + h - 0.25)}"><rect class="pool-water" x="${rim}" y="${rim}" width="${w - 2 * rim}" height="${d - 2 * rim}" rx=".8"/>${ripples}</g>`;
+  // still water, built up in layers inside the basin: a deep base; the white garden wall behind it mirrored
+  // as a pale band along the far edge; the sky's sheen strongest toward the near side (water reflects more
+  // at a grazing view); the rim's shade along the far and left edges; a fine, slowly drifting ripple
+  // texture (fractal noise stretched along the pool) and a few soft glints that come and go
+  const iw = w - 2 * rim, id = d - 2 * rim;
+  const g = (idn, x2, y2, stops) => `<linearGradient id="${idn}" x1="0" y1="0" x2="${x2}" y2="${y2}">` +
+    stops.map(([o, c, a]) => `<stop offset="${o}" style="stop-color:${c}" stop-opacity="${a}"/>`).join('') + `</linearGradient>`;
+  const defs = `<defs><clipPath id="pool-clip"><rect x="${rim}" y="${rim}" width="${iw}" height="${id}" rx=".8"/></clipPath>` +
+    g('pool-wall-refl', 0, 1, [[0, '#fff', 0.5], [0.42, '#fff', 0.08], [0.6, '#fff', 0]]) +
+    g('pool-sky', 0, 1, [[0.35, 'var(--pool-sky)', 0], [1, 'var(--pool-sky)', 0.55]]) +
+    g('pool-shade-back', 0, 1, [[0, '#0b1420', 0.35], [1, '#0b1420', 0]]) +
+    g('pool-shade-left', 1, 0, [[0, '#0b1420', 0.25], [1, '#0b1420', 0]]) +
+    `<filter id="pool-noise" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".09 .9" numOctaves="2" seed="7"/>` +
+    `<feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 2.4 -1.25"/></filter>` +
+    `<filter id="pool-glint" x="-50%" y="-200%" width="200%" height="500%"><feGaussianBlur stdDeviation=".5 .18"/></filter></defs>`;
+  const glints = [[0.22, 0.62, 5, 0], [0.48, 0.78, 7, 1.7], [0.71, 0.55, 4.5, 3.1], [0.86, 0.82, 6, 4.4]]
+    .map(([fx, fy, gw, dl]) => `<ellipse class="pool-glint" cx="${(rim + iw * fx).toFixed(2)}" cy="${(rim + id * fy).toFixed(2)}" rx="${gw / 2}" ry=".35" filter="url(#pool-glint)" style="animation-delay:-${dl}s"/>`).join('');
+  return s + `<g transform="${TOP(x0, y0, PZ + h - 0.25)}">${defs}<g clip-path="url(#pool-clip)">` +
+    `<rect class="pool-water" x="${rim}" y="${rim}" width="${iw}" height="${id}"/>` +
+    `<rect x="${rim}" y="${rim}" width="${iw}" height="${id}" fill="url(#pool-sky)"/>` +
+    `<rect class="pool-refl" x="${rim}" y="${rim}" width="${iw}" height="${id}" fill="url(#pool-wall-refl)"/>` +
+    `<rect class="pool-ripple" x="${rim - 20}" y="${rim}" width="${iw + 20}" height="${id}" filter="url(#pool-noise)"/>` +
+    glints +
+    `<rect x="${rim}" y="${rim}" width="${iw}" height="1.4" fill="url(#pool-shade-back)"/>` +
+    `<rect x="${rim}" y="${rim}" width="1.4" height="${id}" fill="url(#pool-shade-left)"/></g></g>`;
 }
 
 function lawnBed() {

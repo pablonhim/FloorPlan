@@ -541,7 +541,7 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
      so the drag, wheel and click handlers on it carry on. (Not pointer-events:none on the pieces: flipping an
      inherited property restyles the whole subtree, 600 ms each time.) */
 .cam-moving .monitor-ray, .cam-moving .rack-led, .cam-moving .rack-scan, .cam-moving .meet-hi, .cam-moving .meet-glow,
-.cam-moving .route-glint, .cam-moving .route-pulse, .cam-moving .firefly, .cam-moving .pool-ripple, .cam-moving .atm-screen,
+.cam-moving .route-glint, .cam-moving .route-pulse, .cam-moving .firefly, .cam-moving .pool-ripple, .cam-moving .pool-glint, .cam-moving .atm-screen,
 .cam-moving .gate-beacon, .cam-moving .beacon, .cam-moving .beacon-halo { animation-play-state:paused; }
 .cam-shield { display:none; fill:transparent; stroke:none; pointer-events:all; }
 .cam-moving > .cam-shield { display:inline; }
@@ -666,6 +666,10 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 .face.vip-deck { fill:var(--struct-shade); stroke:var(--struct-line); stroke-width:.4; vector-effect:non-scaling-stroke; }
 .face.vip-deck.top { fill:url(#asphalt-grain); stroke:none; }
 .face.vip-deck.pave.top { fill:var(--paving); }
+/* the VIP grade: shade where it climbs steepest, a sky sheen on the crest (opacity set per strip) */
+.vip-slope-shade { fill:#1c2430; stroke:none; pointer-events:none; }
+.vip-slope-sheen { fill:#fff; stroke:none; pointer-events:none; }
+:root:not([data-theme="light"]) .vip-slope-sheen { fill:color-mix(in srgb, var(--ink) 40%, transparent); }
 /* "no entry" road signs at the exits */
 .sign-disc { fill:#d7262e; stroke:#ffffff; stroke-width:.35; }
 .sign-bar { fill:#ffffff; }
@@ -673,12 +677,21 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 .sign-text { fill:#d7262e; font-family:var(--font); font-weight:700; letter-spacing:.05px; }
 .no-entry { pointer-events:none; }
 /* reflecting pool in front of the garden wall */
-.pool-water { fill:color-mix(in srgb, var(--accent) 22%, #cfdbe6); }
-:root:not([data-theme="light"]) .pool-water { fill:color-mix(in srgb, var(--accent) 30%, #0c1520); }
-.pool-ripple { fill:none; stroke:#ffffff; stroke-width:.9; stroke-linecap:round; stroke-dasharray:6 14; opacity:.55; vector-effect:non-scaling-stroke; animation:pool-drift 4.96s steps(62) infinite; }   /* 62 site ticks */
-:root:not([data-theme="light"]) .pool-ripple { stroke:var(--accent-hi); opacity:.35; }
-@keyframes pool-drift { to { stroke-dashoffset:-40; } }
-@media (prefers-reduced-motion: reduce) { .pool-ripple { animation:none; } }
+/* still, deep water: a dark slate-teal base, the sky's sheen and the white wall mirrored on top (TowerView) */
+.twr { --pool-sky:#dbe8f3; }
+.pool-water { fill:#5f7f8f; }
+:root:not([data-theme="light"]) .twr { --pool-sky:#3a4f6e; }
+:root:not([data-theme="light"]) .pool-water { fill:#0e1a26; }
+:root:not([data-theme="light"]) .pool-refl { opacity:.25; }
+/* fine ripples: noise streaks drifting slowly along the pool */
+.pool-ripple { fill:#fff; opacity:.22; animation:pool-drift 14s linear infinite alternate; }
+:root:not([data-theme="light"]) .pool-ripple { opacity:.12; }
+@keyframes pool-drift { to { transform:translateX(20px); } }
+/* sun glints: soft streaks that brighten and fade, out of step */
+.pool-glint { fill:#fff; opacity:0; animation:pool-glint 6s ease-in-out infinite; }
+:root:not([data-theme="light"]) .pool-glint { fill:var(--night-light-hi); }
+@keyframes pool-glint { 0%, 100% { opacity:0; } 45% { opacity:.7; } 60% { opacity:.2; } }
+@media (prefers-reduced-motion: reduce) { .pool-ripple, .pool-glint { animation:none; } }
 /* ATM kiosk: frosted glass, the cash machine inside, its screen breathing in brightness */
 .atm-kiosk { pointer-events:none; }
 .atm-glass { fill:color-mix(in srgb, #ffffff 42%, transparent); stroke:var(--struct-line); stroke-width:.5; vector-effect:non-scaling-stroke; }
@@ -1221,3 +1234,11 @@ svg:not(.cam-over) .door-leaf { display:inline; stroke:var(--ink-hi); stroke-wid
 :root[data-sky="night"] .twr-star { opacity:.7; animation:star-twinkle 4s ease-in-out infinite; }
 @keyframes star-twinkle { 0%, 100% { opacity:.75; } 50% { opacity:.2; } }
 @media (prefers-reduced-motion: reduce) { .twr-star { transition:none; animation:none; } }
+
+/* the entrance: shade the canopy throws on the landing (day only; at night its downlights take over) */
+.canopy-shade { fill:#141a24; opacity:.14; pointer-events:none; }
+:root:not([data-theme="light"]) .canopy-shade, :root:not([data-theme="light"]) .entry-soffit { display:none; }
+.entry-soffit { pointer-events:none; }
+.ramp-shade { pointer-events:none; }
+.wall-light { pointer-events:none; }
+:root:not([data-theme="light"]) .wall-sheen { opacity:.25; }
